@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 3 — Supabase Schema and Multi-tenancy (completed)
+Phase 4 — Workflow Schema and Engine (completed)
 
 ## Repository baseline
 
@@ -255,4 +255,63 @@ Status: completed
 
 ### Commit
 
-- `feat: add supabase multi-tenant schema` (this phase commit)
+- `1dcac06` — `feat: add supabase multi-tenant schema`
+
+## Phase 4
+
+Status: completed
+
+### Implemented
+
+- Added the strict, versioned Workflow v1 Zod DSL with explicit execution target,
+  trigger, node, edge, and JSON-value contracts.
+- Added typed configuration schemas for all 26 allowed MVP node types. Unknown
+  keys, node types, unsupported versions, path traversal, invalid filenames, and
+  unsafe/unbounded configuration values are rejected.
+- Added semantic validation for duplicate IDs, missing edge endpoints,
+  self-references, cycles, disconnected graphs, and incompatible cloud/desktop
+  execution targets.
+- Added an immutable node catalog with risk level, approval mode, execution
+  location, description, and version metadata.
+- Added strict step-result, run, desktop-agent job/heartbeat, and AI planner
+  response protocols shared across future web, API, and desktop boundaries.
+- Added a deterministic execution engine with a typed executor registry, stable
+  topological ordering, predecessor input propagation, dry runs, risk summaries,
+  approval gates, bounded attempts/timeouts, cancellation, progress events, and
+  idempotent successful-run replay.
+- Added a complete mock executor registry so all node paths are testable without
+  credentials, local files, or network access.
+
+### Files changed
+
+- `packages/workflow-schema` DSL, node schemas/catalog, semantic validator,
+  protocols, and tests.
+- `packages/workflow-engine` executor contracts, registry, runner, error model,
+  idempotency store, and tests.
+- Workspace lockfile and generated pnpm-store ignore rule.
+- `docs/WORKFLOWS.md`, execution plan, and status.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 26 tests
+- `pnpm db:test`: passed — unchanged migration and tenant-isolation regression
+- `pnpm build:web`: passed — 6 static application routes
+- `pnpm build:desktop`: not applicable — desktop app begins in Phase 8
+
+### Known limitations
+
+- Phase 4 intentionally supplies deterministic mock executors; real filesystem,
+  spreadsheet, Google Sheets, webhook, and notification side effects are added
+  only in their gated implementation phases.
+- The in-memory idempotency store is process-local. Persistent run/job
+  idempotency is implemented with the database and API orchestration in later
+  phases.
+- Workflow schema version 1 is intentionally closed to extension by AI output;
+  new nodes or fields require a reviewed schema/catalog version change.
+
+### Commit
+
+- `feat: add workflow schema and deterministic engine` (this phase commit)
