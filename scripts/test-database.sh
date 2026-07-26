@@ -53,13 +53,26 @@ docker exec --interactive "$container_id" \
   psql --dbname "$DATABASE_NAME" --set ON_ERROR_STOP=1 --username "$DATABASE_USER" \
   <"$REPOSITORY_ROOT/supabase/tests/bootstrap.sql"
 
-docker exec --interactive "$container_id" \
-  psql --dbname "$DATABASE_NAME" --set ON_ERROR_STOP=1 --username "$DATABASE_USER" \
-  <"$REPOSITORY_ROOT/supabase/migrations/202607260001_initial_platform.sql"
+shopt -s nullglob
+migration_files=("$REPOSITORY_ROOT"/supabase/migrations/*.sql)
+if [[ "${#migration_files[@]}" -eq 0 ]]; then
+  echo "Database test failed: no migration files were found." >&2
+  exit 1
+fi
+
+for migration_file in "${migration_files[@]}"; do
+  docker exec --interactive "$container_id" \
+    psql --dbname "$DATABASE_NAME" --set ON_ERROR_STOP=1 --username "$DATABASE_USER" \
+    <"$migration_file"
+done
 
 docker exec --interactive "$container_id" \
   psql --dbname "$DATABASE_NAME" --set ON_ERROR_STOP=1 --username "$DATABASE_USER" \
   <"$REPOSITORY_ROOT/supabase/tests/rls.sql"
+
+docker exec --interactive "$container_id" \
+  psql --dbname "$DATABASE_NAME" --set ON_ERROR_STOP=1 --username "$DATABASE_USER" \
+  <"$REPOSITORY_ROOT/supabase/tests/agent-jobs.sql"
 
 docker exec --interactive "$container_id" \
   psql --dbname "$DATABASE_NAME" --set ON_ERROR_STOP=1 --username "$DATABASE_USER" \

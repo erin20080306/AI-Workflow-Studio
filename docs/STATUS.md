@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 6 — AI gateway (completed)
+Phase 7 — Device pairing and Agent Job API (completed)
 
 ## Repository baseline
 
@@ -476,4 +476,94 @@ Status: completed
 
 ### Commit
 
-- `feat: add validated multi-provider ai gateway` (this phase commit)
+- `c7e5b9f` — `feat: add validated multi-provider ai gateway`
+
+## Phase 7
+
+Status: completed
+
+### Implemented
+
+- Added strict pairing, heartbeat, claim, lease, progress, completion, failure,
+  and revocation schemas and a common Agent protocol service.
+- Added 12-character, ten-minute, single-use pairing codes and 256-bit device
+  and claim tokens. Only domain-separated HMAC-SHA-256 values and bounded hints
+  are retained; plaintext device and claim tokens are returned exactly once.
+- Added 90-day device-token expiry, explicit revocation, last-used tracking, and
+  a five-minute past/30-second future request-timestamp window.
+- Derived tenant and device identity exclusively from the authenticated token.
+  Job lookup and every state transition recheck tenant, device, status, attempt,
+  lease, and claim-token ownership.
+- Added polling for pending and expired-leased work, atomic active-claim
+  exclusion, reclaim after lease expiry, 30–120 second lease renewal, structured
+  progress, structured failure, terminal completion, and event-level
+  idempotency.
+- Added an immutable PostgreSQL migration with the protected pairing-code table,
+  Agent event UUID uniqueness, row-locked terminal transitions, and
+  service-role-only claim, lease, progress, and finish functions.
+- Updated the database test runner to discover and apply every immutable
+  migration in filename order.
+- Added all required Next.js Agent API routes with strict 32 KB bodies,
+  no-store responses, redacted errors, device-token headers, request timestamps,
+  and separate claim credentials.
+- Added a fail-closed server boundary: Mock mode uses the real protocol state
+  machine with an in-memory store and one safe seeded job; configured production
+  mode does not silently use process memory when authenticated Supabase
+  repository context is unavailable.
+- Added a full API E2E covering pair, heartbeat, poll, duplicate claim, lease,
+  duplicate progress, duplicate completion, revoke, and old-token rejection.
+- Added protocol, database, architecture, testing, and security documentation.
+
+### Dependency purposes
+
+- No new third-party runtime dependency was added. The package uses Node's
+  cryptographic random and HMAC primitives, existing Zod schemas, and the shared
+  Workflow v1 protocol.
+- The Web app links the new `@ai-workflow-studio/agent-protocol` workspace
+  package so API and future Electron code share the same contracts.
+
+### Files changed
+
+- `packages/agent-protocol` crypto, schemas, service, store, errors, and tests.
+- Pairing, heartbeat, jobs, claim, lease, progress, complete, fail, and revoke
+  App Router API handlers plus server/API helpers.
+- `202607260002_agent_pairing_jobs.sql`, Agent Job database assertions, and the
+  multi-migration database test runner.
+- Agent protocol browser E2E, workspace metadata, lockfile, and phase
+  documentation.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 48 tests
+- `pnpm test:e2e`: passed — 2 Chromium E2Es
+- `bash -n scripts/test-database.sh`: passed
+- `pnpm db:test`: passed — all migrations, RLS/role isolation, hidden pairing
+  hashes, service-role function boundary, tenant/device atomic claims, active
+  duplicate-claim rejection, claim-token leases, expired leases, event
+  idempotency, owner invariant, and idempotent seed
+- PostgreSQL test container cleanup: passed
+- `pnpm peers check`: passed
+- `pnpm build:web`: passed without Supabase or Agent secrets — 28 generated
+  application pages including all 10 Agent API routes
+- `pnpm build:desktop`: not applicable — desktop app begins in Phase 8
+
+### Known limitations
+
+- The live Supabase-backed Agent repository and authenticated web session
+  adapter are intentionally not fabricated without project credentials. A
+  non-Mock deployment returns a redacted 503 until those are configured and
+  connected; PostgreSQL production state-transition functions are present and
+  integration-tested.
+- Mock Agent state is process-local and resets when the Web development server
+  restarts. It must never be used as production job storage.
+- Edge/WAF pairing attempt rate limits and abuse monitoring are deployment
+  controls still required before enabling public pairing in production.
+- Agent local secure storage, offline polling/reconnection, and user-facing
+  pairing UI begin in Phase 8.
+
+### Commit
+
+- `feat: add secure device pairing and agent job api` (this phase commit)

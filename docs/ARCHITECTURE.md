@@ -27,6 +27,7 @@ apps/
   web/                  Next.js control plane and server APIs
   desktop/              Electron local agent
 packages/
+  agent-protocol/       Pairing, device authentication, claims, leases, job state
   ai-gateway/           Server-only AI provider adapters and validation boundary
   workflow-schema/      Versioned Zod DSL and semantic validation
   workflow-engine/      Registry and deterministic orchestration
@@ -58,6 +59,15 @@ Electron owns local folder authorization, file watching, Excel processing,
 desktop notifications, and device job execution. It returns redacted metadata
 and progress, not complete local spreadsheets. Local paths are represented in
 cloud workflow data only by device-scoped folder aliases.
+
+## Agent job protocol
+
+The database remains the durable Agent Job source. An opaque device token binds
+every request to one tenant and device; job identifiers never establish
+authorization. Polling discovers pending or expired-leased work, an atomic
+claim issues a separate one-time claim credential, and bounded renewable leases
+prevent active duplicate execution. Progress and terminal event UUIDs provide
+request-level idempotency. See `docs/AGENT_PROTOCOL.md`.
 
 ## Trust boundaries
 

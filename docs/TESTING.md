@@ -48,6 +48,9 @@ destructive-node approvals. Database tests use disposable local or CI instances.
 fresh database, applies every migration, verifies required tables and RLS,
 exercises owner/viewer and cross-tenant behavior, applies the development seed
 twice to verify idempotency, and stops the container through an exit trap.
+Agent database assertions also verify hidden pairing hashes, service-role-only
+functions, tenant/device-bound atomic claims, active duplicate-claim rejection,
+claim-token-bound leases, expired-lease rejection, and event idempotency.
 
 ### End to end
 
@@ -59,8 +62,10 @@ paid service.
 `pnpm test:e2e` starts the Next.js application on an isolated localhost port,
 runs the workflow path in Playwright Chromium, and terminates both browser and
 server. The flow also verifies Mock provider selection and the server-secret
-boundary on the AI model settings page. CI installs only Chromium immediately
-before this test.
+boundary on the AI model settings page. A second API E2E pairs a Mock Agent,
+heartbeats, polls, claims, renews, reports deduplicated progress, completes
+idempotently, revokes the device, and verifies the old token fails. CI installs
+only Chromium immediately before this test.
 
 ### Build and packaging
 

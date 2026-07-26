@@ -38,6 +38,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ai-workflow-studio/agent-protocol':
+        specifier: workspace:*
+        version: link:../../packages/agent-protocol
       '@ai-workflow-studio/ai-gateway':
         specifier: workspace:*
         version: link:../../packages/ai-gateway
@@ -84,6 +87,22 @@ importers:
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
+
+  packages/agent-protocol:
+    dependencies:
+      '@ai-workflow-studio/workflow-schema':
+        specifier: workspace:*
+        version: link:../workflow-schema
+      zod:
+        specifier: ^4.3.6
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   packages/ai-gateway:
     dependencies:

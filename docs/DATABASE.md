@@ -16,6 +16,11 @@ The initial migration creates:
 - Constraints, cross-tenant composite foreign keys, indexes, timestamp triggers,
   least-privilege grants, and Row Level Security.
 
+The second migration, `202607260002_agent_pairing_jobs.sql`, adds protected
+device pairing hashes, Agent event idempotency keys, and service-role-only
+atomic claim, lease, progress, and finish functions. Browser roles have neither
+table access to pairing hashes nor function execution rights.
+
 ## Local migration verification
 
 Run:
@@ -25,8 +30,8 @@ pnpm db:test
 ```
 
 The command starts an ephemeral official PostgreSQL 16 container, bootstraps only
-the minimal Supabase Auth roles/functions needed by the migration, applies the
-migration to a new database, executes tenant-isolation and role tests, and stops
+the minimal Supabase Auth roles/functions needed by the migrations, applies all
+migrations to a new database, executes tenant-isolation and role tests, and stops
 the container. It exposes no database port and retains no volume.
 
 This test requires Docker. It does not require a Supabase account or credentials.

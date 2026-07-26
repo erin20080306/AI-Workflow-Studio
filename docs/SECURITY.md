@@ -31,6 +31,19 @@ only as peppered hashes. Each request binds authentication to tenant, device,
 revocation status, and an acceptable timestamp. Jobs use atomic claims,
 renewable leases, structured events, and idempotency keys.
 
+Pairing codes are 12-character, short-lived, single-use secrets and are also
+stored only as domain-separated HMAC-SHA-256 values. Device and claim tokens
+carry 256 bits of randomness and have distinct HMAC domains. Device tokens
+expire after 90 days; revocation invalidates the device and all associated
+tokens. The application never accepts tenant or device identity from an Agent
+request body.
+
+Agent requests are capped at 32 KB and use strict schemas. The device token,
+device status, token expiry/revocation, timestamp window, tenant, device, job
+status, attempt limit, lease, and claim-token hash are validated before state
+changes. Progress and terminal event UUIDs are unique per job. Pairing hashes
+and job state-transition functions are service-role-only in PostgreSQL.
+
 ## Data minimization
 
 Desktop reports contain workflow/run identifiers, status, timing, counts,
