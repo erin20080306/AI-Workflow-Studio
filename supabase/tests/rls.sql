@@ -229,6 +229,7 @@ begin
     'profiles',
     'tenants',
     'memberships',
+    'notifications',
     'devices',
     'device_tokens',
     'device_heartbeats',

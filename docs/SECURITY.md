@@ -80,6 +80,16 @@ status, attempt limit, lease, and claim-token hash are validated before state
 changes. Progress and terminal event UUIDs are unique per job. Pairing hashes
 and job state-transition functions are service-role-only in PostgreSQL.
 
+Run completion additionally requires every Workflow node to have a successful
+or skipped terminal step. Browser roles cannot directly mutate Run rows or call
+the compare-and-set transition function. Cancellation changes the active Job
+state; a Desktop executor aborts when its next lease renewal is rejected.
+
+The local Job engine receives folder aliases only and registers a closed subset
+of Workflow v1 nodes. Folder enumeration is capped, does not recurse, and
+ignores symlinks. Progress deliberately omits node output, so rows and paths
+cannot enter browser Run views, audit metadata, or notifications.
+
 ## Data minimization
 
 Desktop reports contain workflow/run identifiers, status, timing, counts,

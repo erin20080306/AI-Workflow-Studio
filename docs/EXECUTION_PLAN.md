@@ -26,7 +26,7 @@ test, and build checks and has been committed.
 | 8     | Desktop agent foundation      | Development build and unsigned test package pass; folder access is constrained | completed |
 | 9     | Local Excel executor          | Fixture, idempotency, atomic output, backup, and traversal tests pass          | completed |
 | 10    | Google Sheets connector       | Mock OAuth/Sheets tests pass; credentials are optional and server-only         | completed |
-| 11    | Run orchestration             | End-to-end mock run, reconnect, approval, and de-duplication pass              | pending   |
+| 11    | Run orchestration             | End-to-end mock run, reconnect, approval, and de-duplication pass              | completed |
 | 12    | GitHub release and Vercel     | CI, production web build, platform desktop builds, and secret checks pass      | pending   |
 | 13    | Security and final acceptance | Security review and all MVP acceptance criteria pass                           | pending   |
 

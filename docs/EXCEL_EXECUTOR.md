@@ -18,8 +18,10 @@ The executor implements the Phase 9 capabilities:
 - persisted restart-safe duplicate receipts;
 - stabilized folder create/change watching.
 
-The Agent advertises only the registered Workflow v1 capability names. Phase 11
-connects these local functions to claimed, leased Agent jobs.
+The Agent advertises only registered Workflow v1 capability names. The Phase 11
+Job executor now connects folder list, Excel read/merge/write/report, filter,
+column map, and deduplicate functions to claimed, renewable-lease Jobs. Unknown
+or cloud-only nodes fail closed.
 
 ## Read limits
 
@@ -124,4 +126,5 @@ restart-safe source of duplicate suppression.
 - Workbooks are processed in bounded memory; streaming multi-million-row
   processing is outside the MVP.
 - Folder watchers do not recurse into arbitrary directory trees.
-- Cloud job claim, lease, progress, and completion orchestration is Phase 11.
+- Folder listing and watching remain non-recursive and capped; they do not
+  enumerate arbitrary directory trees.

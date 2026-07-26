@@ -9,8 +9,9 @@ code, shell commands, or arbitrary imports.
 
 Phase 8 establishes the secure application, protocol client, local permission
 model, and operator experience. Phase 9 adds the bounded Excel/CSV executor,
-content-hash ledger, and safe folder watcher described in
-`docs/EXCEL_EXECUTOR.md`.
+content-hash ledger, and safe folder watcher. Phase 11 binds approved,
+device-targeted Jobs to that executor with atomic claims, renewable leases,
+step progress, terminal reports, and lease-loss cancellation.
 
 ## Process boundary
 
@@ -40,10 +41,13 @@ Agent exchanges it for one device-bound session, persists the session only
 through operating-system encryption, and then sends authenticated heartbeat and
 job-poll requests. It never puts tokens in URLs or logs.
 
-The executor can be explicitly started and stopped. Transient transport failures
-move the status offline and retry with bounded exponential delays from 5 to 60
-seconds. Stopping the executor aborts the current request and cancels future
-polls. Every response is size-bounded and runtime-validated before use.
+The executor can be explicitly started and stopped. After reconnect it
+heartbeats, polls, atomically claims pending work, renews the active lease, runs
+only registered local nodes, and reports metadata-only progress. Transient
+transport failures move the status offline and retry with bounded exponential
+delays from 5 to 60 seconds. Stopping the executor or losing a lease aborts the
+current Workflow and cancels future polls. Every response is size-bounded and
+runtime-validated before use.
 
 ## Local secure storage
 

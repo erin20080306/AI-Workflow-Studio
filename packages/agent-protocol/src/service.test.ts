@@ -307,4 +307,27 @@ describe('AgentService', () => {
     expect((await fixture.service.failJob(credentials, JOB_A, failure)).job.status).toBe('failed');
     expect((await fixture.service.failJob(credentials, JOB_A, failure)).duplicate).toBe(true);
   });
+
+  it('cancels active jobs and ignores duplicate job dispatches', async () => {
+    const fixture = createFixture();
+    const paired = await fixture.pair();
+    const pendingJob = job(JOB_A, TENANT_A, paired.device.id, RUN_A);
+    fixture.store.seedJob(pendingJob);
+    fixture.store.seedJob({ ...pendingJob, status: 'succeeded' });
+
+    expect(fixture.store.snapshot().jobs).toHaveLength(1);
+    await expect(
+      fixture.store.cancelJob(TENANT_B, JOB_A, new Date('2026-07-26T06:01:00.000Z')),
+    ).resolves.toBe(false);
+    await expect(
+      fixture.store.cancelJob(TENANT_A, JOB_A, new Date('2026-07-26T06:01:00.000Z')),
+    ).resolves.toBe(true);
+    expect(fixture.store.snapshot().jobs[0]).toMatchObject({
+      events: [{ type: 'cancelled' }],
+      job: { status: 'cancelled' },
+    });
+    await expect(
+      fixture.store.cancelJob(TENANT_A, JOB_A, new Date('2026-07-26T06:02:00.000Z')),
+    ).resolves.toBe(false);
+  });
 });

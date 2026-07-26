@@ -48,4 +48,24 @@ test('creates, reviews, and dry-runs a safe Mock Workflow', async ({ page }) => 
   await expect(page.getByText('營運追蹤')).toBeVisible();
   await expect(page.locator('body')).not.toContainText('refresh-token-fixture');
   await expect(page.locator('body')).not.toContainText('access-token-fixture');
+
+  const runStart = await page.request.post('/api/runs', {
+    data: {
+      deviceId: '00000000-0000-4000-8000-000000000501',
+      idempotencyKey: 'browser-run-approval-e2e',
+      requiresApproval: true,
+      timeoutSeconds: 300,
+    },
+  });
+  expect(runStart.ok()).toBe(true);
+  const runPayload = (await runStart.json()) as {
+    readonly run: { readonly id: string };
+  };
+  await page.goto(`/dashboard/runs/${runPayload.run.id}`);
+  await expect(page.getByRole('heading', { name: 'Run details' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '需要執行核准' })).toBeVisible();
+  await page.getByRole('button', { name: '核准並派送' }).click();
+  await expect(page.getByText('queued', { exact: true })).toBeVisible();
+  await expect(page.getByText('approval.approved', { exact: true })).toBeVisible();
+  await expect(page.getByText('agent_job.queued', { exact: true })).toBeVisible();
 });

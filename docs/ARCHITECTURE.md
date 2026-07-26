@@ -29,7 +29,9 @@ apps/
 packages/
   agent-protocol/       Pairing, device authentication, claims, leases, job state
   ai-gateway/           Server-only AI provider adapters and validation boundary
+  google-sheets/        OAuth and bounded Sheets operations
   local-executor/       Bounded Excel/CSV I/O, transforms, watcher, and ledger
+  run-orchestrator/     Run state, approval, dispatch, retry, audit, notification
   workflow-schema/      Versioned Zod DSL and semantic validation
   workflow-engine/      Registry and deterministic orchestration
   connector-sdk/        Connector contracts and safe helpers
@@ -89,6 +91,13 @@ authorization. Polling discovers pending or expired-leased work, an atomic
 claim issues a separate one-time claim credential, and bounded renewable leases
 prevent active duplicate execution. Progress and terminal event UUIDs provide
 request-level idempotency. See `docs/AGENT_PROTOCOL.md`.
+
+`@ai-workflow-studio/run-orchestrator` owns the control-plane Run state machine.
+It holds risky Runs for approval, dispatches one device-bound Job, reconciles
+Agent step/terminal events, applies bounded retry/cancel/timeout behavior, and
+returns output-free audit/notification views. The Desktop Agent independently
+revalidates the Workflow and runs only its locally registered subset. See
+`docs/RUN_ORCHESTRATION.md`.
 
 ## Trust boundaries
 

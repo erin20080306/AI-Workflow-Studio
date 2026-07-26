@@ -22,6 +22,8 @@
     "@ai-workflow-studio/agent-protocol": "workspace:*",
     "@ai-workflow-studio/local-executor": "workspace:*",
     "@ai-workflow-studio/shared": "workspace:*",
+    "@ai-workflow-studio/workflow-engine": "workspace:*",
+    "@ai-workflow-studio/workflow-schema": "workspace:*",
     "@types/node": "^22.20.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

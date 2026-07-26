@@ -19,6 +19,7 @@ packages/agent-protocol   Pairing and durable job contracts
 packages/ai-gateway       Validated provider adapters
 packages/google-sheets    OAuth and bounded Google Sheets operations
 packages/local-executor   Bounded Excel/CSV processing
+packages/run-orchestrator Run state, approval, dispatch, retry, and audit
 packages/workflow-schema  Workflow v1 schemas and catalog
 packages/workflow-engine  Deterministic orchestration primitives
 supabase                  PostgreSQL migrations and RLS
@@ -66,6 +67,14 @@ state validation, offline access, encrypted tokens, refresh and revoke support,
 bounded Sheets requests, and durable idempotency contracts. Credentials are
 optional for local builds; Mock integration tests never contact Google. See
 [`docs/GOOGLE_SHEETS.md`](docs/GOOGLE_SHEETS.md).
+
+## Run orchestration
+
+Approved Runs dispatch one device-bound Job. The Desktop Agent reconnects,
+claims it atomically, renews its lease, executes only registered local nodes,
+and reports metadata-only progress. Retry, cancellation, timeout, audit, and
+notifications remain in the control plane. See
+[`docs/RUN_ORCHESTRATION.md`](docs/RUN_ORCHESTRATION.md).
 
 ## Release status
 

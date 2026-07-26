@@ -13,6 +13,8 @@ import {
   type SpreadsheetTable,
   type SpreadsheetWriteResult,
 } from '@ai-workflow-studio/local-executor';
+import { lstat, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import { FolderGrantStore } from './folder-grants';
 
@@ -26,6 +28,12 @@ export interface AuthorizedOutput {
   readonly outputName: string;
 }
 
+export interface AuthorizedFileList {
+  readonly folderAliasId: string;
+  readonly modifiedSince?: string;
+  readonly pattern: string;
+}
+
 export class DesktopSpreadsheetExecutor {
   constructor(
     private readonly folderGrants: FolderGrantStore,
@@ -34,15 +42,49 @@ export class DesktopSpreadsheetExecutor {
 
   capabilities(): readonly string[] {
     return [
+      'folder.list_files',
       'excel.read',
       'excel.merge',
       'excel.write',
+      'excel.create_report',
       'data.filter',
       'data.map_columns',
       'data.deduplicate',
       'folder.file_created',
       'folder.file_changed',
     ];
+  }
+
+  async list(deviceId: string, input: AuthorizedFileList): Promise<readonly string[]> {
+    const rootPath = await this.folderGrants.resolveAuthorizedRoot(
+      input.folderAliasId,
+      deviceId,
+      'read',
+    );
+    const modifiedSince =
+      input.modifiedSince === undefined ? undefined : new Date(input.modifiedSince);
+    if (modifiedSince !== undefined && Number.isNaN(modifiedSince.getTime())) {
+      throw new Error('Folder list modifiedSince value is invalid.');
+    }
+    const matcher = filePattern(input.pattern);
+    const entries = await readdir(rootPath, { withFileTypes: true });
+    const paths: string[] = [];
+    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+      if (!entry.isFile() || !matcher.test(entry.name)) {
+        continue;
+      }
+      if (modifiedSince !== undefined) {
+        const metadata = await lstat(join(rootPath, entry.name));
+        if (!metadata.isFile() || metadata.mtime.getTime() < modifiedSince.getTime()) {
+          continue;
+        }
+      }
+      paths.push(entry.name);
+      if (paths.length >= 1_000) {
+        break;
+      }
+    }
+    return paths;
   }
 
   async read(deviceId: string, input: AuthorizedInput, options: SpreadsheetReadOptions = {}) {
@@ -131,4 +173,18 @@ export class DesktopSpreadsheetExecutor {
     await watcher.start();
     return watcher;
   }
+}
+
+function filePattern(pattern: string): RegExp {
+  if (
+    pattern.length < 1 ||
+    pattern.length > 120 ||
+    pattern.includes('/') ||
+    pattern.includes('\\') ||
+    pattern.includes('..')
+  ) {
+    throw new Error('Folder list pattern is invalid.');
+  }
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped.replaceAll('*', '.*').replaceAll('?', '.')}$`, 'iu');
 }

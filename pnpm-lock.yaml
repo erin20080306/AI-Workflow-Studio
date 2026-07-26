@@ -51,6 +51,12 @@ importers:
       '@ai-workflow-studio/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@ai-workflow-studio/workflow-engine':
+        specifier: workspace:*
+        version: link:../../packages/workflow-engine
+      '@ai-workflow-studio/workflow-schema':
+        specifier: workspace:*
+        version: link:../../packages/workflow-schema
       '@types/node':
         specifier: ^22.20.1
         version: 22.20.1
@@ -96,6 +102,9 @@ importers:
       '@ai-workflow-studio/google-sheets':
         specifier: workspace:*
         version: link:../../packages/google-sheets
+      '@ai-workflow-studio/run-orchestrator':
+        specifier: workspace:*
+        version: link:../../packages/run-orchestrator
       '@ai-workflow-studio/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -196,6 +205,19 @@ importers:
       '@types/yauzl':
         specifier: 3.4.0
         version: 3.4.0
+
+  packages/run-orchestrator:
+    dependencies:
+      '@ai-workflow-studio/workflow-schema':
+        specifier: workspace:*
+        version: link:../workflow-schema
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
 
   packages/shared: {}
 

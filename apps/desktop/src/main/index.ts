@@ -26,6 +26,7 @@ import { ProcessingLedger } from '@ai-workflow-studio/local-executor';
 import { AgentClient, type AgentClientStatus } from './agent-client';
 import { FolderGrantStore } from './folder-grants';
 import { DesktopSpreadsheetExecutor } from './local-executor';
+import { DesktopWorkflowJobExecutor } from './workflow-job-executor';
 import { StructuredLogger } from './logger';
 import { SettingsStore, type DesktopSettings } from './settings-store';
 import { TokenVault, type SecureCipher } from './token-vault';
@@ -360,10 +361,12 @@ async function initialize(): Promise<void> {
     folderGrants,
     new ProcessingLedger(join(userData, 'processing-ledger.json')),
   );
+  const workflowJobExecutor = new DesktopWorkflowJobExecutor(spreadsheetExecutor);
   const vault = new TokenVault(join(userData, 'device-session.enc'), secureCipher());
   updater = new ManualUpdateController(app.isPackaged, logger, () => broadcastSnapshot());
   agentClient = new AgentClient({
     agentVersion: app.getVersion(),
+    executeJob: async (job, reporter) => await workflowJobExecutor.execute(job, reporter),
     logger,
     onStatus: (status) => {
       agentStatus = status;

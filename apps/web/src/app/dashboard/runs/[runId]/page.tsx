@@ -1,0 +1,38 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
+
+import { RunDetailsPanel } from '@/components/runs/run-details-panel';
+import { getRun } from '@/lib/run-server';
+
+export const metadata: Metadata = {
+  title: 'Run details',
+};
+
+export default async function RunDetailsPage({
+  params,
+}: {
+  readonly params: Promise<{ readonly runId: string }>;
+}) {
+  const run = await getRun((await params).runId);
+  return (
+    <div className="mx-auto max-w-[1120px]">
+      <nav className="text-xs font-semibold text-slate-500">
+        <Link className="transition hover:text-indigo-700" href="/dashboard/runs">
+          執行紀錄
+        </Link>
+        <span className="mx-2 text-slate-300">/</span>
+        <span className="text-slate-800">Run details</span>
+      </nav>
+      <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">
+        Correlation {run.id.slice(0, 8)}
+      </p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">
+        Run details
+      </h1>
+      <p className="mt-2 text-sm text-slate-600">
+        Client 僅顯示計數、狀態與安全錯誤摘要，不顯示本機路徑或資料列內容。
+      </p>
+      <RunDetailsPanel initialRun={run} />
+    </div>
+  );
+}

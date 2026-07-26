@@ -155,4 +155,81 @@ describe('AgentClient', () => {
     expect(client.isExecutorRunning()).toBe(false);
     vi.useRealTimers();
   });
+
+  it('claims each pending job once, reports progress, and completes it', async () => {
+    let completed = false;
+    const requests: { readonly body?: string; readonly url: string }[] = [];
+    const pendingJob = jobPayload().jobs[0];
+    const fetchTransport: AgentFetch = async (input, init) => {
+      const url = String(input);
+      requests.push({
+        ...(typeof init?.body === 'string' ? { body: init.body } : {}),
+        url,
+      });
+      if (url.endsWith('/heartbeat')) {
+        return jsonResponse({
+          acceptedAt: new Date().toISOString(),
+          deviceStatus: 'online',
+        });
+      }
+      if (url.endsWith('/jobs')) {
+        return jsonResponse(completed ? { jobs: [] } : jobPayload());
+      }
+      if (url.endsWith('/claim')) {
+        return jsonResponse({
+          claimToken: `clm_${'C'.repeat(43)}`,
+          job: { ...pendingJob, attempt: 1, status: 'claimed' },
+        });
+      }
+      if (url.endsWith('/progress')) {
+        return jsonResponse({
+          duplicate: false,
+          job: { ...pendingJob, attempt: 1, status: 'running' },
+        });
+      }
+      if (url.endsWith('/complete')) {
+        completed = true;
+        return jsonResponse({
+          duplicate: false,
+          job: { ...pendingJob, attempt: 1, status: 'succeeded' },
+        });
+      }
+      return jsonResponse({ error: 'unexpected route' }, 404);
+    };
+    const executeJob = vi.fn(async (_job, reporter) => {
+      await reporter.reportStep({
+        nodeId: 'validate',
+        processedRowCount: 3,
+        status: 'succeeded',
+      });
+      return { processedRows: 3 };
+    });
+    const client = new AgentClient({
+      agentVersion: '0.1.0-test',
+      executeJob,
+      fetchTransport,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      onStatus: vi.fn(),
+      vault: {
+        async clear() {},
+        async load() {
+          return pairingSession();
+        },
+        async save() {},
+      },
+    });
+    await client.initialize();
+
+    await client.processOnce();
+    await client.processOnce();
+
+    expect(executeJob).toHaveBeenCalledTimes(1);
+    expect(requests.filter((request) => request.url.endsWith('/claim'))).toHaveLength(1);
+    expect(requests.filter((request) => request.url.endsWith('/progress'))[0]?.body).toContain(
+      '"processedRowCount":3',
+    );
+    expect(requests.filter((request) => request.url.endsWith('/complete'))[0]?.body).toContain(
+      '"processedRows":3',
+    );
+  });
 });

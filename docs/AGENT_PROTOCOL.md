@@ -87,6 +87,12 @@ unstructured failure payloads are rejected.
 - Completion and failure are terminal. Retry scheduling remains an
   orchestration decision rather than an Agent-controlled state transition.
 
+After polling, the Electron Agent claims each Job before invoking a local
+executor. It renews a 120-second lease every 45 seconds, aborts execution when
+the lease is lost, sends metadata-only step events, and reports one terminal
+event. A Job claimed by another live process is skipped rather than treated as
+a reconnect failure.
+
 ## PostgreSQL boundary
 
 Migration `202607260002_agent_pairing_jobs.sql` adds the protected pairing-code
@@ -105,8 +111,9 @@ hashes or execute these functions.
 ## Mock and production storage
 
 Mock mode uses the same protocol service, HMAC rules, schemas, lease state
-machine, and idempotency behavior with an in-memory store and one safe seeded
-job per paired device. It is intended for E2E and desktop development only.
+machine, Run dispatcher, and idempotency behavior with in-memory stores. Pairing
+does not create work; only an approved/idempotent Run dispatches a Job. It is
+intended for E2E and desktop development only.
 
 The database migration is production-ready, but the live Next.js store is
 deliberately unavailable until authenticated Supabase session and service-role

@@ -1,5 +1,6 @@
 import { agentApiError, claimedJobCredentials, readAgentJson } from '@/lib/agent-api';
 import { getAgentServerState } from '@/lib/agent-server';
+import { syncAgentProgress } from '@/lib/run-server';
 
 export async function POST(
   request: Request,
@@ -7,11 +8,15 @@ export async function POST(
 ): Promise<Response> {
   try {
     const { jobId } = await context.params;
+    const input = await readAgentJson(request);
     const result = await getAgentServerState().service.recordProgress(
       claimedJobCredentials(request),
       jobId,
-      await readAgentJson(request),
+      input,
     );
+    if (!result.duplicate) {
+      await syncAgentProgress(result.job, input);
+    }
     return Response.json(result, {
       headers: { 'cache-control': 'no-store' },
     });

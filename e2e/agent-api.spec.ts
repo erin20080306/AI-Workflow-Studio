@@ -29,6 +29,46 @@ test('pairs an Agent and enforces claim, lease, idempotency, and revocation', as
     authorization: `Bearer ${paired.deviceToken}`,
     'x-request-timestamp': new Date().toISOString(),
   });
+
+  const runStart = await request.post('/api/runs', {
+    data: {
+      deviceId: paired.device.id,
+      idempotencyKey: `e2e-run-${paired.device.id}`,
+      requiresApproval: true,
+      timeoutSeconds: 300,
+    },
+  });
+  expect(runStart.status()).toBe(201);
+  const runStartPayload = (await runStart.json()) as {
+    readonly duplicate: boolean;
+    readonly run: {
+      readonly approval?: { readonly id: string };
+      readonly id: string;
+      readonly status: string;
+    };
+  };
+  expect(runStartPayload).toMatchObject({
+    duplicate: false,
+    run: { status: 'awaiting_approval' },
+  });
+
+  const whileOffline = await request.get('/api/agent/jobs', {
+    headers: agentHeaders(),
+  });
+  expect(whileOffline.ok()).toBe(true);
+  expect(await whileOffline.json()).toMatchObject({ jobs: [] });
+
+  const approval = await request.post(`/api/runs/${runStartPayload.run.id}/approval`, {
+    data: {
+      approvalId: runStartPayload.run.approval?.id,
+      decision: 'approve',
+    },
+  });
+  expect(approval.ok()).toBe(true);
+  expect(await approval.json()).toMatchObject({
+    run: { attempts: 1, status: 'queued' },
+  });
+
   const heartbeat = await request.post('/api/agent/heartbeat', {
     data: {
       agentVersion: '0.1.0-e2e',
@@ -79,24 +119,55 @@ test('pairs an Agent and enforces claim, lease, idempotency, and revocation', as
   });
   expect(renewed.ok()).toBe(true);
 
-  const progressEventId = '10000000-0000-4000-8000-000000000721';
-  const progressBody = {
-    eventId: progressEventId,
-    step: {
-      nodeId: 'validate_orders',
-      processedRowCount: 5,
-      status: 'running',
+  const progressBodies = [
+    {
+      eventId: '10000000-0000-4000-8000-000000000721',
+      step: {
+        nodeId: 'list_order_files',
+        processedFileCount: 1,
+        processedRowCount: 0,
+        status: 'succeeded',
+      },
     },
-  };
-  const firstProgress = await request.post(`/api/agent/jobs/${jobId}/progress`, {
-    data: progressBody,
-    headers: claimHeaders(),
-  });
-  expect(firstProgress.ok()).toBe(true);
-  expect(await firstProgress.json()).toMatchObject({ duplicate: false });
+    {
+      eventId: '10000000-0000-4000-8000-000000000723',
+      step: {
+        nodeId: 'read_order_files',
+        processedFileCount: 1,
+        processedRowCount: 6,
+        status: 'succeeded',
+      },
+    },
+    {
+      eventId: '10000000-0000-4000-8000-000000000724',
+      step: {
+        nodeId: 'deduplicate_orders',
+        processedFileCount: 1,
+        processedRowCount: 5,
+        status: 'succeeded',
+      },
+    },
+    {
+      eventId: '10000000-0000-4000-8000-000000000725',
+      step: {
+        nodeId: 'create_order_report',
+        processedFileCount: 1,
+        processedRowCount: 5,
+        status: 'succeeded',
+      },
+    },
+  ] as const;
+  for (const progressBody of progressBodies) {
+    const progress = await request.post(`/api/agent/jobs/${jobId}/progress`, {
+      data: progressBody,
+      headers: claimHeaders(),
+    });
+    expect(progress.ok()).toBe(true);
+    expect(await progress.json()).toMatchObject({ duplicate: false });
+  }
 
   const duplicateProgress = await request.post(`/api/agent/jobs/${jobId}/progress`, {
-    data: progressBody,
+    data: progressBodies[0],
     headers: claimHeaders(),
   });
   expect(duplicateProgress.ok()).toBe(true);
@@ -122,6 +193,22 @@ test('pairs an Agent and enforces claim, lease, idempotency, and revocation', as
   });
   expect(duplicateCompletion.ok()).toBe(true);
   expect(await duplicateCompletion.json()).toMatchObject({ duplicate: true });
+
+  const runDetails = await request.get(`/api/runs/${runStartPayload.run.id}`);
+  expect(runDetails.ok()).toBe(true);
+  expect(await runDetails.json()).toMatchObject({
+    run: {
+      attempts: 1,
+      status: 'succeeded',
+      steps: expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: 'create_order_report',
+          processedRowCount: 5,
+          status: 'succeeded',
+        }),
+      ]),
+    },
+  });
 
   const revoke = await request.post(`/api/agent/devices/${paired.device.id}/revoke`);
   expect(revoke.ok()).toBe(true);

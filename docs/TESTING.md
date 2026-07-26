@@ -63,6 +63,10 @@ claim-token-bound leases, expired-lease rejection, and event idempotency.
 Google database assertions verify that connection ciphertext and write claims
 are inaccessible to authenticated clients, tenant/connection foreign keys hold,
 idempotency hashes conflict safely, and completed metadata results replay.
+Run database assertions verify that authenticated roles cannot mutate Runs or
+call service transitions, expected-status compare-and-set transitions succeed,
+invalid terminal transitions fail, and audit/notification rows are created in
+the same transaction.
 
 ### End to end
 
@@ -84,6 +88,13 @@ performs a Mock health check, renders the spreadsheet metadata list, and asserts
 that token fixture values do not appear in the page. Connector integration tests
 inject OAuth and Sheets transports, so no Google credential or network call is
 required.
+
+The Agent API E2E starts a write-capable Run while its paired Agent is offline,
+asserts no Job exists before approval, approves it, reconnects, claims exactly
+one Job, renews the lease, reports all four Workflow steps, replays duplicate
+events, completes, and verifies the output-free Run details. Desktop integration
+tests independently execute an authorized CSV-to-XLSX Workflow twice and prove
+that the source and first output hashes remain unchanged.
 
 ### Build and packaging
 

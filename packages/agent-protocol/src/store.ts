@@ -62,7 +62,7 @@ export interface JobEventRecord {
   readonly eventId: string;
   readonly occurredAt: Date;
   readonly payload: Readonly<Record<string, unknown>>;
-  readonly type: 'claimed' | 'completed' | 'failed' | 'lease_renewed' | 'progress';
+  readonly type: 'cancelled' | 'claimed' | 'completed' | 'failed' | 'lease_renewed' | 'progress';
 }
 
 export interface PairCompletionInput {
@@ -115,6 +115,7 @@ export interface AgentStore {
       readonly status: 'failed' | 'succeeded';
     },
   ): Promise<{ readonly duplicate: boolean; readonly job: AgentJob } | undefined>;
+  cancelJob(tenantId: string, jobId: string, now: Date): Promise<boolean>;
   revokeDevice(tenantId: string, deviceId: string, now: Date): Promise<boolean>;
 }
 
@@ -313,6 +314,26 @@ export class InMemoryAgentStore implements AgentStore {
     return { duplicate: false, job: cloneJob(record.job) };
   }
 
+  async cancelJob(tenantId: string, jobId: string, now: Date): Promise<boolean> {
+    const record = this.jobs.get(jobId);
+    if (
+      record === undefined ||
+      record.job.tenantId !== tenantId ||
+      !['pending', 'claimed', 'running'].includes(record.job.status)
+    ) {
+      return false;
+    }
+    record.job.status = 'cancelled';
+    delete record.job.leaseExpiresAt;
+    record.events.push({
+      eventId: `cancel-${now.toISOString()}`,
+      occurredAt: now,
+      payload: {},
+      type: 'cancelled',
+    });
+    return true;
+  }
+
   async revokeDevice(tenantId: string, deviceId: string, now: Date): Promise<boolean> {
     const device = this.devices.get(deviceId);
     if (device === undefined || device.tenantId !== tenantId) {
@@ -329,6 +350,9 @@ export class InMemoryAgentStore implements AgentStore {
   }
 
   seedJob(job: AgentJob): void {
+    if (this.jobs.has(job.id)) {
+      return;
+    }
     this.jobs.set(job.id, { events: [], job: structuredClone(job) });
   }
 

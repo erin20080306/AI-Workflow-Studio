@@ -1,4 +1,13 @@
-import { AgentJobListSchema, type AgentJob } from '@ai-workflow-studio/agent-protocol';
+import {
+  AgentJobListSchema,
+  AgentJobSchema,
+  JsonValueSchema,
+  StepResultSchema,
+  type AgentJob,
+  type JsonValue,
+  type StepResult,
+} from '@ai-workflow-studio/agent-protocol';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import type { PairingSession } from './token-vault';
@@ -23,12 +32,26 @@ const JobResponseSchema = z
     jobs: AgentJobListSchema,
   })
   .strict();
+const ClaimResponseSchema = z
+  .object({
+    claimToken: z.string().regex(/^clm_[A-Za-z0-9_-]{40,60}$/),
+    job: AgentJobSchema,
+  })
+  .strict();
+const JobMutationResponseSchema = z
+  .object({
+    duplicate: z.boolean(),
+    job: AgentJobSchema,
+  })
+  .strict();
 
 const MAX_RESPONSE_BYTES = 1_000_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const HEALTHY_POLL_MS = 15_000;
 const MIN_RECONNECT_MS = 5_000;
 const MAX_RECONNECT_MS = 60_000;
+const JOB_LEASE_SECONDS = 120;
+const JOB_LEASE_RENEW_MS = 45_000;
 
 export interface AgentClientStatus {
   readonly connection: 'offline' | 'online' | 'reconnecting' | 'unpaired';
@@ -45,8 +68,19 @@ export interface SafeAgentLogger {
 
 export type AgentFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
+export interface AgentJobReporter {
+  readonly signal: AbortSignal;
+  reportStep(step: StepResult): Promise<void>;
+}
+
+export type AgentJobHandler = (
+  job: AgentJob,
+  reporter: AgentJobReporter,
+) => Promise<JsonValue | undefined>;
+
 export interface AgentClientOptions {
   readonly agentVersion: string;
+  readonly executeJob?: AgentJobHandler;
   readonly fetchTransport?: AgentFetch;
   readonly logger: SafeAgentLogger;
   readonly onStatus: (status: AgentClientStatus) => void;
@@ -57,6 +91,13 @@ export interface SessionVault {
   clear(): Promise<void>;
   load(): Promise<PairingSession | undefined>;
   save(session: PairingSession): Promise<void>;
+}
+
+class AgentHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`Agent server request failed with status ${status}.`);
+    this.name = 'AgentHttpError';
+  }
 }
 
 function validateBaseUrl(input: string): string {
@@ -82,6 +123,7 @@ function validateBaseUrl(input: string): string {
 
 export class AgentClient {
   private readonly agentVersion: string;
+  private readonly executeJobHandler: AgentJobHandler | undefined;
   private readonly fetchTransport: AgentFetch;
   private readonly logger: SafeAgentLogger;
   private readonly onStatus: (status: AgentClientStatus) => void;
@@ -99,6 +141,7 @@ export class AgentClient {
 
   constructor(options: AgentClientOptions) {
     this.agentVersion = options.agentVersion;
+    this.executeJobHandler = options.executeJob;
     this.fetchTransport = options.fetchTransport ?? fetch;
     this.logger = options.logger;
     this.onStatus = options.onStatus;
@@ -222,6 +265,26 @@ export class AgentClient {
     return jobResponse.jobs;
   }
 
+  async processOnce(signal?: AbortSignal): Promise<readonly AgentJob[]> {
+    const jobs = await this.pollOnce(signal);
+    if (this.executeJobHandler === undefined) {
+      return jobs;
+    }
+    for (const job of jobs) {
+      if (signal?.aborted === true) {
+        break;
+      }
+      await this.executePendingJob(job, signal);
+    }
+    if (jobs.length > 0) {
+      this.setStatus({
+        ...this.status,
+        pendingJobCount: 0,
+      });
+    }
+    return jobs;
+  }
+
   start(): void {
     this.requireSession();
     if (this.executorRunning) {
@@ -269,7 +332,7 @@ export class AgentClient {
       throw new Error('Agent server response is too large.');
     }
     if (!response.ok) {
-      throw new Error(`Agent server request failed with status ${response.status}.`);
+      throw new AgentHttpError(response.status);
     }
     let value: unknown;
     try {
@@ -286,7 +349,7 @@ export class AgentClient {
     }
     this.abortController = new AbortController();
     try {
-      const jobs = await this.pollOnce(this.abortController.signal);
+      const jobs = await this.processOnce(this.abortController.signal);
       if (jobs.length > 0) {
         this.logger.info('AGENT_JOBS_AVAILABLE', 'Pending Agent jobs are available.', {
           count: jobs.length,
@@ -328,8 +391,179 @@ export class AgentClient {
     this.timer.unref?.();
   }
 
+  private async executePendingJob(job: AgentJob, parentSignal?: AbortSignal): Promise<void> {
+    const session = this.requireSession();
+    let claim: z.infer<typeof ClaimResponseSchema>;
+    try {
+      claim = await this.requestJson(
+        `${session.agentBaseUrl}/api/agent/jobs/${job.id}/claim`,
+        {
+          body: JSON.stringify({ leaseSeconds: JOB_LEASE_SECONDS }),
+          headers: this.deviceHeaders(session),
+          method: 'POST',
+          ...(parentSignal === undefined ? {} : { signal: parentSignal }),
+        },
+        ClaimResponseSchema,
+      );
+    } catch (error) {
+      if (error instanceof AgentHttpError && error.status === 409) {
+        this.logger.info('AGENT_JOB_ALREADY_CLAIMED', 'Agent job claim was already active.', {
+          jobId: job.id,
+        });
+        return;
+      }
+      throw error;
+    }
+
+    const controller = new AbortController();
+    const onParentAbort = () => controller.abort(parentSignal?.reason);
+    parentSignal?.addEventListener('abort', onParentAbort, { once: true });
+    let leaseFailure: unknown;
+    const renewLease = async () => {
+      try {
+        await this.requestJson(
+          `${session.agentBaseUrl}/api/agent/jobs/${job.id}/lease`,
+          {
+            body: JSON.stringify({ leaseSeconds: JOB_LEASE_SECONDS }),
+            headers: this.claimHeaders(session, claim.claimToken),
+            method: 'POST',
+            signal: controller.signal,
+          },
+          AgentJobSchema,
+        );
+      } catch (error) {
+        leaseFailure = error;
+        controller.abort('job_lease_lost');
+      }
+    };
+    const leaseTimer = setInterval(() => void renewLease(), JOB_LEASE_RENEW_MS);
+    leaseTimer.unref?.();
+
+    const reportStep = async (stepInput: StepResult) => {
+      const step = StepResultSchema.parse(stepInput);
+      await this.requestJson(
+        `${session.agentBaseUrl}/api/agent/jobs/${job.id}/progress`,
+        {
+          body: JSON.stringify({ eventId: randomUUID(), step }),
+          headers: this.claimHeaders(session, claim.claimToken),
+          method: 'POST',
+          signal: controller.signal,
+        },
+        JobMutationResponseSchema,
+      );
+    };
+
+    try {
+      this.logger.info('AGENT_JOB_STARTED', 'Desktop execution started for a claimed job.', {
+        attempt: claim.job.attempt,
+        jobId: job.id,
+      });
+      const result = await this.executeJobHandler?.(claim.job, {
+        reportStep,
+        signal: controller.signal,
+      });
+      if (leaseFailure !== undefined || controller.signal.aborted) {
+        throw leaseFailure ?? new Error('Desktop job execution was cancelled.');
+      }
+      await this.requestJson(
+        `${session.agentBaseUrl}/api/agent/jobs/${job.id}/complete`,
+        {
+          body: JSON.stringify({
+            eventId: randomUUID(),
+            ...(result === undefined ? {} : { result: JsonValueSchema.parse(result) }),
+          }),
+          headers: this.claimHeaders(session, claim.claimToken),
+          method: 'POST',
+          signal: controller.signal,
+        },
+        JobMutationResponseSchema,
+      );
+      this.logger.info('AGENT_JOB_COMPLETED', 'Desktop execution completed.', {
+        jobId: job.id,
+      });
+    } catch (error) {
+      if (parentSignal?.aborted === true || leaseFailure !== undefined) {
+        this.logger.warn(
+          'AGENT_JOB_LEASE_LOST',
+          'Desktop execution stopped after losing its lease.',
+          {
+            jobId: job.id,
+          },
+        );
+        return;
+      }
+      const failure = safeJobFailure(error);
+      try {
+        await this.requestJson(
+          `${session.agentBaseUrl}/api/agent/jobs/${job.id}/fail`,
+          {
+            body: JSON.stringify({
+              error: failure,
+              eventId: randomUUID(),
+            }),
+            headers: this.claimHeaders(session, claim.claimToken),
+            method: 'POST',
+            signal: controller.signal,
+          },
+          JobMutationResponseSchema,
+        );
+      } catch (reportError) {
+        this.logger.warn('AGENT_JOB_FAILURE_REPORT_REJECTED', 'Job failure report was rejected.', {
+          jobId: job.id,
+          type: reportError instanceof Error ? reportError.name : 'UnknownError',
+        });
+      }
+      this.logger.warn('AGENT_JOB_FAILED', failure.message, {
+        code: failure.code,
+        jobId: job.id,
+        retryable: failure.retryable,
+      });
+    } finally {
+      clearInterval(leaseTimer);
+      parentSignal?.removeEventListener('abort', onParentAbort);
+    }
+  }
+
+  private deviceHeaders(session: PairingSession): Readonly<Record<string, string>> {
+    return {
+      authorization: `Bearer ${session.deviceToken}`,
+      'content-type': 'application/json',
+      'x-request-timestamp': new Date().toISOString(),
+    };
+  }
+
+  private claimHeaders(
+    session: PairingSession,
+    claimToken: string,
+  ): Readonly<Record<string, string>> {
+    return {
+      ...this.deviceHeaders(session),
+      'x-job-claim-token': claimToken,
+    };
+  }
+
   private setStatus(status: AgentClientStatus): void {
     this.status = structuredClone(status);
     this.onStatus(this.getStatus());
   }
+}
+
+function safeJobFailure(error: unknown): {
+  readonly code: string;
+  readonly message: string;
+  readonly retryable: boolean;
+} {
+  const candidate =
+    typeof error === 'object' && error !== null
+      ? (error as { readonly code?: unknown; readonly retryable?: unknown })
+      : undefined;
+  const code =
+    typeof candidate?.code === 'string' && /^[A-Z][A-Z0-9_]{0,119}$/.test(candidate.code)
+      ? candidate.code
+      : 'DESKTOP_EXECUTION_FAILED';
+  return {
+    code,
+    message: 'Desktop workflow execution failed. Review the redacted local Agent log.',
+    retryable: candidate?.retryable === true,
+  };
 }

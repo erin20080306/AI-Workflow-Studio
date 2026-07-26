@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 10 — Google Sheets connector (completed)
+Phase 11 — Run orchestration (completed)
 
 ## Repository baseline
 
@@ -750,9 +750,8 @@ Status: completed
 
 ### Known limitations
 
-- The executor is packaged and bound to local grants but does not independently
-  claim cloud jobs. Claim, lease, approval, progress, cancellation, and
-  completion orchestration are connected in Phase 11.
+- Phase 9 intentionally stopped at the local executor boundary. Phase 11 now
+  binds it to claimed, leased jobs with metadata-only progress and completion.
 - `.xls`, `.xlsm`, VBA, embedded objects, external workbook links, pivot-table
   fidelity, native charts, external connections, and complex style preservation
   are outside the MVP.
@@ -857,3 +856,94 @@ Status: completed
 ### Commit
 
 - `feat: add secure google sheets connector` (this phase commit)
+
+## Phase 11
+
+Status: completed
+
+### Implemented
+
+- Added `@ai-workflow-studio/run-orchestrator` with tenant/role checks,
+  Workflow/target validation, input-bound start idempotency, a closed Run state
+  machine, approval expiry, bounded attempts, automatic/manual retry,
+  cancellation, timeout sweep, metadata-only audit entries, and notifications.
+- Approval now holds write-capable Workflows before Job creation. Approved Runs
+  dispatch one device-bound Job; rejection and expiry dispatch none.
+- Added Run list/details APIs and responsive dashboard views with step counts,
+  safe structured errors, approval risk counts, retry, two-click cancellation,
+  refresh/polling, audit timeline, and notifications.
+- Synchronized Agent progress, completion, and failure routes into the Run
+  state machine. Duplicate UUID events are replay-safe and success is rejected
+  until every Workflow step is terminal and successful/skipped.
+- Added Agent-store cancellation and duplicate dispatch suppression.
+- Extended the Electron Agent from heartbeat/poll-only behavior to atomic claim,
+  120-second renewable leases, registered local Workflow execution,
+  metadata-only progress, completion/failure, bounded reconnect, and
+  lease-loss cancellation.
+- Bound the local Workflow engine to authorized `folder.list_files`,
+  Excel read/merge/write/report, filter, column-map, and deduplicate nodes.
+  Folder listing is capped, non-recursive, and symlink-safe; persistent output
+  receipts prevent duplicate writes after restart/reclaim.
+- Added durable Run attempt/timeout/cancellation fields, Agent event UUID
+  uniqueness, notifications with tenant RLS, authenticated write revocation,
+  and the service-only compare-and-set `transition_workflow_run` database
+  function.
+- Added the Run orchestration operational guide and updated Agent, Excel,
+  architecture, security, testing, and project documentation.
+
+### Dependency purposes
+
+- The new orchestration package uses the existing Workflow schema, Node
+  registry contracts, Zod validation, and Node cryptography; no new third-party
+  runtime dependency was introduced.
+- The Desktop workspace links the existing Workflow engine/schema packages so
+  a claimed Job can execute the same validated Workflow v1 document locally.
+
+### Files changed
+
+- `packages/run-orchestrator` state machine, store, types, errors, exports, and
+  orchestration tests.
+- Run APIs, Agent synchronization routes, Run list/details UI, and Mock
+  control-plane adapter.
+- Desktop Agent claim/lease/report loop, registered local Job executor, safe
+  folder listing, and integration tests.
+- Run orchestration migration, RLS/transition tests, database runner, E2Es,
+  workspace metadata, and documentation.
+
+### Validation
+
+- `pnpm install`: passed — workspace links only; no new third-party dependency
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all 10 code workspaces
+- `pnpm test`: passed — 82 tests across 17 files
+- `pnpm test:e2e`: passed — 2 Chromium E2Es, including offline reconnect,
+  approval-before-dispatch, one active claim, four step events, duplicate event
+  replay, completion, and Run detail assertions
+- `pnpm db:test`: passed — all fresh migrations, tenant isolation,
+  authenticated privilege denial, valid compare-and-set transitions, invalid
+  transition rejection, audit entries, and notification assertions
+- `pnpm peers check`: passed
+- `pnpm build:web`: passed — 34 generated pages without optional credentials
+- `pnpm build:desktop`: passed
+- Unsigned native package gate: passed — macOS arm64 unpacked development app
+- Browser QA: passed — no horizontal overflow or console warnings; approval,
+  queued state, two-click cancellation, step cancellation, audit, and
+  notification updates rendered correctly
+
+### Known limitations
+
+- Mock Run/Agent stores are process-local. Production must wire the existing
+  repository and dispatcher ports to authenticated Supabase/service-role
+  adapters; configured non-Mock mode currently fails closed.
+- Device cancellation is observed at the next lease renewal rather than through
+  a local push channel.
+- The local Job executor deliberately supports only the Phase 9 registered
+  spreadsheet subset. Unsupported, cloud-only, or destructive file nodes fail
+  closed.
+- The macOS development package remains unsigned and is not a production
+  installer. Native signed release artifacts are Phase 12 gates.
+
+### Commit
+
+- `feat: connect cloud and desktop run orchestration` (this phase commit)
