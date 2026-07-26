@@ -39,7 +39,13 @@ runners. Update download is user-initiated by default. Signing is conditional on
 the appropriate secrets. Unsigned artifacts are development-only and must never
 be described as production-ready.
 
+Phase 8 adds the Electron Builder configuration and verifies an unsigned,
+unpacked macOS development application. It deliberately sets no signing
+identity, installer, checksum, or public release metadata. Native signed
+installers and the GitHub update channel remain Phase 12 release gates.
+
 ## Current deployment status
 
-No application or deployment configuration exists during Phase 0. Nothing has
-been deployed or released.
+The web application and desktop development package build locally. Nothing has
+been deployed or released. Live Vercel, Supabase, signing, and GitHub Release
+configuration remains intentionally deferred until Phase 12.

@@ -60,6 +60,12 @@ desktop notifications, and device job execution. It returns redacted metadata
 and progress, not complete local spreadsheets. Local paths are represented in
 cloud workflow data only by device-scoped folder aliases.
 
+The sandboxed renderer receives an exact preload API and has no Node.js,
+filesystem, token, or generic IPC access. The main process owns OS-encrypted
+device credentials, the system folder picker, canonical grant paths, redacted
+logs, polling, tray behavior, and user-initiated updates. See
+`docs/DESKTOP_AGENT.md`.
+
 ## Agent job protocol
 
 The database remains the durable Agent Job source. An opaque device token binds
@@ -79,6 +85,8 @@ request-level idempotency. See `docs/AGENT_PROTOCOL.md`.
 5. OAuth/provider credentials remain server-side and encrypted at rest.
 6. Node types and versions must be registered; arbitrary executable content is
    never accepted.
+7. The Electron renderer is sandboxed and cannot name filesystem paths or IPC
+   channels.
 
 ## Initial architecture risks
 

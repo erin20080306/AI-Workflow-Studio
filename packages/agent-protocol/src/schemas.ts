@@ -87,3 +87,4 @@ export type LeaseJobRequest = z.infer<typeof LeaseJobRequestSchema>;
 export type PairCompleteRequest = z.infer<typeof PairCompleteRequestSchema>;
 export type PairStartRequest = z.infer<typeof PairStartRequestSchema>;
 export type ProgressJobRequest = z.infer<typeof ProgressJobRequestSchema>;
+export type { AgentJob } from '@ai-workflow-studio/workflow-schema';

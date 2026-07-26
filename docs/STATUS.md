@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 7 — Device pairing and Agent Job API (completed)
+Phase 8 — Desktop Agent foundation (completed)
 
 ## Repository baseline
 
@@ -566,4 +566,97 @@ Status: completed
 
 ### Commit
 
-- `feat: add secure device pairing and agent job api` (this phase commit)
+- `993aaba` — `feat: add secure device pairing and agent job api`
+
+## Phase 8
+
+Status: completed
+
+### Implemented
+
+- Added the Electron 43 Desktop Agent with separate Vite main, preload, and
+  React renderer bundles plus an Electron Builder development package.
+- Added pairing, connection and heartbeat status, pending-job count, explicit
+  executor start/stop, unpair, privacy, startup, folder permission, activity,
+  tray, and manual update experiences.
+- Added a strict Agent client that stores no token in renderer state, uses
+  authenticated protocol headers, validates bounded responses, aborts cleanly,
+  and reconnects with 5–60 second exponential delays.
+- Added OS-backed asynchronous `safeStorage` encryption, atomic `0600` session
+  persistence, re-encryption support, and fail-closed handling for unavailable
+  or Linux `basic_text` storage.
+- Added system-picker-only local folder grants with canonical real paths,
+  device ownership, separate read/write/watch permissions, cloud-safe aliases,
+  traversal rejection, symlink-escape rejection, and revocation.
+- Added structured JSONL logging that recursively masks credentials, tokens,
+  absolute paths, email addresses, and row-like values before memory or disk.
+- Added a sandboxed renderer with context isolation, no Node integration, denied
+  navigation/windows/webviews/permissions, restrictive CSP, a constrained asset
+  protocol, sender validation, strict IPC schemas, and an exact preload bridge.
+- Added a user-initiated update controller with automatic download and
+  install-on-quit disabled. Unsigned artifacts remain explicitly limited to
+  development packaging.
+- Serialized the two full Playwright flows and gave each workflow a bounded
+  90-second budget so concurrent Next.js development cold compilation cannot
+  create a false timeout.
+- Added desktop architecture, operation, storage, security, testing, and
+  packaging documentation.
+
+### Dependency purposes
+
+- `electron` provides the native main, renderer, tray, system dialog, secure
+  storage, startup, and sandbox boundaries.
+- `vite` and `@vitejs/plugin-react` create isolated deterministic bundles for
+  the main, preload, and renderer processes.
+- `electron-builder` creates the native development package, while
+  `electron-updater` implements an explicit user-controlled update state
+  machine.
+- Existing React, Zod, Agent protocol, and shared workspace packages provide the
+  renderer, runtime validation, authenticated contracts, and product identity.
+
+### Files changed
+
+- `apps/desktop` application, renderer, preload, main-process services,
+  packaging configuration, and tests.
+- Exported the Agent job type for the shared desktop protocol client.
+- Workspace dependency allowlist, lockfile, stable E2E worker configuration,
+  architecture, security, testing, deployment, execution plan, and Desktop
+  Agent documentation.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 56 tests
+- Desktop security tests: passed — encrypted session, secure-storage fail
+  closed, log redaction, path traversal, symlink escape, device ownership,
+  missing permission, polling authentication, reconnect, and shutdown
+- `pnpm test:e2e`: passed — 2 Chromium E2Es
+- `pnpm db:test`: passed — all migrations and tenancy/Agent protocol assertions
+- `pnpm peers check`: passed
+- `pnpm build:web`: passed without optional provider or deployment credentials
+- `pnpm build:desktop`: passed — Electron main, preload, and renderer bundles
+- Compiled main-process path audit: passed — no invalid transformed
+  `import.meta.dirname` access remains
+- Desktop renderer QA: passed — pairing, overview, executor, folder grant,
+  activity/settings, update controls, responsive width, and semantic structure
+- Unsigned native package gate: passed — macOS arm64 unpacked development
+  application; signing identity intentionally disabled
+
+### Known limitations
+
+- Phase 8 establishes the secure local boundary but intentionally does not
+  execute Excel or CSV jobs. File watching, transformations, atomic output,
+  backups, hashes, and duplicate suppression begin in Phase 9.
+- The current native package is unsigned, uses Electron's default application
+  icon, and is not a distributable production release. Native signing,
+  installers, checksums, update metadata, and platform CI are Phase 12 gates.
+- The live cloud Agent repository still requires authenticated Supabase
+  configuration; the deterministic Mock protocol remains the development path.
+- Startup behavior and OS encryption use platform APIs and require native
+  Windows/macOS release-runner coverage before production distribution.
+
+### Commit
+
+- `feat: add secure electron desktop agent foundation` (this phase commit)

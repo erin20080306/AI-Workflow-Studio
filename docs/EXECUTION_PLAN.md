@@ -23,7 +23,7 @@ test, and build checks and has been committed.
 | 5     | Workflow web UI               | Mock workflow E2E and web build pass                                           | completed |
 | 6     | AI gateway                    | Provider adapters build without keys; strict JSON and mock tests pass          | completed |
 | 7     | Pairing and job API           | Token, tenant, claim, lease, and revocation tests pass                         | completed |
-| 8     | Desktop agent foundation      | Development build and unsigned test package pass; folder access is constrained | pending   |
+| 8     | Desktop agent foundation      | Development build and unsigned test package pass; folder access is constrained | completed |
 | 9     | Local Excel executor          | Fixture, idempotency, atomic output, backup, and traversal tests pass          | pending   |
 | 10    | Google Sheets connector       | Mock OAuth/Sheets tests pass; credentials are optional and server-only         | pending   |
 | 11    | Run orchestration             | End-to-end mock run, reconnect, approval, and de-duplication pass              | pending   |

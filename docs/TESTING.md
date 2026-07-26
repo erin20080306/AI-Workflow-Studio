@@ -19,6 +19,7 @@ pnpm test:e2e
 pnpm db:test
 pnpm build:web
 pnpm build:desktop
+CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @ai-workflow-studio/desktop package:test
 ```
 
 Only checks relevant to code that exists in the current phase are required. The
@@ -73,6 +74,13 @@ Web production builds run without optional provider credentials. Desktop
 development builds run on supported hosts; release workflows package Windows on
 Windows and macOS on macOS. Artifact checks verify metadata, checksums, absence
 of secrets, and accurate signed/unsigned labeling.
+
+Desktop unit tests inject filesystem roots, a fake secure cipher, and local
+protocol transports. They verify encrypted-at-rest device sessions, fail-closed
+secure storage, recursive secret/path/row log redaction, traversal rejection,
+symlink escape rejection, device-bound grants, permission checks, token headers,
+response validation, polling, reconnect, and clean executor shutdown. The
+Phase 8 native package gate is unsigned and unpacked by design.
 
 ## Phase 0 baseline
 

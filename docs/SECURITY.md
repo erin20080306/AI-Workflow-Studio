@@ -24,6 +24,30 @@ root, rejects traversal and symlink escape, verifies the requested permission,
 and records a content hash. Writes use temporary output and atomic rename; source
 overwrite is not the default and requires backup plus approval.
 
+The renderer cannot create grants from path text. It sees only device-scoped
+aliases and display names. The main process rechecks ownership, permission,
+canonical containment, and symlink resolution for every access. Folder grants
+are stored locally and raw paths are removed from logs and renderer responses.
+
+## Desktop application boundary
+
+The Electron renderer has context isolation, Chromium sandboxing, disabled Node
+integration, disabled webviews and new windows, denied permission requests, and
+an exact allowlisted preload bridge. Production assets are served only from the
+packaged renderer directory through a constrained custom protocol. IPC handlers
+validate both the sender and payload.
+
+Device sessions are encrypted with the operating system's Electron `safeStorage`
+provider before atomic private-mode persistence. The Agent fails closed if
+secure storage is unavailable or Linux exposes only the `basic_text` backend.
+Device tokens never enter renderer state, logs, URLs, settings, or folder-grant
+files.
+
+The updater never auto-downloads. Check and download require separate user
+actions, and unsigned Phase 8 packages are development-only. Formal releases
+must pass signing and artifact verification gates before the update channel is
+enabled.
+
 ## Device and job security
 
 Device secrets are generated with sufficient entropy and stored in the cloud

@@ -5,7 +5,7 @@ export default defineConfig({
     timeout: 8_000,
   },
   forbidOnly: Boolean(process.env.CI),
-  fullyParallel: true,
+  fullyParallel: false,
   outputDir: 'test-results/playwright',
   projects: [
     {
@@ -16,7 +16,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
   retries: process.env.CI ? 2 : 0,
   testDir: './e2e',
-  timeout: 30_000,
+  timeout: 90_000,
   use: {
     baseURL: 'http://127.0.0.1:3100',
     screenshot: 'only-on-failure',
@@ -31,5 +31,5 @@ export default defineConfig({
     timeout: 120_000,
     url: 'http://127.0.0.1:3100',
   },
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
 });
