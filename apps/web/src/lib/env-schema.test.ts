@@ -12,6 +12,12 @@ describe('parseEnvironment', () => {
         gemini: false,
         openai: false,
       },
+      providerModels: {
+        anthropic: 'claude-sonnet-4-6',
+        gemini: 'gemini-3.6-flash',
+        mock: 'mock-planner-v1',
+        openai: 'gpt-5.6-sol',
+      },
       supabaseConfigured: false,
     });
   });
@@ -35,5 +41,17 @@ describe('parseEnvironment', () => {
         NEXT_PUBLIC_SUPABASE_URL: 'not-a-url',
       }),
     ).toThrowError('Invalid environment configuration: NEXT_PUBLIC_SUPABASE_URL');
+  });
+
+  it('accepts safe model overrides and rejects values that look like paths', () => {
+    expect(
+      parseEnvironment({
+        OPENAI_MODEL: 'gpt-5.6-terra',
+      }).providerModels.openai,
+    ).toBe('gpt-5.6-terra');
+
+    expect(() => parseEnvironment({ OPENAI_MODEL: '../../unsafe' })).toThrowError(
+      'Invalid environment configuration: OPENAI_MODEL',
+    );
   });
 });

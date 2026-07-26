@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-workflow-studio/ai-gateway": "workspace:*",
     "@ai-workflow-studio/shared": "workspace:*",
     "@ai-workflow-studio/workflow-engine": "workspace:*",
     "@ai-workflow-studio/workflow-schema": "workspace:*",

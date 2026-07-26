@@ -38,6 +38,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ai-workflow-studio/ai-gateway':
+        specifier: workspace:*
+        version: link:../../packages/ai-gateway
       '@ai-workflow-studio/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -81,6 +84,15 @@ importers:
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
+
+  packages/ai-gateway:
+    dependencies:
+      '@ai-workflow-studio/workflow-schema':
+        specifier: workspace:*
+        version: link:../workflow-schema
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/shared: {}
 

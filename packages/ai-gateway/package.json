@@ -1,0 +1,16 @@
+{
+  "name": "@ai-workflow-studio/ai-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-workflow-studio/workflow-schema": "workspace:*",
+    "zod": "^4.4.3"
+  }
+}

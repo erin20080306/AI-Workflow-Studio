@@ -27,6 +27,7 @@ apps/
   web/                  Next.js control plane and server APIs
   desktop/              Electron local agent
 packages/
+  ai-gateway/           Server-only AI provider adapters and validation boundary
   workflow-schema/      Versioned Zod DSL and semantic validation
   workflow-engine/      Registry and deterministic orchestration
   connector-sdk/        Connector contracts and safe helpers
@@ -43,6 +44,13 @@ The Next.js application owns authentication UX, tenant-aware workflow APIs,
 planner APIs, Google OAuth callbacks, job coordination, approvals, audit
 visibility, and run dashboards. Supabase PostgreSQL is the source of truth.
 Realtime is only a wake-up hint and is never the sole job-delivery mechanism.
+
+The planner API accepts bounded context, selects a server-only provider adapter,
+and treats every completion as untrusted text. Provider JSON modes improve
+reliability, but the complete application-side Workflow v1 structural and
+semantic validators remain authoritative. A bounded repair loop may request a
+complete replacement plan; it never patches, executes, or returns invalid
+content. See `docs/AI_GATEWAY.md`.
 
 ## Desktop data plane
 

@@ -1,6 +1,8 @@
 'use client';
 
+import { AIPlannerOutputSchema, type Workflow } from '@ai-workflow-studio/workflow-schema';
 import { useState, type FormEvent } from 'react';
+import { z } from 'zod';
 
 import {
   ArrowRightIcon,
@@ -10,28 +12,66 @@ import {
   ShieldIcon,
   SparkIcon,
 } from '@/components/icons';
-import { MOCK_WORKFLOW } from '@/lib/mock-workflows';
+import { MOCK_DEVICE_ID, MOCK_FOLDER_ALIAS_ID } from '@/lib/mock-workflows';
 
 import { WorkflowReview } from './workflow-review';
 
 const EXAMPLE_PROMPT = '每天整理訂單資料夾裡的 Excel，依訂單編號去重，並建立一份新的彙整報表。';
+const PlannerApiResponseSchema = z
+  .object({
+    output: AIPlannerOutputSchema,
+  })
+  .passthrough();
 
 export function WorkflowComposer() {
   const [prompt, setPrompt] = useState('');
   const [promptError, setPromptError] = useState<string>();
-  const [generated, setGenerated] = useState(false);
+  const [workflow, setWorkflow] = useState<Workflow>();
+  const [planning, setPlanning] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  function createPreview(event: FormEvent<HTMLFormElement>) {
+  async function createPreview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaved(false);
     if (prompt.trim().length < 12) {
-      setGenerated(false);
+      setWorkflow(undefined);
       setPromptError('請至少用 12 個字描述資料來源、處理方式與預期輸出。');
       return;
     }
     setPromptError(undefined);
-    setGenerated(true);
+    setPlanning(true);
+    try {
+      const response = await fetch('/api/ai/plan', {
+        body: JSON.stringify({
+          context: {
+            allowedFolderAliasIds: [MOCK_FOLDER_ALIAS_ID],
+            executionTarget: {
+              deviceId: MOCK_DEVICE_ID,
+              type: 'desktop',
+            },
+            locale: 'zh-Hant',
+            timezone: 'Asia/Taipei',
+          },
+          maxRepairAttempts: 1,
+          prompt,
+          provider: 'mock',
+        }),
+        headers: {
+          'content-type': 'application/json',
+        },
+        method: 'POST',
+      });
+      const parsed = PlannerApiResponseSchema.safeParse(await response.json());
+      if (!response.ok || !parsed.success) {
+        throw new Error('Invalid planning response');
+      }
+      setWorkflow(parsed.data.output.workflow);
+    } catch {
+      setWorkflow(undefined);
+      setPromptError('目前無法建立安全預覽，請稍後重試。沒有任何工作流被儲存或執行。');
+    } finally {
+      setPlanning(false);
+    }
   }
 
   return (
@@ -80,9 +120,10 @@ export function WorkflowComposer() {
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                disabled={planning}
                 type="submit"
               >
-                產生安全預覽
+                {planning ? '正在驗證…' : '產生安全預覽'}
                 <ArrowRightIcon className="size-4" />
               </button>
               <button
@@ -133,18 +174,18 @@ export function WorkflowComposer() {
         </div>
       </form>
 
-      {generated && (
+      {workflow !== undefined && (
         <section className="mt-7">
           <div className="mb-4">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-600">
               Generated draft
             </p>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950">
-              {MOCK_WORKFLOW.name}
+              {workflow.name}
             </h2>
-            <p className="mt-1 text-sm text-slate-600">{MOCK_WORKFLOW.description}</p>
+            <p className="mt-1 text-sm text-slate-600">{workflow.description}</p>
           </div>
-          <WorkflowReview onSaveDraft={() => setSaved(true)} workflow={MOCK_WORKFLOW} />
+          <WorkflowReview onSaveDraft={() => setSaved(true)} workflow={workflow} />
         </section>
       )}
 

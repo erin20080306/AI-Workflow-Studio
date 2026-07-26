@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 5 — Workflow Web UI (completed)
+Phase 6 — AI gateway (completed)
 
 ## Repository baseline
 
@@ -386,4 +386,94 @@ Status: completed
 
 ### Commit
 
-- `feat: add workflow planning web experience` (this phase commit)
+- `10cc4b8` — `feat: add workflow planning web experience`
+
+## Phase 6
+
+Status: completed
+
+### Implemented
+
+- Added a common AI provider interface and server-only OpenAI, Anthropic,
+  Gemini, and deterministic Mock adapters.
+- Configured provider-specific JSON response modes, fixed official HTTPS
+  endpoints, bounded 45-second requests, 1 MB provider responses, status
+  mapping, refusal/truncation handling, and secret-safe errors.
+- Added a strict planner request contract with trusted execution target and
+  folder-alias context, an 8,000-character prompt limit, and a 20 KB API body
+  limit.
+- Added exact JSON parsing and complete Workflow v1 structural and semantic
+  validation. Markdown fences, invented fields, unknown nodes, code, shell
+  commands, raw paths, arbitrary URLs, and malformed graphs never reach the
+  executor.
+- Added a repair loop bounded to zero through two retries. Repair prompts expose
+  only validation codes and paths and replace the complete rejected response.
+- Added redacted per-attempt usage accounting. Prompt text, output content,
+  provider bodies, API keys, paths, and row data are excluded; a failed usage
+  record withholds the output.
+- Connected the workflow composer to the validated `/api/ai/plan` route and
+  revalidates the returned planner envelope at the browser boundary.
+- Added provider settings and AI-model pages that expose only availability and
+  model names. Mock is always available; live providers remain disabled when
+  server keys are absent.
+- Added provider transport, gateway safety, environment, and browser E2E tests.
+  The browser path covers planning through the Mock API, review, Dry Run, draft
+  save, provider selection, and the server-secret boundary.
+- Hardened the Docker database test readiness check to query the configured
+  database rather than accepting a server-ready signal before database creation
+  finishes.
+- Added AI gateway architecture, configuration, privacy, validation, repair, and
+  testing documentation with official provider references.
+
+### Dependency purposes
+
+- No provider SDK was added. The adapters use the platform `fetch` API and
+  injected transports so tests remain deterministic and paid-service free.
+- Existing Zod and Workflow v1 packages remain the single source of truth for
+  request, planner-envelope, node, graph, and execution-target validation.
+
+### Files changed
+
+- `packages/ai-gateway` contracts, prompts, provider adapters, bounded gateway,
+  strict parser, usage sinks, and tests.
+- Web planner API, server adapter factory, provider environment parsing, workflow
+  composer integration, settings routes, and provider settings UI.
+- Mock workflow browser E2E, environment example, package metadata, and
+  lockfile.
+- Database test readiness condition and AI gateway, architecture, security,
+  testing, execution-plan, and status documentation.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 40 tests
+- `pnpm test:e2e`: passed — 1 Chromium Mock Workflow/provider settings E2E
+- Browser desktop QA: passed — provider availability, model names, secret
+  boundary, save interaction, and no horizontal overflow at 1265px
+- `bash -n scripts/test-database.sh`: passed
+- `pnpm db:test`: passed — fresh migration, RLS/role isolation, required-table
+  checks, owner invariant, and idempotent seed
+- PostgreSQL test container cleanup: passed
+- `pnpm peers check`: passed
+- `pnpm build:web`: passed without provider keys — 24 generated application
+  pages including the dynamic planner API
+- `pnpm build:desktop`: not applicable — desktop app begins in Phase 8
+
+### Known limitations
+
+- Live OpenAI, Anthropic, and Gemini requests were not attempted because no
+  provider credentials are required or available. Injected transport tests
+  verify their request and response contracts without external calls.
+- Provider settings reflect deployment environment configuration; they do not
+  persist end-user API keys.
+- Phase 6 writes redacted usage to the server log. Tenant-bound persistence into
+  `usage_records` is connected when authenticated run orchestration is added.
+- The planner route currently participates in the application's documented Mock
+  authentication mode. Tenant-scoped authorization is enforced when the
+  authenticated API layer is introduced.
+
+### Commit
+
+- `feat: add validated multi-provider ai gateway` (this phase commit)

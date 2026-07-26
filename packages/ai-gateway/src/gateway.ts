@@ -1,0 +1,113 @@
+import type { WorkflowValidationIssue } from '@ai-workflow-studio/workflow-schema';
+
+import { AiGatewayError } from './errors';
+import { parseStrictPlannerOutput } from './json';
+import { buildPlannerUserPrompt, PLANNER_SYSTEM_PROMPT } from './prompts';
+import type {
+  AiProviderAdapter,
+  PlannerRequest,
+  PlannerResult,
+  ProviderTokenUsage,
+  UsageSink,
+} from './types';
+import { PlannerRequestSchema } from './types';
+import { recordUsage } from './usage';
+
+function addUsage(left: ProviderTokenUsage, right: ProviderTokenUsage): ProviderTokenUsage {
+  return {
+    inputTokens: left.inputTokens + right.inputTokens,
+    outputTokens: left.outputTokens + right.outputTokens,
+    totalTokens: left.totalTokens + right.totalTokens,
+  };
+}
+
+export class AiGateway {
+  constructor(
+    private readonly adapter: AiProviderAdapter,
+    private readonly usageSink: UsageSink,
+  ) {}
+
+  async plan(input: unknown, signal?: AbortSignal): Promise<PlannerResult> {
+    const parsedRequest = PlannerRequestSchema.safeParse(input);
+    if (!parsedRequest.success) {
+      throw new AiGatewayError('AI_REQUEST_INVALID', 'AI planning request is invalid.', {
+        details: {
+          paths: parsedRequest.error.issues.map((issue) => issue.path.map(String).join('.')),
+        },
+      });
+    }
+
+    const request: PlannerRequest = parsedRequest.data;
+    const maxAttempts = request.maxRepairAttempts + 1;
+    let priorIssues: readonly WorkflowValidationIssue[] = [];
+    let aggregateUsage: ProviderTokenUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    };
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const startedAt = Date.now();
+      let completion;
+      try {
+        completion = await this.adapter.complete({
+          attempt,
+          plannerRequest: request,
+          ...(signal === undefined ? {} : { signal }),
+          systemPrompt: PLANNER_SYSTEM_PROMPT,
+          userPrompt: buildPlannerUserPrompt(request, priorIssues),
+        });
+      } catch (error) {
+        await recordUsage(this.usageSink, {
+          attempt,
+          durationMs: Math.max(0, Date.now() - startedAt),
+          inputTokens: 0,
+          model: this.adapter.model,
+          operation: 'workflow_plan',
+          outcome: 'failed',
+          outputTokens: 0,
+          provider: this.adapter.provider,
+          validationCodes: [],
+        });
+        throw error;
+      }
+
+      aggregateUsage = addUsage(aggregateUsage, completion.usage);
+      const validation = parseStrictPlannerOutput(completion.text);
+      const validationCodes = [...new Set(validation.issues.map((issue) => issue.code))].sort();
+      await recordUsage(this.usageSink, {
+        attempt,
+        durationMs: Math.max(0, Date.now() - startedAt),
+        inputTokens: completion.usage.inputTokens,
+        model: completion.model,
+        operation: 'workflow_plan',
+        outcome: validation.success ? 'succeeded' : 'invalid',
+        outputTokens: completion.usage.outputTokens,
+        provider: this.adapter.provider,
+        validationCodes,
+      });
+
+      if (validation.success && validation.output !== undefined) {
+        return {
+          attempts: attempt,
+          model: completion.model,
+          output: validation.output,
+          provider: this.adapter.provider,
+          usage: aggregateUsage,
+        };
+      }
+      priorIssues = validation.issues;
+    }
+
+    throw new AiGatewayError(
+      'AI_OUTPUT_INVALID',
+      'AI output did not pass workflow validation within the repair limit.',
+      {
+        details: {
+          attempts: maxAttempts,
+          validationCodes: [...new Set(priorIssues.map((issue) => issue.code))].sort(),
+        },
+      },
+    );
+  }
+}

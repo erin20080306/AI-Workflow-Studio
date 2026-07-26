@@ -45,6 +45,20 @@ stores. Example files never contain working values. Encryption and hashing keys
 must be independently generated and rotatable. Tokens must not appear in URLs,
 client state, workflow JSON, logs, fixtures, or artifacts.
 
+## AI provider boundary
+
+AI provider keys are read only in the server-only adapter factory and are sent
+in provider authorization headers, never in request bodies, browser state, or
+workflow JSON. Provider output is capped, parsed as exact JSON, and validated by
+the closed Workflow v1 schema and semantic validator before it can be released
+as a draft. Unknown fields and nodes, Markdown-wrapped JSON, source code, shell
+commands, raw local paths, arbitrary URLs, and invalid graphs fail closed.
+
+Repair attempts are bounded from zero to two. Repair feedback includes only
+validation classifications and paths; the rejected raw response is not logged
+or echoed. Usage records exclude prompts and generated content. A usage-record
+failure withholds the output rather than creating an unaccounted plan.
+
 ## Security review gates
 
 - Dependency and license audit.

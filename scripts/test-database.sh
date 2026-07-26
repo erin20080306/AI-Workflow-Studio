@@ -35,7 +35,8 @@ fi
 
 database_ready="false"
 for _attempt in $(seq 1 30); do
-  if docker exec "$container_id" pg_isready --dbname "$DATABASE_NAME" --username "$DATABASE_USER" \
+  if docker exec "$container_id" \
+    psql --dbname "$DATABASE_NAME" --tuples-only --command "SELECT 1" --username "$DATABASE_USER" \
     >/dev/null 2>&1; then
     database_ready="true"
     break

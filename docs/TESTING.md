@@ -33,6 +33,11 @@ classification, path authorization/traversal/symlinks, hashes, Excel
 transformations, column mapping, job claim/lease/idempotency, token hashing,
 redaction, invalid AI JSON, provider fallback, and Google refresh errors.
 
+AI provider tests use injected local transports. They assert endpoint and header
+construction, structured-output configuration, response and usage parsing,
+bounded repair, refusal/truncation handling, secret-safe errors, and the
+invariant that invalid or unaccounted output is never released.
+
 ### Integration
 
 Integration tests cover tenant-aware workflow/version/run/job lifecycles,
@@ -53,7 +58,9 @@ paid service.
 
 `pnpm test:e2e` starts the Next.js application on an isolated localhost port,
 runs the workflow path in Playwright Chromium, and terminates both browser and
-server. CI installs only Chromium immediately before this test.
+server. The flow also verifies Mock provider selection and the server-secret
+boundary on the AI model settings page. CI installs only Chromium immediately
+before this test.
 
 ### Build and packaging
 

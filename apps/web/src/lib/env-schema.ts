@@ -4,13 +4,22 @@ const emptyToUndefined = (value: unknown): unknown => (value === '' ? undefined 
 
 const optionalUrl = z.preprocess(emptyToUndefined, z.string().url().optional());
 const optionalSecret = z.preprocess(emptyToUndefined, z.string().min(24).optional());
+const optionalModel = z.preprocess(
+  emptyToUndefined,
+  z
+    .string()
+    .regex(/^[A-Za-z0-9._:-]{2,120}$/)
+    .optional(),
+);
 
 const environmentSchema = z.object({
   AGENT_TOKEN_PEPPER: optionalSecret,
   ANTHROPIC_API_KEY: optionalSecret,
+  ANTHROPIC_MODEL: optionalModel,
   APP_ENCRYPTION_KEY: optionalSecret,
   CRON_SECRET: optionalSecret,
   GEMINI_API_KEY: optionalSecret,
+  GEMINI_MODEL: optionalModel,
   GOOGLE_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   GOOGLE_CLIENT_SECRET: optionalSecret,
   GOOGLE_REDIRECT_URI: optionalUrl,
@@ -19,6 +28,7 @@ const environmentSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   NEXT_PUBLIC_SUPABASE_URL: optionalUrl,
   OPENAI_API_KEY: optionalSecret,
+  OPENAI_MODEL: optionalModel,
   SUPABASE_SERVICE_ROLE_KEY: optionalSecret,
 });
 
@@ -30,6 +40,12 @@ export interface AppEnvironment {
     readonly anthropic: boolean;
     readonly gemini: boolean;
     readonly openai: boolean;
+  };
+  readonly providerModels: {
+    readonly anthropic: string;
+    readonly gemini: string;
+    readonly mock: string;
+    readonly openai: string;
   };
   readonly supabaseConfigured: boolean;
 }
@@ -61,6 +77,12 @@ export function parseEnvironment(input: Record<string, string | undefined>): App
       anthropic: Boolean(parsed.data.ANTHROPIC_API_KEY),
       gemini: Boolean(parsed.data.GEMINI_API_KEY),
       openai: Boolean(parsed.data.OPENAI_API_KEY),
+    },
+    providerModels: {
+      anthropic: parsed.data.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
+      gemini: parsed.data.GEMINI_MODEL ?? 'gemini-3.6-flash',
+      mock: 'mock-planner-v1',
+      openai: parsed.data.OPENAI_MODEL ?? 'gpt-5.6-sol',
     },
     supabaseConfigured,
   };

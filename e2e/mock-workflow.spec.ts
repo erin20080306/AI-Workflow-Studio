@@ -29,4 +29,12 @@ test('creates, reviews, and dry-runs a safe Mock Workflow', async ({ page }) => 
 
   await page.getByRole('button', { name: '儲存草稿' }).click();
   await expect(page.getByText('草稿已儲存於 Mock 工作區')).toBeVisible();
+
+  await page.goto('/dashboard/settings/ai-models');
+  await expect(page.getByRole('heading', { name: 'AI 模型與 Provider' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Mock Planner' })).toBeVisible();
+  await expect(page.getByText('gpt-5.6-sol')).toBeVisible();
+  await expect(page.getByText('API keys 永遠不送到瀏覽器')).toBeVisible();
+  await page.getByRole('button', { name: '儲存 Mock 設定' }).click();
+  await expect(page.getByText('Mock 偏好已更新；未寫入任何金鑰。')).toBeVisible();
 });
