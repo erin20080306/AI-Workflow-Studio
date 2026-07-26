@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 13 — Security and final acceptance (completed locally)
+Phase 14 — Hosted Web staging (completed)
 
 ## Repository baseline
 
@@ -1133,3 +1133,58 @@ Status: completed
 ### Commit
 
 - `feat: complete bilingual platform acceptance` (this phase commit)
+
+## Phase 14
+
+Status: completed
+
+### Implemented
+
+- Pushed the completed platform branch to the configured GitHub repository.
+- Corrected the Vercel monorepo root from the Electron Desktop workspace to the
+  Next.js Web workspace and verified a Production deployment at the configured
+  public domain.
+- Created a dedicated Free Supabase organization and transferred the existing
+  hosted AI Workflow Studio project into it without changing the project or
+  database identity.
+- Matched local Supabase configuration to the hosted PostgreSQL 17 database.
+- Dry-ran, applied, and remotely verified all five immutable database
+  migrations. Development seed data was not applied.
+- Configured the Production Site URL, explicit Production/local redirect
+  allowlist, required email confirmation, secure password changes, and TOTP.
+- Added the required public Supabase configuration and approved server-only
+  secrets to protected Vercel Production environment variables. No credential
+  value was written to Git or a workspace file.
+- Redeployed Production with the hosted environment and corrected the bilingual
+  landing-page call to action so only the explicit mode badge identifies Mock
+  operation.
+
+### Validation
+
+- Hosted database migration dry run: passed
+- Hosted database migration application: passed — five migrations
+- Local/remote migration history comparison: passed — five exact matches
+- Supabase project health after organization transfer: passed
+- Supabase Auth configuration sync: passed
+- Vercel environment-variable presence check: passed — names and targets only
+- Vercel Production redeployment: passed — Ready and aliased to the configured
+  public domain
+- Hosted landing page: passed — HTTP 200 and Traditional Chinese default locale
+- Hosted registration page: passed — real Supabase account fields and password
+  policy rendered without Mock guidance
+- Hosted session boundary: passed — anonymous Dashboard access redirected to
+  the verified-account login screen
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 105 tests across 24 files
+- `pnpm build:web`: passed — 31 static pages generated
+- `pnpm db:test`: passed
+- `pnpm security:scan-client`: passed — 29 client bundle files inspected
+
+### Known limitations
+
+- AI provider, Google OAuth, payment-provider, and durable non-Auth production
+  adapters remain unconfigured and continue to fail closed.
+- The first platform administrator still requires a verified Auth User UUID and
+  a separate manual role grant; no password or user-specific seed is stored.

@@ -19,7 +19,7 @@ const copy = {
       eyebrow: 'AI 負責規劃，確定性工具安全執行',
       title: '用一句話，讓工作流理解你的需求。',
       description: `${PRODUCT.displayName} 將自然語言需求轉換為可檢視、可核准的自動化流程，安全處理 Excel、Google Sheets 與團隊日常工具。`,
-      dashboard: '開啟 Mock 控制台',
+      dashboard: '開啟工作台',
       learnMore: '看看如何運作',
       capabilities: [
         '讀取並整合本機 Excel 檔案',
@@ -75,7 +75,7 @@ const copy = {
       eyebrow: 'AI plans. Deterministic tools execute.',
       title: 'Workflows that understand your words.',
       description: `${PRODUCT.displayName} turns plain-language requests into reviewable automations for Excel, Google Sheets, and the services your team already uses.`,
-      dashboard: 'Open Mock dashboard',
+      dashboard: 'Open workspace',
       learnMore: 'See how it works',
       capabilities: [
         'Read and combine local Excel files',

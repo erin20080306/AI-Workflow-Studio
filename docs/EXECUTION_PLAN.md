@@ -29,6 +29,7 @@ test, and build checks and has been committed.
 | 11    | Run orchestration             | End-to-end mock run, reconnect, approval, and de-duplication pass              | completed |
 | 12    | GitHub release and Vercel     | CI, production web build, platform desktop builds, and secret checks pass      | completed |
 | 13    | Security and final acceptance | Security review, go-live additions, and all MVP acceptance criteria pass       | completed |
+| 14    | Hosted Web staging            | Hosted migrations, Auth configuration, Vercel deployment, and smoke test pass  | completed |
 
 ## Phase 0 — Repository audit
 
@@ -128,3 +129,12 @@ authorized platform Super Admin, subscription entitlements, bilingual
 Traditional Chinese/English product UI, branded Store assets, and truthful
 deployment/release verification. External publication remains blocked until its
 corresponding provider access and release requirements are available.
+
+## Phase 14 — Hosted Web staging
+
+Configure the explicitly authorized hosted Supabase and Vercel projects without
+committing provider credentials. Match the hosted PostgreSQL major version,
+apply and verify immutable migrations, configure secure Auth redirects and
+confirmation controls, store server-only values in protected Vercel environment
+variables, deploy the Web workspace, and smoke-test the real registration and
+session boundary.

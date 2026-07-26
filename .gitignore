@@ -18,6 +18,8 @@ test-results/
 !.env.example
 *.pem
 *.key
+.vercel/
+supabase/.temp/
 
 # Runtime data
 *.log
