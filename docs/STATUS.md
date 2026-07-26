@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 8 — Desktop Agent foundation (completed)
+Phase 9 — Local Excel/CSV executor (completed)
 
 ## Repository baseline
 
@@ -659,4 +659,110 @@ Status: completed
 
 ### Commit
 
-- `feat: add secure electron desktop agent foundation` (this phase commit)
+- `8733475` — `feat: add secure electron desktop agent foundation`
+
+## Phase 9
+
+Status: completed
+
+### Implemented
+
+- Added the `@ai-workflow-studio/local-executor` package with bounded `.xlsx`
+  and independent CSV readers, deterministic merge, mapping, filters, and
+  first/last deduplication.
+- Added an `.xlsx` central-directory safety scan before ExcelJS parsing. It
+  rejects encryption, traversal entries, VBA, embedded objects, external
+  workbook links, excessive entry counts, excessive expansion, and suspicious
+  compression ratios.
+- Added closed scalar conversion that never evaluates formulas. Formula text is
+  discarded, hyperlink targets and execution-irrelevant workbook nodes are
+  ignored, and only cached safe scalar results can enter the local dataset.
+- Added explicit defaults for compressed size, uncompressed size, entry count,
+  compression ratio, row, sheet, column, and header limits. Unsupported `.xls`,
+  `.xlsm`, and other formats fail with structured errors.
+- Added private same-directory temporary output, flush, full reread validation,
+  SHA-256 verification, exclusive output locking, atomic rename, source
+  preservation, existing-output rejection, and cleanup on every exit path.
+- Added a lower-level overwrite safeguard that requires a backup and verifies
+  its SHA-256 before replacing the destination. Current Workflow v1 output
+  schemas continue to allow only `overwrite: false`.
+- Added CSV formula-injection neutralization and rejected multi-table CSV writes
+  until the caller explicitly merges them.
+- Added a serialized, private, atomic processing ledger that hashes workflow
+  context plus sorted input hashes. Successful receipts suppress the same input
+  after an Agent restart without persisting paths or workflow identifiers.
+- Added a stabilized, non-recursive folder watcher with safe single-segment
+  patterns, no symlink following, canonical containment checks, content hashes,
+  stable-write delay, and unchanged-content suppression.
+- Bound the executor to `FolderGrantStore`, including new authorized-output and
+  authorized-root resolution. Lexical traversal is rejected before filesystem
+  lookup, and real-path/symlink containment is rechecked afterward.
+- Added a single-instance Electron lock so two Agent processes cannot race the
+  local receipt ledger.
+- Bundled the executor into the Electron main process, kept all Node built-ins
+  as runtime imports, and excluded workspace source, tests, and source maps from
+  the packaged ASAR.
+- Added a root README plus complete Excel/CSV design, security, test, limits,
+  and MVP limitation documentation.
+
+### Dependency purposes
+
+- `exceljs` 4.4.0 reads and writes `.xlsx` and CSV without executing workbook
+  code or requiring Microsoft Excel.
+- `yauzl` 3.4.0 performs lazy ZIP metadata inspection before workbook parsing.
+- `chokidar` 5.0.0 provides cross-platform stabilized file create/change
+  observation with symlink following disabled.
+- Zod validates local executor limits and the private receipt ledger.
+
+### Files changed
+
+- `packages/local-executor` types, errors, hashing, ZIP inspection, Excel/CSV
+  readers and writers, transformations, watcher, processing ledger, and real
+  fixture tests.
+- Desktop authorized output/root resolution, local executor binding,
+  single-instance startup, build configuration, dependency metadata, and
+  integration tests.
+- Root README, Excel executor documentation, architecture, security, testing,
+  Desktop Agent, execution plan, status, workspace metadata, and lockfile.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all 8 code workspaces
+- `pnpm test`: passed — 64 tests across 14 files
+- Real spreadsheet fixtures: passed — two-sheet `.xlsx`, cached formula value,
+  CSV, merge, filter, map, deduplicate, safe output, backup, limits, and hash
+- Authorized desktop integration: passed — alias-bound read/write, source
+  preservation, lexical traversal rejection, symlink escape rejection, and
+  restart duplicate suppression
+- Folder watcher fixture: passed — stabilized create event and unchanged-hash
+  suppression
+- `pnpm test:e2e`: passed — 2 Chromium E2Es
+- `pnpm db:test`: passed — all migrations and tenancy/Agent protocol assertions
+- `pnpm peers check`: passed
+- `pnpm build:web`: passed — 28 generated pages without optional credentials
+- `pnpm build:desktop`: passed — 1.1 MB main bundle plus isolated preload and
+  renderer; built-in module and runtime-path audits passed
+- Unsigned native package gate: passed — macOS arm64 unpacked development app
+- Packaged ASAR audit: passed — no workspace TypeScript source, test/spec files,
+  source maps, invalid browser built-in shims, or credential signatures
+
+### Known limitations
+
+- The executor is packaged and bound to local grants but does not independently
+  claim cloud jobs. Claim, lease, approval, progress, cancellation, and
+  completion orchestration are connected in Phase 11.
+- `.xls`, `.xlsm`, VBA, embedded objects, external workbook links, pivot-table
+  fidelity, native charts, external connections, and complex style preservation
+  are outside the MVP.
+- Processing is bounded in memory rather than streaming multi-million-row
+  workbooks. Configured limits fail closed before execution.
+- Folder watchers cover the authorized root and direct children, not arbitrary
+  recursive directory trees.
+- The native artifact remains unsigned and uses the default Electron icon until
+  the Phase 12 release gate.
+
+### Commit
+
+- `feat: add safe local spreadsheet executor` (this phase commit)

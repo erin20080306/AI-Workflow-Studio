@@ -1,5 +1,8 @@
+import { builtinModules } from 'node:module';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
+
+const nodeBuiltins = new Set(builtinModules);
 
 export default defineConfig({
   build: {
@@ -11,7 +14,11 @@ export default defineConfig({
     },
     outDir: 'dist/main',
     rolldownOptions: {
-      external: (id) => id === 'electron' || id === 'electron-updater' || id.startsWith('node:'),
+      external: (id) =>
+        id === 'electron' ||
+        id === 'electron-updater' ||
+        id.startsWith('node:') ||
+        nodeBuiltins.has(id),
     },
     target: 'node22',
   },

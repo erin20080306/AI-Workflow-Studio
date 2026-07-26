@@ -6,6 +6,9 @@ directories:
 files:
   - dist/**
   - package.json
+  - '!node_modules/@ai-workflow-studio/**'
+  - '!node_modules/**/*.{test,spec}.{js,ts,tsx}'
+  - '!node_modules/**/*.map'
 mac:
   artifactName: AI-Workflow-Studio-Agent-${version}-${arch}-UNSIGNED-DEV.${ext}
   category: public.app-category.productivity

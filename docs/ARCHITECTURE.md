@@ -29,6 +29,7 @@ apps/
 packages/
   agent-protocol/       Pairing, device authentication, claims, leases, job state
   ai-gateway/           Server-only AI provider adapters and validation boundary
+  local-executor/       Bounded Excel/CSV I/O, transforms, watcher, and ledger
   workflow-schema/      Versioned Zod DSL and semantic validation
   workflow-engine/      Registry and deterministic orchestration
   connector-sdk/        Connector contracts and safe helpers
@@ -65,6 +66,13 @@ filesystem, token, or generic IPC access. The main process owns OS-encrypted
 device credentials, the system folder picker, canonical grant paths, redacted
 logs, polling, tray behavior, and user-initiated updates. See
 `docs/DESKTOP_AGENT.md`.
+
+The main process binds the local executor to a paired device's private folder
+grant store. Excel/CSV readers apply file, row, sheet, column, ZIP-entry,
+decompression, and compression-ratio limits before materializing safe scalar
+rows. Writers use exclusive locks, private temporary files, reread validation,
+atomic rename, verified backups where explicitly required, and SHA-256 receipt
+deduplication. See `docs/EXCEL_EXECUTOR.md`.
 
 ## Agent job protocol
 

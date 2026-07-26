@@ -22,8 +22,10 @@ import {
   type FolderPermissionInput,
   type PairDeviceInput,
 } from '../shared/contracts';
+import { ProcessingLedger } from '@ai-workflow-studio/local-executor';
 import { AgentClient, type AgentClientStatus } from './agent-client';
 import { FolderGrantStore } from './folder-grants';
+import { DesktopSpreadsheetExecutor } from './local-executor';
 import { StructuredLogger } from './logger';
 import { SettingsStore, type DesktopSettings } from './settings-store';
 import { TokenVault, type SecureCipher } from './token-vault';
@@ -71,6 +73,7 @@ let agentStatus: AgentClientStatus = {
 let logger: StructuredLogger;
 let agentClient: AgentClient;
 let folderGrants: FolderGrantStore;
+let spreadsheetExecutor: DesktopSpreadsheetExecutor;
 let settingsStore: SettingsStore;
 let updater: ManualUpdateController;
 
@@ -353,6 +356,10 @@ async function initialize(): Promise<void> {
   settingsStore = new SettingsStore(join(userData, 'settings.json'));
   settings = await settingsStore.load();
   folderGrants = new FolderGrantStore(join(userData, 'folder-grants.json'));
+  spreadsheetExecutor = new DesktopSpreadsheetExecutor(
+    folderGrants,
+    new ProcessingLedger(join(userData, 'processing-ledger.json')),
+  );
   const vault = new TokenVault(join(userData, 'device-session.enc'), secureCipher());
   updater = new ManualUpdateController(app.isPackaged, logger, () => broadcastSnapshot());
   agentClient = new AgentClient({
@@ -376,27 +383,37 @@ async function initialize(): Promise<void> {
   registerIpc();
   updateTrayMenu();
   logger.info('AGENT_READY', 'Desktop Agent is ready.', {
+    capabilities: spreadsheetExecutor.capabilities(),
     packaged: app.isPackaged,
     platform: process.platform,
     version: app.getVersion(),
   });
 }
 
-void app
-  .whenReady()
-  .then(async () => {
-    session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-      callback(false);
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  void app
+    .whenReady()
+    .then(async () => {
+      session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+        callback(false);
+      });
+      await initialize();
+    })
+    .catch(() => {
+      dialog.showErrorBox(
+        'AI Workflow Studio Agent',
+        'The desktop agent could not start. Review the local agent logs for details.',
+      );
+      app.exit(1);
     });
-    await initialize();
-  })
-  .catch(() => {
-    dialog.showErrorBox(
-      'AI Workflow Studio Agent',
-      'The desktop agent could not start. Review the local agent logs for details.',
-    );
-    app.exit(1);
+  app.on('second-instance', () => {
+    mainWindow?.show();
+    mainWindow?.focus();
   });
+}
 
 app.on('activate', () => {
   mainWindow?.show();

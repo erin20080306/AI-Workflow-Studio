@@ -43,6 +43,18 @@ secure storage is unavailable or Linux exposes only the `basic_text` backend.
 Device tokens never enter renderer state, logs, URLs, settings, or folder-grant
 files.
 
+`.xlsx` files are inspected as bounded ZIP archives before parsing. Encrypted
+entries, traversal names, VBA, embedded objects, external workbook links,
+excessive expansion, and suspicious compression fail closed. Formula text is
+discarded and never evaluated. CSV formula-trigger characters are neutralized
+on output.
+
+New outputs use an exclusive local lock and private same-directory temporary
+file. The Agent flushes and rereads the temporary output, revalidates limits,
+hashes it, atomically renames it, and verifies the final hash. Destructive
+overwrite is unavailable to current Workflow v1 output nodes; the lower-level
+path requires a hash-verified backup.
+
 The updater never auto-downloads. Check and download require separate user
 actions, and unsigned Phase 8 packages are development-only. Formal releases
 must pass signing and artifact verification gates before the update channel is

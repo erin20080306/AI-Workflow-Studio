@@ -1,5 +1,5 @@
-import { realpath, stat } from 'node:fs/promises';
-import { basename, isAbsolute, relative, resolve } from 'node:path';
+import { lstat, realpath, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
@@ -117,17 +117,48 @@ export class FolderGrantStore {
     relativePath: string,
     requiredPermission: keyof FolderPermissionInput,
   ): Promise<string> {
-    if (
-      relativePath.length === 0 ||
-      relativePath.length > 1_024 ||
-      relativePath.includes('\0') ||
-      isAbsolute(relativePath)
-    ) {
-      throw new FolderAuthorizationError(
-        'FOLDER_TRAVERSAL_REJECTED',
-        'The requested path is not a safe relative path.',
-      );
+    this.assertSafeRelativePath(relativePath);
+    const root = await this.resolveAuthorizedRoot(folderAliasId, deviceId, requiredPermission);
+    const unresolvedTarget = resolve(root, relativePath);
+    this.assertContained(root, unresolvedTarget);
+    const target = await realpath(unresolvedTarget);
+    this.assertContained(root, target);
+    return target;
+  }
+
+  async resolveAuthorizedOutputPath(
+    folderAliasId: string,
+    deviceId: string,
+    relativePath: string,
+  ): Promise<string> {
+    this.assertSafeRelativePath(relativePath);
+    const root = await this.resolveAuthorizedRoot(folderAliasId, deviceId, 'write');
+    const target = resolve(root, relativePath);
+    this.assertContained(root, target);
+    const canonicalParent = await realpath(dirname(target));
+    this.assertContained(root, canonicalParent);
+    try {
+      const targetStat = await lstat(target);
+      if (targetStat.isSymbolicLink()) {
+        throw new FolderAuthorizationError(
+          'FOLDER_TRAVERSAL_REJECTED',
+          'A spreadsheet output cannot replace a symbolic link.',
+        );
+      }
+      this.assertContained(root, await realpath(target));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
     }
+    return target;
+  }
+
+  async resolveAuthorizedRoot(
+    folderAliasId: string,
+    deviceId: string,
+    requiredPermission: keyof FolderPermissionInput,
+  ): Promise<string> {
     const grant = (await this.load()).find(
       (candidate) => candidate.folderAliasId === folderAliasId && candidate.deviceId === deviceId,
     );
@@ -144,7 +175,16 @@ export class FolderGrantStore {
       );
     }
     const root = await realpath(grant.canonicalPath);
-    const target = await realpath(resolve(root, relativePath));
+    if (!(await stat(root)).isDirectory()) {
+      throw new FolderAuthorizationError(
+        'FOLDER_NOT_DIRECTORY',
+        'The authorized local root is no longer a directory.',
+      );
+    }
+    return root;
+  }
+
+  private assertContained(root: string, target: string): void {
     const containment = relative(root, target);
     if (
       containment === '..' ||
@@ -156,7 +196,20 @@ export class FolderGrantStore {
         'The requested path is outside the authorized folder.',
       );
     }
-    return target;
+  }
+
+  private assertSafeRelativePath(relativePath: string): void {
+    if (
+      relativePath.length === 0 ||
+      relativePath.length > 1_024 ||
+      relativePath.includes('\0') ||
+      isAbsolute(relativePath)
+    ) {
+      throw new FolderAuthorizationError(
+        'FOLDER_TRAVERSAL_REJECTED',
+        'The requested path is not a safe relative path.',
+      );
+    }
   }
 
   private async load(): Promise<LocalFolderGrant[]> {

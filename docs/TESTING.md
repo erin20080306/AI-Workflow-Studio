@@ -34,6 +34,14 @@ classification, path authorization/traversal/symlinks, hashes, Excel
 transformations, column mapping, job claim/lease/idempotency, token hashing,
 redaction, invalid AI JSON, provider fallback, and Google refresh errors.
 
+Phase 9 spreadsheet fixtures create a real two-sheet `.xlsx`, a CSV, formula
+cells with cached values, repeated business keys, and bounded-output targets.
+Tests verify Excel/CSV reads, ZIP expansion limits, row/sheet limits, merge,
+mapping, filter, deduplication, CSV formula neutralization, source preservation,
+temporary-output reread, SHA-256, mandatory overwrite backup, restart-safe
+duplicate receipts, stable folder watching, output symlink rejection, and
+lexical/real-path traversal rejection.
+
 AI provider tests use injected local transports. They assert endpoint and header
 construction, structured-output configuration, response and usage parsing,
 bounded repair, refusal/truncation handling, secret-safe errors, and the

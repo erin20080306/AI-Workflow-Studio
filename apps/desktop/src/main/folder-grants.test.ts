@@ -45,6 +45,28 @@ describe('FolderGrantStore', () => {
     ).resolves.toBe(expected);
   });
 
+  it('creates output paths only inside a write-enabled canonical root', async () => {
+    const { authorized, grant, store } = await fixture();
+    await store.authorize(authorized, DEVICE_ID, {
+      read: true,
+      watch: true,
+      write: true,
+    });
+
+    await expect(
+      store.resolveAuthorizedOutputPath(grant.folderAliasId, DEVICE_ID, 'report.xlsx'),
+    ).resolves.toBe(join(await realpath(authorized), 'report.xlsx'));
+    await expect(
+      store.resolveAuthorizedOutputPath(grant.folderAliasId, DEVICE_ID, '../report.xlsx'),
+    ).rejects.toMatchObject({ code: 'FOLDER_TRAVERSAL_REJECTED' });
+    await expect(
+      store.resolveAuthorizedOutputPath(grant.folderAliasId, DEVICE_ID, 'escape/report.xlsx'),
+    ).rejects.toMatchObject({ code: 'FOLDER_TRAVERSAL_REJECTED' });
+    await expect(
+      store.resolveAuthorizedOutputPath(grant.folderAliasId, DEVICE_ID, 'missing/report.xlsx'),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('rejects traversal, symlink escape, the wrong device, and missing write permission', async () => {
     const { grant, store } = await fixture();
 

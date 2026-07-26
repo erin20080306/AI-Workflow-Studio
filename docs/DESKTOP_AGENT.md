@@ -8,7 +8,9 @@ will run registered local executors. It never evaluates workflow text, source
 code, shell commands, or arbitrary imports.
 
 Phase 8 establishes the secure application, protocol client, local permission
-model, and operator experience. Excel and CSV execution begins in Phase 9.
+model, and operator experience. Phase 9 adds the bounded Excel/CSV executor,
+content-hash ledger, and safe folder watcher described in
+`docs/EXCEL_EXECUTOR.md`.
 
 ## Process boundary
 
