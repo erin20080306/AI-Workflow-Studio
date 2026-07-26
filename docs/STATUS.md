@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 2 — Next.js Web Foundation (completed)
+Phase 3 — Supabase Schema and Multi-tenancy (completed)
 
 ## Repository baseline
 
@@ -190,4 +190,69 @@ Status: completed
 
 ### Commit
 
-- `feat: add Next.js web foundation` (this phase commit)
+- `6f71feb` — `feat: add Next.js web foundation`
+
+## Phase 3
+
+Status: completed
+
+### Implemented
+
+- Added the immutable initial Supabase migration with all 19 required platform
+  tables, nine constrained status/role types, cross-tenant composite foreign
+  keys, unique/check constraints, indexes, and updated-at triggers.
+- Added Auth profile provisioning and an authenticated `create_tenant` function
+  that atomically makes the first membership an owner.
+- Added an invariant trigger that prevents the canonical tenant owner
+  membership from being demoted, moved, or deleted.
+- Enabled Row Level Security on every tenant-owned table with explicit member,
+  owner, admin, editor, and viewer policies according to the permission model.
+- Revoked public/default table and function access, withheld direct browser
+  access to token/ciphertext tables, and granted only the required operations.
+- Added an idempotent development seed that uses the first local Auth user and
+  safely skips when no user exists.
+- Added Supabase local configuration and database/type-generation documentation.
+- Added a terminating Docker-based database test and wired it into CI. The test
+  uses a fixed official PostgreSQL 16.13 image, no host port, no volume, and an
+  exit trap that removes the container.
+- Verified tenant A cannot read or write tenant B, a viewer cannot update
+  workflows, an owner can update their workflow, self-demotion is blocked, RPC
+  tenant creation assigns owner, all required tables exist, every tenant table
+  enforces RLS, and applying the seed twice remains idempotent.
+
+### Files changed
+
+- `supabase/migrations/202607260001_initial_platform.sql`
+- Supabase local config, seed, Auth test bootstrap, RLS tests, and seed tests.
+- `scripts/test-database.sh` and root `pnpm db:test` command.
+- CI database migration step.
+- `docs/DATABASE.md`, generated-type directory guidance, testing docs, execution
+  plan, and status.
+
+### Validation
+
+- `bash -n scripts/test-database.sh`: passed
+- `pnpm db:test`: passed — fresh migration, RLS/role isolation, required-table
+  checks, owner invariant, and idempotent seed
+- PostgreSQL test container cleanup: passed — no container remains
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 4 tests
+- `pnpm peers check`: passed
+- `pnpm build:web`: passed — 6 static application routes
+- `pnpm build:desktop`: not applicable — desktop app begins in Phase 8
+
+### Known limitations
+
+- Live Supabase Auth and hosted-project migration were not attempted because no
+  project credentials are required or available; local migration behavior is
+  verified against fresh PostgreSQL 16.
+- Database TypeScript generation requires a running Supabase local stack or a
+  linked project and is documented rather than fabricated by hand.
+- Service-role API routes must still perform explicit membership checks when
+  they are introduced in later phases because service role bypasses RLS.
+
+### Commit
+
+- `feat: add supabase multi-tenant schema` (this phase commit)

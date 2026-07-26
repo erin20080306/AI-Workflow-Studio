@@ -48,5 +48,8 @@ jobs:
       - name: Run unit tests
         run: pnpm test
 
+      - name: Test database migrations and tenant isolation
+        run: pnpm db:test
+
       - name: Build web application
         run: pnpm build:web

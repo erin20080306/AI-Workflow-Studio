@@ -13,6 +13,7 @@
     "build": "pnpm -r --if-present build",
     "build:desktop": "pnpm --filter @ai-workflow-studio/desktop build",
     "build:web": "pnpm --filter @ai-workflow-studio/web build",
+    "db:test": "bash scripts/test-database.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",

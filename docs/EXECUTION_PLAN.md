@@ -18,7 +18,7 @@ test, and build checks and has been committed.
 | 0     | Repository audit              | Repository state, build baseline, architecture, and risks documented           | completed |
 | 1     | Monorepo and guardrails       | Install, format, lint, typecheck, and unit tests pass                          | completed |
 | 2     | Next.js web foundation        | App Router shell, auth screens, mock mode, and production web build pass       | completed |
-| 3     | Supabase schema and tenancy   | Fresh migrations and tenant-isolation tests pass                               | pending   |
+| 3     | Supabase schema and tenancy   | Fresh migrations and tenant-isolation tests pass                               | completed |
 | 4     | Workflow schema and engine    | Schema, registry, DAG, risk, dry-run, and executor tests pass                  | pending   |
 | 5     | Workflow web UI               | Mock workflow E2E and web build pass                                           | pending   |
 | 6     | AI gateway                    | Provider adapters build without keys; strict JSON and mock tests pass          | pending   |

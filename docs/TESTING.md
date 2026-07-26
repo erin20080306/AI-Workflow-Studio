@@ -15,6 +15,7 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm db:test
 pnpm build:web
 pnpm build:desktop
 ```
@@ -36,6 +37,11 @@ redaction, invalid AI JSON, provider fallback, and Google refresh errors.
 Integration tests cover tenant-aware workflow/version/run/job lifecycles,
 completion and failure propagation, role restrictions, tenant isolation, and
 destructive-node approvals. Database tests use disposable local or CI instances.
+
+`pnpm db:test` uses a portless, volume-free PostgreSQL 16 container. It creates a
+fresh database, applies every migration, verifies required tables and RLS,
+exercises owner/viewer and cross-tenant behavior, applies the development seed
+twice to verify idempotency, and stops the container through an exit trap.
 
 ### End to end
 
