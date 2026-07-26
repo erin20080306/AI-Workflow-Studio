@@ -9,7 +9,7 @@
   artifacts on their native operating systems.
 - GitHub Releases distributes platform installers and update metadata.
 
-## Planned Vercel configuration
+## Vercel configuration
 
 | Setting         | Value                            |
 | --------------- | -------------------------------- |
@@ -18,8 +18,11 @@
 | Install Command | `pnpm install --frozen-lockfile` |
 | Build Command   | `pnpm build`                     |
 
-Workspace package resolution must be configured at the monorepo level. Shared
-packages must not be copied into the web application.
+The checked-in `apps/web/vercel.json` records the install and build commands.
+Vercel resolves workspace packages through the repository's pnpm workspace and
+root lockfile; shared packages are not copied into the web application. Use
+[the production checklist](./PRODUCTION_CHECKLIST.md) before connecting a live
+domain.
 
 ## Environment classes
 
@@ -37,20 +40,31 @@ Google OAuth additionally requires an HTTPS callback registered exactly as
 values are never exposed through `NEXT_PUBLIC_` variables. Missing Google values
 disable live connection creation without breaking the build or Mock mode.
 
-## Desktop releases
+## Desktop release channels
 
 Windows artifacts are built on Windows runners and macOS artifacts on macOS
-runners. Update download is user-initiated by default. Signing is conditional on
-the appropriate secrets. Unsigned artifacts are development-only and must never
-be described as production-ready.
+runners. Update download is user-initiated by default.
 
-Phase 8 adds the Electron Builder configuration and verifies an unsigned,
-unpacked macOS development application. It deliberately sets no signing
-identity, installer, checksum, or public release metadata. Native signed
-installers and the GitHub update channel remain Phase 12 release gates.
+- Prerelease tags may publish explicitly marked unsigned installers for
+  controlled testing at no signing cost.
+- Stable tags fail unless macOS signing/notarization and Windows Authenticode
+  credentials are configured. A successful stable workflow creates a draft for
+  human review.
+- Each channel includes SHA-256 files, signing-aware JSON metadata, and a scan
+  for credential patterns and local paths.
+
+Microsoft Store AppX/MSIX is the planned zero-certificate-cost Windows
+production alternative. The Partner Center product name and identity are
+reserved, and a manual Windows-only workflow can produce x64/arm64 package
+drafts. Those drafts are not interchangeable with an unsigned GitHub EXE and
+must not be submitted until branded assets, native installation, Windows App
+Certification Kit, listing, privacy, and support checks pass. See
+[the release checklist](./RELEASE_CHECKLIST.md).
 
 ## Current deployment status
 
-The web application and desktop development package build locally. Nothing has
-been deployed or released. Live Vercel, Supabase, signing, and GitHub Release
-configuration remains intentionally deferred until Phase 12.
+The web application and desktop development package build locally. Vercel
+configuration, CI, direct release, and Microsoft Store package workflow
+definitions are checked in, but nothing has been deployed, submitted to
+Microsoft Store, signed, or released. Production Supabase adapters, real
+registration, platform Super Admin, and billing remain required before go-live.

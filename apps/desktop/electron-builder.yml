@@ -2,6 +2,7 @@ appId: com.aiworkflowstudio.agent
 productName: AI Workflow Studio Agent
 asar: true
 directories:
+  buildResources: build
   output: release
 files:
   - dist/**
@@ -10,19 +11,21 @@ files:
   - '!node_modules/**/*.{test,spec}.{js,ts,tsx}'
   - '!node_modules/**/*.map'
 mac:
-  artifactName: AI-Workflow-Studio-Agent-${version}-${arch}-UNSIGNED-DEV.${ext}
+  artifactName: AI-Workflow-Studio-Agent-${version}-mac-${arch}.${ext}
   category: public.app-category.productivity
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
   hardenedRuntime: true
-  identity: null
+  notarize: true
   target:
     - dmg
     - zip
 win:
-  artifactName: AI-Workflow-Studio-Agent-${version}-${arch}-UNSIGNED-DEV.${ext}
+  artifactName: AI-Workflow-Studio-Agent-${version}-windows-${arch}.${ext}
   target:
     - nsis
 linux:
-  artifactName: AI-Workflow-Studio-Agent-${version}-${arch}-UNSIGNED-DEV.${ext}
+  artifactName: AI-Workflow-Studio-Agent-${version}-linux-${arch}.${ext}
   category: Office
   target:
     - AppImage

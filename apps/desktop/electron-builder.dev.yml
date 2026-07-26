@@ -1,0 +1,9 @@
+extends: ./electron-builder.yml
+mac:
+  artifactName: AI-Workflow-Studio-Agent-${version}-mac-${arch}-UNSIGNED-PRERELEASE.${ext}
+  identity: null
+  notarize: false
+win:
+  artifactName: AI-Workflow-Studio-Agent-${version}-windows-${arch}-UNSIGNED-PRERELEASE.${ext}
+linux:
+  artifactName: AI-Workflow-Studio-Agent-${version}-linux-${arch}-UNSIGNED-PRERELEASE.${ext}

@@ -1,0 +1,213 @@
+name: Desktop release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Required CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  desktop-release:
+    name: ${{ matrix.platform }} ${{ matrix.architecture }}
+    needs: quality
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: universal
+            builderTarget: mac
+            platform: macos
+            runner: macos-latest
+            signedStatus: signed-notarized
+          - architecture: x64
+            builderTarget: win
+            platform: windows
+            runner: windows-latest
+            signedStatus: signed
+    env:
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_KEY_PASSWORD: ${{ matrix.platform == 'macos' && secrets.MACOS_CSC_KEY_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      CSC_LINK: ${{ matrix.platform == 'macos' && secrets.MACOS_CSC_LINK || secrets.WINDOWS_CSC_LINK }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate stable macOS signing configuration
+        if: matrix.platform == 'macos' && !contains(github.ref_name, '-')
+        shell: bash
+        run: |
+          for variable in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!variable}" ]]; then
+              echo "::error::Required macOS release secret is not configured: ${variable}"
+              exit 1
+            fi
+          done
+
+      - name: Validate stable Windows signing configuration
+        if: matrix.platform == 'windows' && !contains(github.ref_name, '-')
+        shell: pwsh
+        run: |
+          foreach ($variable in @("CSC_LINK", "CSC_KEY_PASSWORD")) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($variable))) {
+              Write-Error "Required Windows release secret is not configured: $variable"
+              exit 1
+            }
+          }
+
+      - name: Build signed stable installer
+        if: ${{ !contains(github.ref_name, '-') }}
+        run: pnpm --filter @ai-workflow-studio/desktop exec electron-builder --${{ matrix.builderTarget }} --${{ matrix.architecture }} --publish never
+
+      - name: Build unsigned prerelease installer
+        if: ${{ contains(github.ref_name, '-') }}
+        run: pnpm --filter @ai-workflow-studio/desktop exec electron-builder --config electron-builder.dev.yml --${{ matrix.builderTarget }} --${{ matrix.architecture }} --publish never
+
+      - name: Verify stable macOS signature and notarization
+        if: matrix.platform == 'macos' && !contains(github.ref_name, '-')
+        shell: bash
+        run: |
+          found_app=false
+          while IFS= read -r -d '' application; do
+            found_app=true
+            codesign --verify --deep --strict --verbose=2 "$application"
+            xcrun stapler validate "$application"
+          done < <(find apps/desktop/release -maxdepth 2 -name '*.app' -print0)
+          if [[ "$found_app" != "true" ]]; then
+            echo "::error::No signed macOS application was produced."
+            exit 1
+          fi
+
+      - name: Verify stable Windows Authenticode signature
+        if: matrix.platform == 'windows' && !contains(github.ref_name, '-')
+        shell: pwsh
+        run: |
+          $installers = Get-ChildItem apps/desktop/release -Filter *.exe
+          if ($installers.Count -eq 0) {
+            Write-Error "No signed Windows installer was produced."
+            exit 1
+          }
+          foreach ($installer in $installers) {
+            $signature = Get-AuthenticodeSignature $installer.FullName
+            if ($signature.Status -ne "Valid") {
+              Write-Error "Invalid Authenticode signature on $($installer.Name): $($signature.Status)"
+              exit 1
+            }
+          }
+
+      - name: Scan release artifacts for credentials and local paths
+        run: pnpm release:scan -- --directory apps/desktop/release
+
+      - name: Generate checksums and release metadata
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          signing_status="${{ contains(github.ref_name, '-') && 'unsigned-prerelease' || matrix.signedStatus }}"
+          node scripts/release-artifacts.mjs manifest \
+            --directory apps/desktop/release \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.architecture }}" \
+            --version "$version" \
+            --git-ref "$GITHUB_REF_NAME" \
+            --git-sha "$GITHUB_SHA" \
+            --signing-status "$signing_status" \
+            --checksums "apps/desktop/release/SHA256SUMS-${{ matrix.platform }}-${{ matrix.architecture }}" \
+            --metadata "apps/desktop/release/release-metadata-${{ matrix.platform }}-${{ matrix.architecture }}.json"
+
+      - name: Verify generated checksums
+        run: pnpm release:verify -- --directory apps/desktop/release
+
+      - name: Upload platform release assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.architecture }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.exe
+            apps/desktop/release/latest*.yml
+            apps/desktop/release/*.zip
+            apps/desktop/release/SHA256SUMS-*
+            apps/desktop/release/release-metadata-*.json
+
+  github-release:
+    name: Publish GitHub release
+    needs: desktop-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Download platform assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: release-assets
+
+      - name: Verify checksums and combine release metadata
+        run: |
+          node scripts/release-artifacts.mjs verify-tree --directory release-assets
+          node scripts/release-artifacts.mjs combine \
+            --directory release-assets \
+            --checksums release-assets/SHA256SUMS.txt \
+            --metadata release-assets/release-metadata.json
+          node scripts/release-artifacts.mjs scan --directory release-assets
+
+      - name: Publish unsigned prerelease
+        if: ${{ contains(github.ref_name, '-') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mapfile -d '' assets < <(find release-assets -type f -print0)
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+            --generate-notes \
+            --prerelease \
+            --title "AI Workflow Studio ${GITHUB_REF_NAME} — unsigned prerelease" \
+            --verify-tag
+
+      - name: Create signed stable release draft
+        if: ${{ !contains(github.ref_name, '-') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mapfile -d '' assets < <(find release-assets -type f -print0)
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+            --draft \
+            --generate-notes \
+            --title "AI Workflow Studio ${GITHUB_REF_NAME}" \
+            --verify-tag

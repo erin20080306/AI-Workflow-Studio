@@ -1,0 +1,18 @@
+extends: ./electron-builder.yml
+win:
+  target:
+    - appx
+appx:
+  applicationId: AIWorkflowStudio
+  artifactName: AI-Workflow-Studio-Agent-${version}-windows-store-${arch}-DRAFT-DO-NOT-SUBMIT.${ext}
+  backgroundColor: '#1e1b4b'
+  displayName: AI Workflow Studio
+  identityName: AIWorkflowStudio.AIWorkflowStudio
+  languages:
+    - zh-TW
+    - en-US
+  maxVersionTested: 10.0.26100.0
+  minVersion: 10.0.17763.0
+  publisher: CN=D7BFE6B4-9245-4A59-B2B7-7F9F6D7D0C60
+  publisherDisplayName: AI Workflow Studio
+  showNameOnTiles: true

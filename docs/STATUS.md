@@ -947,3 +947,109 @@ Status: completed
 ### Commit
 
 - `feat: connect cloud and desktop run orchestration` (this phase commit)
+
+## Phase 12
+
+Status: completed locally
+
+### Implemented
+
+- Converted CI into a reusable, least-privilege workflow with full-SHA-pinned
+  GitHub actions, the existing quality/Web gates, and a native macOS/Windows
+  unsigned development-package matrix.
+- Added a tag-driven Desktop release workflow. Semantic-version prerelease tags
+  publish explicitly marked unsigned GitHub Prereleases for controlled testing;
+  stable tags require macOS Developer ID signing/notarization and Windows
+  Authenticode, verify both platforms, and create a draft release for human
+  approval.
+- Limited `contents: write` to the final release job. Build and validation jobs
+  retain read-only repository access.
+- Split Electron Builder into a production signing configuration and an
+  explicitly unsigned prerelease/development configuration. Added hardened
+  macOS Electron entitlements without disabling library validation.
+- Added streaming release-artifact controls for SHA-256 generation and
+  verification, signing-aware machine-readable JSON metadata, tag/package
+  version consistency, safe in-bundle symlinks, path traversal denial, and scans
+  for credential files, private key markers, provider-token patterns, and local
+  workspace paths.
+- Added production environment and desktop release checklists covering Vercel,
+  Supabase, OAuth, server-only variables, registration readiness, Super Admin
+  bootstrap safety, zero-cost unsigned testing, stable signing, Microsoft Store
+  MSIX as the planned zero-certificate-cost Windows channel, rollback, and
+  incident response.
+- Added a Windows-only manual Store draft workflow for x64/arm64 AppX packages,
+  Partner Center identity verification, artifact scanning, SHA-256 metadata, and
+  seven-day Actions retention. It has no Store credentials or submission step.
+- Added the Partner Center-assigned Identity Name, Publisher, Publisher Display
+  Name, Traditional Chinese/English language declarations, and Windows version
+  bounds to a dedicated Store packaging configuration. Draft filenames are
+  deliberately marked `DRAFT-DO-NOT-SUBMIT`.
+- Confirmed the existing Vercel monorepo boundary: Root Directory `apps/web`,
+  frozen pnpm install, Next.js Web-only build, and no Desktop/local executor in
+  the deployment.
+- The project owner completed Microsoft Partner Center developer enrollment and
+  reserved the `AI Workflow Studio` MSIX/PWA product identity. No Store package,
+  submission, signing, certification, or publication was completed.
+
+### Dependency purposes
+
+- No third-party dependency was added. Release hashing, scanning, metadata, and
+  verification use Node.js standard-library APIs.
+- GitHub workflows use only official `actions/*` artifact and setup actions,
+  pinned to immutable commit SHAs, plus the preinstalled GitHub CLI.
+
+### Files changed
+
+- Reusable CI and tag-driven Desktop release workflows.
+- Electron production/prerelease/Store packaging configurations and macOS
+  entitlements.
+- Manual Microsoft Store package draft workflow.
+- Release artifact CLI and four focused tests.
+- Vercel production and release checklists, deployment documentation, workspace
+  scripts, test discovery, and formatting exclusions.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all 10 code workspaces
+- `pnpm test`: passed — 86 tests across 18 files, including four release
+  artifact controls
+- `pnpm test:e2e`: passed — both Chromium acceptance paths
+- `pnpm db:test`: passed — fresh migrations, RLS, tenant isolation, service
+  boundaries, and orchestration transitions
+- `pnpm peers check`: passed
+- `pnpm build:web`: passed — 34 generated pages; the sandbox-only Turbopack port
+  restriction was resolved by running the same build outside the sandbox
+- `pnpm build:desktop`: passed
+- Native macOS arm64 unpacked development package: passed
+- Unsigned macOS arm64 DMG/ZIP prerelease package: passed
+- Unsigned Windows x64 unpacked/NSIS prerelease cross-package: passed
+- Packaged-artifact sensitive material/local path scan: passed across the
+  macOS and Windows outputs
+- Workflow YAML parse check: passed
+- Partner Center Store identity configuration: Electron Builder accepted the
+  values and reached the Windows `makeappx` tool boundary
+
+### Known limitations
+
+- The new GitHub workflows have not run on remote hosted runners because this
+  branch has not been pushed. Native Windows CI, GitHub Prerelease publication,
+  stable signing checks, checksums downloaded from Actions, and GitHub Release
+  creation must not be claimed as executed.
+- Stable public direct-download releases intentionally fail without paid signing
+  credentials. Unsigned GitHub artifacts are prerelease-only.
+- Microsoft Store can sign an accepted AppX/MSIX without a certificate fee, and
+  its product identity is reserved. Native Windows Store packaging has not run
+  because this branch is not on a Windows hosted runner; the local macOS attempt
+  correctly stopped at the Windows-only `makeappx` boundary. Certification and
+  clean-machine install/update tests are also pending.
+- Desktop packages still use Electron's default icon. Branded icons and the
+  bilingual professional design pass remain later work.
+- Nothing has been deployed to Vercel or Supabase. Real Auth, production
+  repository adapters, platform Super Admin, subscriptions, and billing remain
+  go-live blockers.
+
+### Commit
+
+- `ci: add release and deployment controls` (this phase commit)

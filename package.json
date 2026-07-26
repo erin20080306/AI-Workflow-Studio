@@ -17,6 +17,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "release:scan": "node scripts/release-artifacts.mjs scan",
+    "release:verify": "node scripts/release-artifacts.mjs verify-tree",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:coverage": "vitest run --coverage",

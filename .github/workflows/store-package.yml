@@ -1,0 +1,113 @@
+name: Microsoft Store package draft
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: store-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Required CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  package:
+    name: AppX draft (${{ matrix.architecture }})
+    needs: quality
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - x64
+          - arm64
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Desktop Agent
+        run: pnpm build:desktop
+
+      - name: Build unsigned Store package draft
+        run: pnpm --filter @ai-workflow-studio/desktop exec electron-builder --config electron-builder.store.yml --win appx --${{ matrix.architecture }} --publish never
+
+      - name: Verify Store package identity
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem apps/desktop/release -Filter *.appx)
+          if ($packages.Count -ne 1) {
+            Write-Error "Expected exactly one AppX package, found $($packages.Count)."
+            exit 1
+          }
+
+          $extractDirectory = Join-Path $env:RUNNER_TEMP "ai-workflow-studio-appx"
+          New-Item -ItemType Directory -Force -Path $extractDirectory | Out-Null
+          tar -xf $packages[0].FullName -C $extractDirectory
+
+          [xml]$manifest = Get-Content (Join-Path $extractDirectory "AppxManifest.xml")
+          $identity = $manifest.Package.Identity
+          $publisherName = $manifest.Package.Properties.PublisherDisplayName
+
+          if ($identity.Name -ne "AIWorkflowStudio.AIWorkflowStudio") {
+            Write-Error "Store package Identity.Name does not match Partner Center."
+            exit 1
+          }
+          if ($identity.Publisher -ne "CN=D7BFE6B4-9245-4A59-B2B7-7F9F6D7D0C60") {
+            Write-Error "Store package Identity.Publisher does not match Partner Center."
+            exit 1
+          }
+          if ($publisherName -ne "AI Workflow Studio") {
+            Write-Error "Store package PublisherDisplayName does not match Partner Center."
+            exit 1
+          }
+
+      - name: Scan unpacked and Store package artifacts
+        run: pnpm release:scan -- --directory apps/desktop/release
+
+      - name: Generate and verify Store package metadata
+        shell: bash
+        run: |
+          version="$(node -p "require('./apps/desktop/package.json').version")"
+          node scripts/release-artifacts.mjs manifest \
+            --directory apps/desktop/release \
+            --platform windows-store \
+            --arch "${{ matrix.architecture }}" \
+            --version "$version" \
+            --git-ref "$GITHUB_REF_NAME" \
+            --git-sha "$GITHUB_SHA" \
+            --signing-status store-signing-pending \
+            --checksums "apps/desktop/release/SHA256SUMS-windows-store-${{ matrix.architecture }}" \
+            --metadata "apps/desktop/release/release-metadata-windows-store-${{ matrix.architecture }}.json"
+          node scripts/release-artifacts.mjs verify-tree \
+            --directory apps/desktop/release
+
+      - name: Upload Store package draft
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-store-${{ matrix.architecture }}-draft-do-not-submit
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            apps/desktop/release/*.appx
+            apps/desktop/release/SHA256SUMS-windows-store-*
+            apps/desktop/release/release-metadata-windows-store-*.json
