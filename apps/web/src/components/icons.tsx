@@ -27,10 +27,45 @@ export function ArrowRightIcon(props: IconProps) {
   );
 }
 
+export function AlertIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="M12 3 2.8 19h18.4L12 3Z" />
+      <path d="M12 9v4M12 16.5h.01" />
+    </IconFrame>
+  );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="m9 5 7 7-7 7" />
+    </IconFrame>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <IconFrame {...props}>
       <path d="m5 12 4 4L19 6" />
+    </IconFrame>
+  );
+}
+
+export function FileIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="M6 2.5h8l4 4V21H6V2.5Z" />
+      <path d="M14 2.5v5h4M9 12h6M9 16h6" />
+    </IconFrame>
+  );
+}
+
+export function FolderIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="M3 6.5h7l2 2h9v10.5H3V6.5Z" />
+      <path d="M3 6.5V4h6l2 2.5" />
     </IconFrame>
   );
 }
@@ -70,6 +105,49 @@ export function RunsIcon(props: IconProps) {
     <IconFrame {...props}>
       <circle cx="12" cy="12" r="8" />
       <path d="M12 8v5l3 2" />
+    </IconFrame>
+  );
+}
+
+export function PlayIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="m9 6 9 6-9 6V6Z" />
+    </IconFrame>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </IconFrame>
+  );
+}
+
+export function SaveIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="M4 3h13l3 3v15H4V3Z" />
+      <path d="M8 3v6h8V3M8 21v-7h8v7" />
+    </IconFrame>
+  );
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m15.5 15.5 4 4" />
+    </IconFrame>
+  );
+}
+
+export function ShieldIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="M12 3 5 6v5c0 4.6 2.8 8.1 7 10 4.2-1.9 7-5.4 7-10V6l-7-3Z" />
+      <path d="m9 12 2 2 4-5" />
     </IconFrame>
   );
 }

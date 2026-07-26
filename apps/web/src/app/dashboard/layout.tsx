@@ -1,29 +1,14 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { Brand } from '@/components/brand';
-import {
-  DashboardIcon,
-  DeviceIcon,
-  FlowIcon,
-  RunsIcon,
-  SettingsIcon,
-  SparkIcon,
-} from '@/components/icons';
+import { DashboardNavigation } from '@/components/dashboard-navigation';
+import { SparkIcon } from '@/components/icons';
 import { MockModeBadge } from '@/components/mock-mode-badge';
 
 export const metadata: Metadata = {
   title: '控制台',
 };
-
-const navigation = [
-  { href: '/dashboard', icon: DashboardIcon, label: '總覽' },
-  { href: '/dashboard/workflows', icon: FlowIcon, label: '工作流' },
-  { href: '/dashboard/runs', icon: RunsIcon, label: '執行紀錄' },
-  { href: '/dashboard/devices', icon: DeviceIcon, label: '裝置' },
-  { href: '/dashboard/settings', icon: SettingsIcon, label: '設定' },
-];
 
 export default function DashboardLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
@@ -36,25 +21,7 @@ export default function DashboardLayout({ children }: Readonly<{ children: React
           </div>
         </div>
 
-        <nav
-          aria-label="Dashboard navigation"
-          className="no-scrollbar mt-4 flex gap-1 overflow-x-auto pb-1 lg:mt-8 lg:block lg:space-y-1 lg:overflow-visible"
-        >
-          {navigation.map(({ href, icon: Icon, label }, index) => (
-            <Link
-              className={`flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
-                index === 0
-                  ? 'bg-white text-slate-950 shadow-sm'
-                  : 'text-slate-300 hover:bg-white/8 hover:text-white'
-              }`}
-              href={href}
-              key={href}
-            >
-              <Icon className="size-[18px]" />
-              {label}
-            </Link>
-          ))}
-        </nav>
+        <DashboardNavigation />
 
         <div className="absolute bottom-5 left-5 right-5 hidden rounded-2xl border border-white/10 bg-white/5 p-4 lg:block">
           <div className="flex items-center gap-2 text-xs font-semibold text-emerald-200">

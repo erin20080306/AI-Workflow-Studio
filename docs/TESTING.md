@@ -15,6 +15,7 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:e2e
 pnpm db:test
 pnpm build:web
 pnpm build:desktop
@@ -49,6 +50,10 @@ The required mock path signs in a test user, creates a mock device and folder
 alias, plans a workflow with the mock provider, renders its validated preview,
 runs a dry run, and displays run details. It must not call OpenAI, Google, or any
 paid service.
+
+`pnpm test:e2e` starts the Next.js application on an isolated localhost port,
+runs the workflow path in Playwright Chromium, and terminates both browser and
+server. CI installs only Chromium immediately before this test.
 
 ### Build and packaging
 

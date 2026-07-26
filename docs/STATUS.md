@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 4 — Workflow Schema and Engine (completed)
+Phase 5 — Workflow Web UI (completed)
 
 ## Repository baseline
 
@@ -314,4 +314,76 @@ Status: completed
 
 ### Commit
 
-- `feat: add workflow schema and deterministic engine` (this phase commit)
+- `af03d16` — `feat: add workflow schema and deterministic engine`
+
+## Phase 5
+
+Status: completed
+
+### Implemented
+
+- Added responsive workflow list, natural-language creation, detail, and
+  immutable version routes to the dashboard.
+- Added a React Flow 12 compatible, accessible, read-only node canvas with
+  stable layout, edges, minimap, zoom controls, selected-node state, and a typed
+  Node Inspector.
+- Connected the Web UI directly to the shared Workflow v1 validator, risk
+  catalog, and deterministic engine instead of duplicating their safety logic.
+- Added validation feedback, execution target, folder-alias permission, bounded
+  read/write, risk, and approval summaries before any activation control.
+- Added a user-initiated Dry Run that invokes only the mock executor registry and
+  displays structured planned-step results.
+- Enforced a draft-first activation experience: an AI-created workflow cannot be
+  activated until the user checks the permission/write summary.
+- Added Mock draft save, new version, enable, pause, list status, version history,
+  active navigation, and deterministic fixtures.
+- Added Playwright configuration and a terminating Chromium E2E covering Mock
+  login, device/folder context, natural-language planning, visual preview, Node
+  Inspector, Dry Run, and draft save.
+- Added CI browser installation and E2E execution after the production web
+  build.
+- Performed interactive browser QA at a 679px responsive viewport and confirmed
+  the page width matches the viewport with no horizontal overflow.
+
+### Dependency purposes
+
+- `@xyflow/react`: official React Flow 12 package used for the accessible node
+  canvas, edges, minimap, and viewport controls.
+- `@playwright/test`: deterministic browser E2E runner; provider APIs, real
+  credentials, and local files are not used.
+- Existing workflow schema and engine workspace packages: one source of truth
+  for validation, risk metadata, registry checks, and Dry Run behavior.
+
+### Files changed
+
+- Workflow list, creation, detail, and version App Router pages.
+- Workflow composer, canvas, review, inspector, activation, navigation, icons,
+  and mock fixture modules and tests.
+- Playwright configuration and Mock Workflow E2E.
+- Root/Web dependency metadata, CI workflow, testing docs, execution plan, and
+  status.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 28 tests
+- `pnpm test:e2e`: passed — 1 Chromium Mock Workflow E2E
+- Browser responsive QA: passed — no horizontal overflow at 679px
+- `pnpm db:test`: passed — unchanged migration and tenant-isolation regression
+- `pnpm build:web`: passed
+- `pnpm build:desktop`: not applicable — desktop app begins in Phase 8
+
+### Known limitations
+
+- Workflow persistence, Supabase Auth, and multi-user synchronization remain in
+  deterministic Mock mode until the orchestration/API phases.
+- Mock AI returns one validated demonstration workflow. Provider adapters and
+  bounded JSON repair begin in Phase 6.
+- The canvas is intentionally non-editable in this phase; the natural-language
+  planner and reviewed version creation are the supported editing path.
+
+### Commit
+
+- `feat: add workflow planning web experience` (this phase commit)

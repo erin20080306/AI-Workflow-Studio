@@ -53,3 +53,9 @@ jobs:
 
       - name: Build web application
         run: pnpm build:web
+
+      - name: Install Chromium for browser tests
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Mock Workflow browser test
+        run: pnpm test:e2e

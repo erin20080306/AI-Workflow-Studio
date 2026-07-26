@@ -20,7 +20,7 @@ test, and build checks and has been committed.
 | 2     | Next.js web foundation        | App Router shell, auth screens, mock mode, and production web build pass       | completed |
 | 3     | Supabase schema and tenancy   | Fresh migrations and tenant-isolation tests pass                               | completed |
 | 4     | Workflow schema and engine    | Schema, registry, DAG, risk, dry-run, and executor tests pass                  | completed |
-| 5     | Workflow web UI               | Mock workflow E2E and web build pass                                           | pending   |
+| 5     | Workflow web UI               | Mock workflow E2E and web build pass                                           | completed |
 | 6     | AI gateway                    | Provider adapters build without keys; strict JSON and mock tests pass          | pending   |
 | 7     | Pairing and job API           | Token, tenant, claim, lease, and revocation tests pass                         | pending   |
 | 8     | Desktop agent foundation      | Development build and unsigned test package pass; folder access is constrained | pending   |
