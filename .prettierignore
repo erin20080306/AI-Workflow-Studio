@@ -7,3 +7,4 @@ playwright-report
 pnpm-lock.yaml
 release
 test-results
+**/next-env.d.ts

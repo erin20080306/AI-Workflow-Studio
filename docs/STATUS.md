@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 1 — Monorepo and Guardrails (completed)
+Phase 2 — Next.js Web Foundation (completed)
 
 ## Repository baseline
 
@@ -123,4 +123,71 @@ Status: completed
 
 ### Commit
 
-- `chore: initialize monorepo and project guardrails` (this phase commit)
+- `8d1a88a` — `chore: initialize monorepo and project guardrails`
+
+## Phase 2
+
+Status: completed
+
+### Implemented
+
+- Added a Next.js 16 App Router application with React 19, Tailwind CSS 4, a
+  production Turbopack build, and explicit monorepo root resolution.
+- Added responsive public home, login, registration, dashboard shell, dashboard
+  overview, loading, error, not-found, and generated application icon routes.
+- Kept all application branding sourced from the shared product configuration.
+- Added runtime environment parsing with Zod, optional provider credentials,
+  safe mock-mode fallback, and redacted validation errors.
+- Added a complete environment-variable example and Vercel application
+  configuration without live values.
+- Added server-side Mock form actions so authentication fields never appear in
+  query strings or browser history.
+- Added an explicit pnpm 11 build-script allowlist for Next.js image dependency
+  `sharp`; all unlisted dependency build scripts remain denied.
+- Browser-tested the production server at desktop and mobile breakpoints,
+  verified navigation, removed the mobile navigation scrollbar, confirmed no
+  horizontal overflow, and found no browser warnings or errors.
+
+### Dependency purposes
+
+- Next.js and React: App Router web control plane and server-rendered UI.
+- Zod and `server-only`: runtime environment validation and enforced server
+  credential boundary.
+- Tailwind CSS, PostCSS, and the Tailwind PostCSS adapter: responsive design
+  system and production CSS compilation.
+- React type definitions: strict TSX checking.
+- Sharp is an official transitive Next.js image dependency; only its install
+  script is explicitly allowed.
+
+### Files changed
+
+- `apps/web` package, Next.js/Tailwind configuration, environment example, and
+  Vercel configuration.
+- Public, authentication, dashboard, loading, error, and not-found UI.
+- Shared icon, brand, mock-mode, and environment-validation modules and tests.
+- pnpm build-policy configuration and lockfile.
+- Phase execution and status documentation.
+
+### Validation
+
+- `pnpm install`: passed
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 4 tests
+- `pnpm build:web`: passed — 6 static application routes
+- Browser desktop QA: passed
+- Browser mobile QA: passed — no horizontal overflow or console errors
+- `pnpm build:desktop`: not applicable — desktop app begins in Phase 8
+
+### Known limitations
+
+- Login and registration intentionally redirect into deterministic Mock mode;
+  Supabase Auth and tenant creation begin in Phase 3.
+- Dashboard metrics and approval content are clearly labeled Mock data.
+- Workflow, run, device, and settings detail pages begin in later phases.
+- Live provider credentials are neither required nor exercised.
+
+### Commit
+
+- `feat: add Next.js web foundation` (this phase commit)

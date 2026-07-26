@@ -1,0 +1,100 @@
+@import 'tailwindcss';
+
+:root {
+  --background: #f7f8f5;
+  --foreground: #17211b;
+  --muted: #647067;
+  --line: #dfe5df;
+  --accent: #5b55e6;
+  --accent-dark: #403bc0;
+  --mint: #baf4d0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+  color: var(--foreground);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 8% -12%, rgb(186 244 208 / 45%), transparent 31rem),
+    radial-gradient(circle at 97% 0%, rgb(201 199 255 / 45%), transparent 28rem), var(--background);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: #c9c7ff;
+  color: #15132f;
+}
+
+:focus-visible {
+  outline: 3px solid rgb(91 85 230 / 35%);
+  outline-offset: 3px;
+}
+
+.workflow-grid {
+  background-image: radial-gradient(circle, rgb(89 102 92 / 20%) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.skeleton {
+  animation: pulse 1.6s ease-in-out infinite;
+  background: linear-gradient(90deg, #e8ece8 25%, #f5f7f5 45%, #e8ece8 65%);
+  background-size: 220% 100%;
+}
+
+@keyframes pulse {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .skeleton {
+    animation: none;
+  }
+}
