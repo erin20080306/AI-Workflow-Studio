@@ -2,6 +2,8 @@ import { PRODUCT } from '@ai-workflow-studio/shared/product';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
+import { LanguageProvider } from '@/components/language-provider';
+
 import '@xyflow/react/dist/style.css';
 import './globals.css';
 
@@ -21,8 +23,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html data-scroll-behavior="smooth" lang="zh-Hant">
-      <body>{children}</body>
+    <html data-locale="zh-Hant" data-scroll-behavior="smooth" lang="zh-Hant">
+      <body>
+        <LanguageProvider>{children}</LanguageProvider>
+      </body>
     </html>
   );
 }

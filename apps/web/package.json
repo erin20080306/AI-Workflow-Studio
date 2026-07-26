@@ -17,6 +17,8 @@
     "@ai-workflow-studio/shared": "workspace:*",
     "@ai-workflow-studio/workflow-engine": "workspace:*",
     "@ai-workflow-studio/workflow-schema": "workspace:*",
+    "@supabase/ssr": "^0.12.3",
+    "@supabase/supabase-js": "^2.110.8",
     "@xyflow/react": "^12.11.2",
     "next": "^16.2.11",
     "react": "^19.2.8",

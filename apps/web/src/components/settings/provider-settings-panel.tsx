@@ -3,10 +3,12 @@
 import { useState } from 'react';
 
 import { CheckIcon, ShieldIcon, SparkIcon } from '@/components/icons';
+import { useLanguage } from '@/components/language-provider';
 
 export interface ProviderSettingView {
   readonly configured: boolean;
-  readonly description: string;
+  readonly descriptionEn: string;
+  readonly descriptionZhHant: string;
   readonly id: 'anthropic' | 'gemini' | 'mock' | 'openai';
   readonly label: string;
   readonly model: string;
@@ -17,8 +19,47 @@ export function ProviderSettingsPanel({
 }: Readonly<{
   providers: readonly ProviderSettingView[];
 }>) {
+  const { locale } = useLanguage();
   const [selectedProvider, setSelectedProvider] = useState('mock');
   const [saved, setSaved] = useState(false);
+  const text =
+    locale === 'en'
+      ? {
+          available: 'Available',
+          current: 'Current default',
+          input: 'Input units',
+          keyRequired: 'Key required',
+          output: 'Output units',
+          plannerRequests: 'Planner requests',
+          rejected: 'Rejected outputs',
+          save: 'Save Mock settings',
+          saved: 'Mock preference updated. No key was written.',
+          secretBody:
+            'This page receives only configuration status and model names. Keys are read from the server environment, and responses and usage logs exclude keys, prompts, and raw output.',
+          secretBoundary: 'Secret boundary',
+          secretTitle: 'API keys never reach the browser',
+          select: 'Set as default',
+          usage: '7-day usage · Mock',
+          zeroExecuted: '0 executed',
+        }
+      : {
+          available: '可用',
+          current: '目前預設',
+          input: '輸入單位',
+          keyRequired: '需要金鑰',
+          output: '輸出單位',
+          plannerRequests: '規劃請求',
+          rejected: '遭拒輸出',
+          save: '儲存 Mock 設定',
+          saved: 'Mock 偏好已更新；未寫入任何金鑰。',
+          secretBody:
+            '此頁只接收「是否已設定」與模型名稱。金鑰只從伺服器環境讀取，回應與用量紀錄均不包含金鑰、Prompt 或原始輸出。',
+          secretBoundary: '機密界線',
+          secretTitle: 'API 金鑰永遠不送到瀏覽器',
+          select: '設為預設',
+          usage: '7 日用量 · Mock',
+          zeroExecuted: '執行 0 次',
+        };
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -54,10 +95,12 @@ export function ProviderSettingsPanel({
                             : 'bg-slate-100 text-slate-500'
                         }`}
                       >
-                        {selectable ? 'Available' : 'Key required'}
+                        {selectable ? text.available : text.keyRequired}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">{provider.description}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      {locale === 'en' ? provider.descriptionEn : provider.descriptionZhHant}
+                    </p>
                     <div className="mt-3 inline-flex rounded-lg bg-slate-100 px-2.5 py-1.5 font-mono text-[11px] text-slate-700">
                       {provider.model}
                     </div>
@@ -79,7 +122,7 @@ export function ProviderSettingsPanel({
                   }}
                   type="button"
                 >
-                  {selected ? '目前預設' : '設為預設'}
+                  {selected ? text.current : text.select}
                 </button>
               </div>
             </article>
@@ -91,33 +134,30 @@ export function ProviderSettingsPanel({
         <section className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <div className="flex items-center gap-2 text-emerald-300">
             <ShieldIcon className="size-4" />
-            <h2 className="text-xs font-bold uppercase tracking-[0.14em]">Secret boundary</h2>
+            <h2 className="text-xs font-bold uppercase tracking-[0.14em]">{text.secretBoundary}</h2>
           </div>
-          <p className="mt-4 text-sm font-semibold">API keys 永遠不送到瀏覽器</p>
-          <p className="mt-2 text-xs leading-5 text-slate-400">
-            此頁只接收「是否已設定」與模型名稱。金鑰只從 Server Environment 讀取，回應與 usage log
-            均不包含金鑰、Prompt 或原始輸出。
-          </p>
+          <p className="mt-4 text-sm font-semibold">{text.secretTitle}</p>
+          <p className="mt-2 text-xs leading-5 text-slate-400">{text.secretBody}</p>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-950">7 日用量 · Mock</h2>
+          <h2 className="text-sm font-semibold text-slate-950">{text.usage}</h2>
           <dl className="mt-4 space-y-3 text-xs">
             <div className="flex items-center justify-between">
-              <dt className="text-slate-500">Planner requests</dt>
+              <dt className="text-slate-500">{text.plannerRequests}</dt>
               <dd className="font-semibold text-slate-900">18</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-slate-500">Input units</dt>
+              <dt className="text-slate-500">{text.input}</dt>
               <dd className="font-semibold text-slate-900">12,480</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-slate-500">Output units</dt>
+              <dt className="text-slate-500">{text.output}</dt>
               <dd className="font-semibold text-slate-900">8,120</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-slate-500">Rejected outputs</dt>
-              <dd className="font-semibold text-emerald-700">0 executed</dd>
+              <dt className="text-slate-500">{text.rejected}</dt>
+              <dd className="font-semibold text-emerald-700">{text.zeroExecuted}</dd>
             </div>
           </dl>
         </section>
@@ -128,14 +168,14 @@ export function ProviderSettingsPanel({
           type="button"
         >
           <CheckIcon className="size-4" />
-          儲存 Mock 設定
+          {text.save}
         </button>
         {saved && (
           <p
             aria-live="polite"
             className="rounded-xl bg-emerald-50 px-3 py-2.5 text-xs font-medium text-emerald-800"
           >
-            Mock 偏好已更新；未寫入任何金鑰。
+            {text.saved}
           </p>
         )}
       </aside>

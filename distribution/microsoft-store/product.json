@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "status": "reserved-draft",
+  "product": {
+    "displayName": "AI Workflow Studio",
+    "identityName": "AIWorkflowStudio.AIWorkflowStudio",
+    "publisher": "CN=D7BFE6B4-9245-4A59-B2B7-7F9F6D7D0C60",
+    "publisherDisplayName": "AI Workflow Studio",
+    "packageFamilyName": "AIWorkflowStudio.AIWorkflowStudio_477cee9gs4yy2",
+    "storeId": "9PBQBFPNSWBH",
+    "storeUrl": "https://apps.microsoft.com/detail/9PBQBFPNSWBH"
+  },
+  "package": {
+    "applicationId": "AIWorkflowStudio",
+    "architectures": ["x64", "arm64"],
+    "format": "appx",
+    "languages": ["zh-TW", "en-US"],
+    "submissionMode": "manual"
+  },
+  "submissionBlockers": [
+    "Build and inspect the native Windows Store package on GitHub Actions or Windows.",
+    "Replace draft screenshots with final Traditional Chinese and English captures.",
+    "Publish and verify the privacy policy and support URLs.",
+    "Complete Partner Center age ratings, declarations, pricing, and certification."
+  ]
+}

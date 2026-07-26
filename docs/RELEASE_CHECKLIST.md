@@ -38,9 +38,10 @@ Partner Center identity reserved for `AI Workflow Studio`, but remain unsigned
 until Microsoft accepts and signs a submission.
 
 The current artifact filename contains `DRAFT-DO-NOT-SUBMIT`. It exists only to
-validate packaging and identity. Do not upload it to Partner Center until:
+validate packaging and identity. Branded AppX assets and bilingual listing
+drafts are committed under `apps/desktop/build/appx` and
+`distribution/microsoft-store`. Do not upload a package to Partner Center until:
 
-- branded Store/AppX image assets replace Electron's sample assets;
 - a clean Windows machine passes install, launch, folder authorization, pairing,
   revocation, update, and uninstall tests;
 - Windows App Certification Kit passes;

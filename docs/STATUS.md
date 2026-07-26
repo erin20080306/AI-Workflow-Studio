@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 13 — Security and final acceptance (in progress)
+Phase 13 — Security and final acceptance (completed locally)
 
 ## Repository baseline
 
@@ -1056,53 +1056,80 @@ Status: completed locally
 
 ## Phase 13
 
-Status: in progress
+Status: completed
 
-### Implemented so far
+### Implemented
 
 - Audited the dependency graph and replaced vulnerable transitive versions with
   scoped pnpm workspace overrides. `pnpm audit --audit-level high` now reports
   no known vulnerabilities.
-- Closed the pre-Auth paid-provider exposure: until an authenticated workspace
-  context is connected, the planner accepts only the deterministic Mock
-  provider. External providers fail closed.
-- Required a verified web actor before starting Google OAuth and redirected the
-  dashboard away from non-Mock mode until the real session boundary is
-  connected.
+- Added official Supabase SSR browser/server clients, per-request cookie refresh,
+  verified-claim session context, registration, confirmation, login, recovery,
+  password update with local-session revocation, logout, and guarded Tenant
+  onboarding.
+- Derived non-Mock Web actors from the verified user, Tenant membership, role,
+  and subscription context. Paid AI providers and Google OAuth require that
+  authenticated workspace boundary; unavailable durable production adapters
+  continue to fail closed.
+- Added a separately authorized platform administrator model with
+  `super_admin`, `billing_admin`, and `support` roles, protected `/admin`
+  operations, and append-only plan-change audit evidence. No administrator
+  email, password, token, or user-specific bootstrap is stored or seeded.
+- Added public Free, Pro, Team, and Business plans, bilingual TWD pricing,
+  automatic Free subscriptions, Tenant subscription visibility, and
+  PostgreSQL-enforced workflow, monthly run, active-device, and member limits.
+- Added the missing Devices route with metadata-only paired-device views and
+  Zod-validated short-lived pairing-code responses.
+- Completed a shared Traditional Chinese/English Web language system across the
+  landing page, Auth, pricing, dashboard, workflows, runs, devices, settings,
+  connections, and platform administration. The Desktop Agent has the same
+  user-controlled language switch, with OS-localized native menus.
+- Replaced default Web/Desktop/AppX artwork with the AI Workflow Studio brand
+  mark, exact Store asset dimensions, and automated PNG-header tests. Added
+  machine-readable Partner Center identity data plus Traditional Chinese and
+  English Store listing drafts.
+- Added a reusable runtime `WorkflowRunView` Zod schema so changing Run API
+  responses are validated before entering browser state.
 - Added a client-bundle scanner and focused tests for server-only variable
   names, configured secret values, credential patterns, private keys, and local
   workspace paths.
-- Began the documented security and acceptance review.
+- Completed the documented local security and acceptance review and updated the
+  production, release, user, and administrator bootstrap guides.
 
-### Validation so far
+### Validation
 
 - `pnpm audit --audit-level high`: passed — no known vulnerabilities
+- `pnpm peers check`: passed — no peer dependency issues
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
 - `pnpm typecheck`: passed — all 10 code workspaces
-- `pnpm test`: passed — 91 tests across 20 files
-- `pnpm build:web`: passed — 34 generated pages with synthetic server secrets
-- `pnpm security:scan-client`: passed — 23 built browser assets, no synthetic
+- `pnpm test`: passed — 105 tests across 24 files
+- `pnpm build:web`: passed — optimized Next.js production build with 31 static
+  pages and all dynamic Auth, admin, device, workflow, Run, and API routes
+- `pnpm security:scan-client`: passed — 29 built browser assets, no synthetic
   secret, server-only variable name, credential pattern, private key, or local
   path detected
 - `pnpm db:test`: passed — fresh migrations, Tenant isolation, privileged
-  function denial, state transitions, and idempotent seed
-- `pnpm build:desktop`: passed
-- `pnpm test:e2e`: passed — both Chromium Mock acceptance paths
+  function denial, state transitions, plan entitlements, admin role boundaries,
+  atomic plan audit, and idempotent seed
+- `pnpm build:desktop`: passed — main, preload, and bilingual renderer
+- `pnpm test:e2e`: passed — both Chromium Mock acceptance paths, including
+  persisted bilingual switching and the Devices pairing route
+- `pnpm release:scan -- --directory apps/desktop/build`: passed
 
-### Remaining before completion
+### External publication follow-up
 
-- Complete the remaining security review after real Auth, Super Admin, and
-  subscription enforcement are implemented.
-- Connect real Supabase registration, login, logout, recovery, verified Tenant
-  onboarding, and server-side route authorization.
-- Add the separately authorized platform Super Admin and subscription
-  entitlement model without storing or seeding an administrator password.
-- Complete the Traditional Chinese/English professional UI and branded Store
-  assets.
-- Verify remote GitHub CI, Vercel, Supabase, GitHub prerelease, and Microsoft
-  Store packaging only after the required account authorization is available.
+- Configure and staging-test a real Supabase project, mail delivery, durable
+  production repositories, payment-provider webhooks, backups, and operational
+  ownership.
+- Grant the intended verified Auth user as the first platform administrator
+  manually by UUID; never provide or store that user's password.
+- Run remote GitHub CI and the native Windows Store packaging workflow, then
+  complete clean-machine testing, WACK, screenshots, privacy/support URLs,
+  Partner Center declarations, and certification.
+- Create a Vercel deployment, GitHub prerelease, or Microsoft Store submission
+  only with explicit provider authorization. No remote publication is claimed.
 
 ### Commit
 
-- Pending
+- `feat: complete bilingual platform acceptance` (this phase commit)

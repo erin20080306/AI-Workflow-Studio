@@ -10,7 +10,7 @@ const CALLBACK_PATH = '/api/connections/google/callback';
 
 export async function GET(): Promise<Response> {
   try {
-    getWebActor();
+    await getWebActor();
     const state = randomBytes(32).toString('base64url');
     const pkce = createGooglePkcePair();
     const cookieStore = await cookies();

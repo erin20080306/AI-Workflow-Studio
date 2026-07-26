@@ -4,6 +4,7 @@ import {
   PlannerRequestSchema,
 } from '@ai-workflow-studio/ai-gateway';
 
+import { getWorkspaceContext } from '@/lib/auth/context';
 import { createServerAiGateway } from '@/lib/ai-gateway';
 import { plannerAccessDecision } from '@/lib/control-plane-access';
 import { getEnvironment } from '@/lib/env';
@@ -66,7 +67,16 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { provider, ...plannerRequest } = parsed.data;
-  const access = plannerAccessDecision(getEnvironment().mockMode, provider);
+  const environment = getEnvironment();
+  let workspaceAuthenticated = environment.mockMode;
+  if (!environment.mockMode) {
+    try {
+      workspaceAuthenticated = (await getWorkspaceContext()) !== null;
+    } catch {
+      workspaceAuthenticated = false;
+    }
+  }
+  const access = plannerAccessDecision(environment.mockMode, provider, workspaceAuthenticated);
   if (!access.allowed) {
     return Response.json(
       {

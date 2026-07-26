@@ -90,7 +90,8 @@ export function getRunOrchestrator(): RunOrchestrator {
 
 export async function createMockRun(input: unknown) {
   const parsed = StartMockRunSchema.parse(input);
-  return await getRunOrchestrator().start(getWebActor(), {
+  const actor = await getWebActor();
+  return await getRunOrchestrator().start(actor, {
     deviceId: parsed.deviceId,
     idempotencyKey: parsed.idempotencyKey,
     maxAttempts: parsed.maxAttempts,
@@ -104,7 +105,8 @@ export async function createMockRun(input: unknown) {
 }
 
 export async function ensureMockRun(): Promise<void> {
-  if (getRunOrchestrator().list(getWebActor()).length > 0) {
+  const actor = await getWebActor();
+  if (getRunOrchestrator().list(actor).length > 0) {
     return;
   }
   await createMockRun({
@@ -115,13 +117,15 @@ export async function ensureMockRun(): Promise<void> {
 }
 
 export async function listRuns(): Promise<readonly WorkflowRunView[]> {
+  const actor = await getWebActor();
   await getRunOrchestrator().sweepExpired();
-  return getRunOrchestrator().list(getWebActor());
+  return getRunOrchestrator().list(actor);
 }
 
 export async function getRun(runId: string): Promise<WorkflowRunView> {
+  const actor = await getWebActor();
   await getRunOrchestrator().sweepExpired();
-  return getRunOrchestrator().get(getWebActor(), runId);
+  return getRunOrchestrator().get(actor, runId);
 }
 
 export async function resolveRunApproval(
@@ -129,17 +133,18 @@ export async function resolveRunApproval(
   approvalId: string,
   decision: 'approve' | 'reject',
 ): Promise<WorkflowRunView> {
+  const actor = await getWebActor();
   return decision === 'approve'
-    ? await getRunOrchestrator().approve(getWebActor(), runId, approvalId)
-    : await getRunOrchestrator().reject(getWebActor(), runId, approvalId);
+    ? await getRunOrchestrator().approve(actor, runId, approvalId)
+    : await getRunOrchestrator().reject(actor, runId, approvalId);
 }
 
 export async function cancelRun(runId: string): Promise<WorkflowRunView> {
-  return await getRunOrchestrator().cancel(getWebActor(), runId);
+  return await getRunOrchestrator().cancel(await getWebActor(), runId);
 }
 
 export async function retryRun(runId: string): Promise<WorkflowRunView> {
-  return await getRunOrchestrator().retry(getWebActor(), runId);
+  return await getRunOrchestrator().retry(await getWebActor(), runId);
 }
 
 export async function syncAgentProgress(job: AgentJob, input: unknown): Promise<void> {

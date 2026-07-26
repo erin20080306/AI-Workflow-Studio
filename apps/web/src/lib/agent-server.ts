@@ -8,10 +8,9 @@ import {
   type WebActor,
 } from '@ai-workflow-studio/agent-protocol';
 
+import { requireWorkspaceActor } from './auth/context';
 import { getEnvironment } from './env';
 
-const MOCK_TENANT_ID = '10000000-0000-4000-8000-000000000701';
-const MOCK_USER_ID = '10000000-0000-4000-8000-000000000702';
 const MOCK_PEPPER = 'mock-mode-only-agent-pepper-never-use-in-production';
 
 interface AgentServerState {
@@ -49,20 +48,22 @@ function createState(): AgentServerState {
 }
 
 export function getAgentServerState(): AgentServerState {
+  if (!getEnvironment().mockMode) {
+    throw new AgentProtocolError(
+      'AGENT_SERVER_NOT_CONFIGURED',
+      'Durable production Agent persistence is not configured.',
+    );
+  }
   agentGlobal.__aiWorkflowAgentState ??= createState();
   return agentGlobal.__aiWorkflowAgentState;
 }
 
-export function getWebActor(): WebActor {
-  if (!getEnvironment().mockMode) {
-    throw new AgentProtocolError(
-      'AGENT_SERVER_NOT_CONFIGURED',
-      'Authenticated tenant context is not configured for this server.',
-    );
+export async function getWebActor(): Promise<WebActor> {
+  try {
+    return await requireWorkspaceActor();
+  } catch (error) {
+    throw new AgentProtocolError('AGENT_FORBIDDEN', 'An authenticated workspace is required.', {
+      cause: error,
+    });
   }
-  return {
-    role: 'owner',
-    tenantId: MOCK_TENANT_ID,
-    userId: MOCK_USER_ID,
-  };
 }

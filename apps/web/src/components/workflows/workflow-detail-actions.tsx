@@ -3,19 +3,53 @@
 import { useState } from 'react';
 
 import { CheckIcon, PlusIcon, ShieldIcon } from '@/components/icons';
+import { useLanguage } from '@/components/language-provider';
+
+const copy = {
+  en: {
+    activate: 'Activate workflow',
+    activated:
+      'Workflow activated in the mock workspace. The first live run will still require write approval.',
+    checkbox:
+      'I reviewed the data source, execution device, read/write scope, and first-run approval rules.',
+    created: 'Mock v4 created. The current version remains unchanged.',
+    description: 'AI-generated workflows remain drafts until a user reviews and activates them.',
+    needsReview: 'Review the permissions and write summary first.',
+    newVersion: 'Create new version',
+    pause: 'Pause workflow',
+    paused: 'Workflow paused. It will not accept new runs.',
+    status: { active: 'Active', draft: 'Draft', paused: 'Paused' },
+  },
+  'zh-Hant': {
+    activate: '啟用工作流',
+    activated: '工作流已在 Mock 工作區啟用。首次正式執行仍會要求寫入核准。',
+    checkbox: '我已檢查資料來源、執行裝置、讀寫範圍與首次執行核准規則。',
+    created: '已建立 Mock v4；目前版本仍保持不變。',
+    description: 'AI 產生的流程預設為草稿，只有使用者完成檢查後才能啟用。',
+    needsReview: '請先確認權限與寫入摘要。',
+    newVersion: '建立新版本',
+    pause: '暫停工作流',
+    paused: '工作流已暫停，不會接受新的執行。',
+    status: { active: '已啟用', draft: '草稿', paused: '已暫停' },
+  },
+} as const;
+
+type ActionMessage = 'activated' | 'created' | 'needs-review' | 'paused';
 
 export function WorkflowDetailActions() {
+  const { locale } = useLanguage();
+  const text = copy[locale];
   const [status, setStatus] = useState<'active' | 'draft' | 'paused'>('draft');
   const [approvalReviewed, setApprovalReviewed] = useState(false);
-  const [message, setMessage] = useState<string>();
+  const [message, setMessage] = useState<ActionMessage>();
 
   function activate() {
     if (!approvalReviewed) {
-      setMessage('請先確認權限與寫入摘要。');
+      setMessage('needs-review');
       return;
     }
     setStatus('active');
-    setMessage('工作流已在 Mock 工作區啟用。首次 Live Run 仍會要求寫入核准。');
+    setMessage('activated');
   }
 
   return (
@@ -32,34 +66,30 @@ export function WorkflowDetailActions() {
                     : 'bg-slate-400'
               }`}
             />
-            <p className="text-sm font-semibold text-slate-950">
-              {status === 'active' ? '已啟用' : status === 'paused' ? '已暫停' : '草稿'}
-            </p>
+            <p className="text-sm font-semibold text-slate-950">{text.status[status]}</p>
           </div>
-          <p className="mt-1 text-xs text-slate-500">
-            AI 產生的流程預設為草稿，只有使用者完成檢查後才能啟用。
-          </p>
+          <p className="mt-1 text-xs text-slate-500">{text.description}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
             className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800"
-            onClick={() => setMessage('已建立 Mock v4；目前版本仍保持不變。')}
+            onClick={() => setMessage('created')}
             type="button"
           >
             <PlusIcon className="size-4" />
-            建立新版本
+            {text.newVersion}
           </button>
           {status === 'active' ? (
             <button
               className="rounded-xl bg-amber-100 px-4 py-2.5 text-sm font-semibold text-amber-900"
               onClick={() => {
                 setStatus('paused');
-                setMessage('工作流已暫停，不會接受新的執行。');
+                setMessage('paused');
               }}
               type="button"
             >
-              暫停工作流
+              {text.pause}
             </button>
           ) : (
             <button
@@ -68,7 +98,7 @@ export function WorkflowDetailActions() {
               type="button"
             >
               <ShieldIcon className="size-4" />
-              啟用工作流
+              {text.activate}
             </button>
           )}
         </div>
@@ -82,7 +112,7 @@ export function WorkflowDetailActions() {
             onChange={(event) => setApprovalReviewed(event.target.checked)}
             type="checkbox"
           />
-          我已檢查資料來源、執行裝置、讀寫範圍與首次執行核准規則。
+          {text.checkbox}
         </label>
       )}
 
@@ -90,13 +120,20 @@ export function WorkflowDetailActions() {
         <div
           aria-live="polite"
           className={`mt-3 flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium ${
-            message.startsWith('請')
+            message === 'needs-review'
               ? 'bg-amber-50 text-amber-900'
               : 'bg-emerald-50 text-emerald-800'
           }`}
         >
-          {!message.startsWith('請') && <CheckIcon className="size-4 shrink-0" />}
-          {message}
+          {message !== 'needs-review' && <CheckIcon className="size-4 shrink-0" />}
+          {
+            {
+              activated: text.activated,
+              created: text.created,
+              'needs-review': text.needsReview,
+              paused: text.paused,
+            }[message]
+          }
         </div>
       )}
     </section>

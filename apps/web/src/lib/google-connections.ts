@@ -156,7 +156,7 @@ export async function googleConnectionPageState(): Promise<{
   const environment = getEnvironment();
   const savedConnections =
     environment.mockMode && environment.googleConfigured
-      ? await googleConnectionService().list(getWebActor().tenantId)
+      ? await googleConnectionService().list((await getWebActor()).tenantId)
       : [];
   return {
     configured: environment.googleConfigured,
@@ -171,7 +171,7 @@ export async function listGoogleConnections(): Promise<readonly GoogleConnection
   if (getEnvironment().mockMode && !getEnvironment().googleConfigured) {
     return [MOCK_GOOGLE_CONNECTION];
   }
-  const actor = getWebActor();
+  const actor = await getWebActor();
   return await googleConnectionService().list(actor.tenantId);
 }
 
@@ -191,7 +191,7 @@ export async function checkGoogleConnection(
       spreadsheets: MOCK_SPREADSHEETS,
     };
   }
-  const actor = getWebActor();
+  const actor = await getWebActor();
   return await googleConnectionService().health(actor.tenantId, connectionId, signal);
 }
 
@@ -207,7 +207,7 @@ export async function listGoogleSheets(
   ) {
     return MOCK_SHEETS;
   }
-  const actor = getWebActor();
+  const actor = await getWebActor();
   return await googleConnectionService().listSheets(
     actor.tenantId,
     connectionId,
@@ -227,7 +227,7 @@ export async function createGoogleConnectionFromCode(
       'Authenticated production connection persistence is not configured.',
     );
   }
-  const actor = getWebActor();
+  const actor = await getWebActor();
   const tokens = await googleOAuthClient().exchangeCode(code, verifier, signal);
   return await googleConnectionService().create(
     actor.tenantId,
@@ -244,6 +244,6 @@ export async function revokeGoogleConnection(
   if (getEnvironment().mockMode && connectionId === MOCK_GOOGLE_CONNECTION_ID) {
     return;
   }
-  const actor = getWebActor();
+  const actor = await getWebActor();
   await googleConnectionService().revoke(actor.tenantId, connectionId, signal);
 }

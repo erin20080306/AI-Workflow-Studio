@@ -3,8 +3,9 @@ import { getAgentServerState, getWebActor } from '@/lib/agent-server';
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const actor = await getWebActor();
     const result = await getAgentServerState().service.startPairing(
-      getWebActor(),
+      actor,
       await readAgentJson(request),
     );
     return Response.json(result, {

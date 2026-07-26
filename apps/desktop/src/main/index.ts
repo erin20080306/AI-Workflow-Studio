@@ -78,6 +78,10 @@ let spreadsheetExecutor: DesktopSpreadsheetExecutor;
 let settingsStore: SettingsStore;
 let updater: ManualUpdateController;
 
+function nativeText(en: string, zhHant: string): string {
+  return app.getLocale().toLowerCase().startsWith('zh') ? zhHant : en;
+}
+
 function currentSnapshot(): AgentSnapshot {
   return {
     agentVersion: app.getVersion(),
@@ -196,9 +200,12 @@ function registerIpc(): void {
       throw new Error('Desktop window is unavailable.');
     }
     const selected = await dialog.showOpenDialog(ownerWindow, {
-      buttonLabel: '授權此資料夾',
+      buttonLabel: nativeText('Authorize folder', '授權此資料夾'),
       properties: ['openDirectory', 'createDirectory'],
-      title: '選擇 Desktop Agent 可存取的資料夾',
+      title: nativeText(
+        'Choose a folder the Desktop Agent may access',
+        '選擇 Desktop Agent 可存取的資料夾',
+      ),
     });
     const selectedPath = selected.filePaths[0];
     if (selected.canceled || selectedPath === undefined) {
@@ -328,15 +335,15 @@ function updateTrayMenu(): void {
       {
         label:
           agentStatus.connection === 'online'
-            ? 'Agent 在線'
+            ? nativeText('Agent online', 'Agent 在線')
             : agentStatus.paired
-              ? 'Agent 離線'
-              : '尚未配對',
+              ? nativeText('Agent offline', 'Agent 離線')
+              : nativeText('Not paired', '尚未配對'),
         enabled: false,
       },
       {
         click: () => mainWindow?.show(),
-        label: '開啟控制台',
+        label: nativeText('Open console', '開啟控制台'),
       },
       { type: 'separator' },
       {
@@ -344,7 +351,7 @@ function updateTrayMenu(): void {
           isQuitting = true;
           app.quit();
         },
-        label: '結束 Agent',
+        label: nativeText('Quit Agent', '結束 Agent'),
       },
     ]),
   );

@@ -31,9 +31,10 @@ values into an issue, build log, screenshot, or commit.
       absolute paths.
 
 `NEXT_PUBLIC_MOCK_MODE=true` is suitable only for a public demonstration with
-synthetic data. Do not switch it to `false` until the authenticated Supabase
-repository adapters described in the acceptance checklist are implemented and
-verified. The current non-Mock server boundary fails closed by design.
+synthetic data. Supabase Auth and Tenant onboarding are implemented, but do not
+switch the flag to `false` until migrations, redirect URLs, mail delivery,
+service-role configuration, and durable production repositories pass staging.
+Unavailable non-Mock operations fail closed by design.
 
 ## Supabase and authentication
 
@@ -53,10 +54,12 @@ verified. The current non-Mock server boundary fails closed by design.
       source code, Vercel variables, or GitHub secrets.
 - [ ] Enable database backups and test a restore procedure.
 
-The schema already provisions a profile when Supabase creates a user and exposes
-the guarded `create_tenant` function. The web login and registration screens are
-currently Mock-only; public registration is not production-ready until the
-authenticated web session flow is complete.
+The schema provisions a profile when Supabase creates a user, automatically
+creates the Free subscription for a new Tenant, and exposes guarded onboarding.
+The Web implements registration, email confirmation, login, recovery, password
+update, logout, and verified Tenant creation. Follow
+[the administrator bootstrap guide](./PLATFORM_ADMIN_BOOTSTRAP.md) only after the
+intended Auth user is verified.
 
 ## Environment variables
 
@@ -64,7 +67,8 @@ authenticated web session flow is complete.
 
 - [ ] `NEXT_PUBLIC_APP_URL`
 - [ ] `NEXT_PUBLIC_SUPABASE_URL`
-- [ ] `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- [ ] `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (preferred) or the legacy
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - [ ] `NEXT_PUBLIC_MOCK_MODE`
 
 Only these intended browser values may use the `NEXT_PUBLIC_` prefix. The
@@ -116,11 +120,13 @@ a client bundle or log.
 
 ## Current blockers
 
-- Production Supabase session/repository adapters are not connected to the web
-  routes.
-- Public registration and login still enter the Mock workspace.
-- Platform-wide Super Admin and subscription enforcement are not implemented.
-- Billing is a placeholder; no payment provider is connected.
+- Production Supabase has not been configured or staging-tested.
+- Durable production Agent, Run, and Google repository adapters are not
+  connected; their affected non-Mock operations fail closed.
+- A real platform administrator has not been granted. The repository stores no
+  administrator password or user-specific bootstrap data.
+- Entitlements are enforced in PostgreSQL, but checkout, invoices, tax, webhook
+  processing, and a payment provider are not connected.
 - No production deployment, signed desktop installer, Microsoft Store
   submission/certification, or GitHub Release has been created. The Store
-  product identity exists only as a draft.
+  identity, branded package assets, and bilingual listing copy remain drafts.

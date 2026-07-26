@@ -7,7 +7,8 @@ export async function POST(
 ): Promise<Response> {
   try {
     const { deviceId } = await context.params;
-    const result = await getAgentServerState().service.revokeDevice(getWebActor(), deviceId);
+    const actor = await getWebActor();
+    const result = await getAgentServerState().service.revokeDevice(actor, deviceId);
     return Response.json(result, {
       headers: { 'cache-control': 'no-store' },
     });

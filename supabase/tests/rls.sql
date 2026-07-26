@@ -55,6 +55,10 @@ values
     '10000000-0000-0000-0000-000000000003'
   );
 
+update public.tenant_subscriptions
+set plan_code = 'team'
+where tenant_id = '20000000-0000-0000-0000-000000000002';
+
 insert into public.memberships (tenant_id, user_id, role)
 values
   (
@@ -246,7 +250,12 @@ begin
     'agent_job_events',
     'column_mapping_rules',
     'usage_records',
-    'audit_logs'
+    'audit_logs',
+    'billing_plans',
+    'tenant_subscriptions',
+    'billing_events',
+    'platform_admins',
+    'platform_admin_audit_logs'
   ]
   loop
     if to_regclass(format('public.%I', required_table)) is null then

@@ -26,7 +26,7 @@ describe('parseEnvironment', () => {
     expect(
       parseEnvironment({
         NEXT_PUBLIC_MOCK_MODE: 'false',
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: 'public-anon-key',
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'public-publishable-key',
         NEXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
       }),
     ).toMatchObject({

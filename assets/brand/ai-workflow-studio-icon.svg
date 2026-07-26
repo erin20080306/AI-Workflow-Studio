@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">AI Workflow Studio</title>
+  <desc id="description">A connected workflow mark forming the letter A on an indigo gradient.</desc>
+  <defs>
+    <linearGradient id="background" x1="132" y1="96" x2="894" y2="940" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="0.48" stop-color="#312E81"/>
+      <stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(764 196) rotate(132) scale(650)">
+      <stop stop-color="#818CF8" stop-opacity="0.66"/>
+      <stop offset="1" stop-color="#818CF8" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="28" stdDeviation="30" flood-color="#020617" flood-opacity="0.34"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#background)"/>
+  <rect width="1024" height="1024" rx="224" fill="url(#glow)"/>
+  <g opacity="0.18" fill="none" stroke="#C7D2FE" stroke-width="2">
+    <path d="M96 718C242 616 310 604 444 660s236 42 484-162"/>
+    <path d="M112 780c172-112 286-90 400-24s238 34 408-104"/>
+  </g>
+  <g filter="url(#shadow)">
+    <path d="M282 722 512 290 742 722" fill="none" stroke="#F8FAFC" stroke-linecap="round" stroke-linejoin="round" stroke-width="78"/>
+    <path d="M392 560h240" fill="none" stroke="#C7D2FE" stroke-linecap="round" stroke-width="58"/>
+    <circle cx="512" cy="290" r="72" fill="#F8FAFC"/>
+    <circle cx="512" cy="290" r="30" fill="#312E81"/>
+    <circle cx="282" cy="722" r="62" fill="#C7D2FE"/>
+    <circle cx="282" cy="722" r="25" fill="#312E81"/>
+    <circle cx="742" cy="722" r="62" fill="#C7D2FE"/>
+    <circle cx="742" cy="722" r="25" fill="#312E81"/>
+    <circle cx="512" cy="560" r="40" fill="#818CF8"/>
+    <circle cx="512" cy="560" r="16" fill="#EEF2FF"/>
+  </g>
+  <g fill="#E0E7FF">
+    <path d="m782 236 13 36 36 13-36 13-13 36-13-36-36-13 36-13 13-36Z"/>
+    <circle cx="844" cy="376" r="14"/>
+  </g>
+</svg>

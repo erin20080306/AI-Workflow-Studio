@@ -39,6 +39,10 @@ const environmentSchema = z.object({
   NEXT_PUBLIC_APP_URL: optionalUrl,
   NEXT_PUBLIC_MOCK_MODE: z.enum(['true', 'false']).default('true'),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.preprocess(
+    emptyToUndefined,
+    z.string().min(1).optional(),
+  ),
   NEXT_PUBLIC_SUPABASE_URL: optionalUrl,
   OPENAI_API_KEY: optionalSecret,
   OPENAI_MODEL: optionalModel,
@@ -75,7 +79,8 @@ export function parseEnvironment(input: Record<string, string | undefined>): App
   }
 
   const supabaseConfigured = Boolean(
-    parsed.data.NEXT_PUBLIC_SUPABASE_URL && parsed.data.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    parsed.data.NEXT_PUBLIC_SUPABASE_URL &&
+    (parsed.data.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || parsed.data.NEXT_PUBLIC_SUPABASE_ANON_KEY),
   );
 
   return {

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "locale": "en-US",
+  "status": "draft",
+  "title": "AI Workflow Studio",
+  "shortDescription": "Plan safe, approval-aware, and auditable desktop and cloud workflows with natural language.",
+  "description": "AI Workflow Studio turns natural-language requests into structured workflow drafts and requires explicit approval before activation or high-risk execution. Its local-first Desktop Agent processes Excel files only inside approved folder aliases; full rows and absolute paths stay off the cloud by default. The Web console provides workflow versions, run status, devices, connections, and audit summaries. AI output is limited to Workflow JSON that passes closed-schema and safety validation—it cannot generate or run arbitrary code.",
+  "features": [
+    "Create validated Workflow JSON drafts with natural language",
+    "Local-first Excel processing with folder-alias permissions",
+    "Explicit approval for write, external, and destructive nodes",
+    "Immutable versions, dry runs, and an audit timeline",
+    "Traditional Chinese and English interface",
+    "Windows x64 and arm64 Store packages"
+  ],
+  "searchTerms": [
+    "AI automation",
+    "workflow",
+    "Excel automation",
+    "desktop agent",
+    "data processing",
+    "productivity"
+  ],
+  "requiredBeforeSubmission": [
+    "Final Store screenshots",
+    "A public and reachable privacy-policy URL",
+    "A public and reachable support URL",
+    "Partner Center pricing and market configuration"
+  ]
+}

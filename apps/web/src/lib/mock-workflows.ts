@@ -15,37 +15,115 @@ export const NODE_PRESENTATION: Readonly<
   Record<
     WorkflowNode['type'],
     {
-      readonly category: string;
-      readonly label: string;
+      readonly category: { readonly en: string; readonly zhHant: string };
+      readonly label: { readonly en: string; readonly zhHant: string };
     }
   >
 > = {
-  'data.aggregate': { category: '資料轉換', label: '彙總資料' },
-  'data.deduplicate': { category: '資料轉換', label: '資料去重' },
-  'data.filter': { category: '資料轉換', label: '篩選資料' },
-  'data.group': { category: '資料轉換', label: '資料分組' },
-  'data.map_columns': { category: '資料轉換', label: '欄位對應' },
-  'data.sort': { category: '資料轉換', label: '資料排序' },
-  'data.validate': { category: '資料轉換', label: '驗證資料' },
-  'excel.create_report': { category: 'Excel', label: '建立 Excel 報表' },
-  'excel.merge': { category: 'Excel', label: '合併 Excel' },
-  'excel.read': { category: 'Excel', label: '讀取 Excel' },
-  'excel.split_by_field': { category: 'Excel', label: '拆分 Excel' },
-  'excel.write': { category: 'Excel', label: '寫入 Excel' },
-  'folder.archive_file': { category: '本機檔案', label: '封存檔案' },
-  'folder.file_changed': { category: '觸發器', label: '檔案變更時' },
-  'folder.file_created': { category: '觸發器', label: '檔案建立時' },
-  'folder.list_files': { category: '本機檔案', label: '列出 Excel 檔案' },
-  'folder.move_file': { category: '本機檔案', label: '移動檔案' },
-  'folder.rename_file': { category: '本機檔案', label: '重新命名檔案' },
-  'google_sheets.append': { category: 'Google Sheets', label: '附加試算表資料' },
-  'google_sheets.read': { category: 'Google Sheets', label: '讀取試算表' },
-  'google_sheets.sync': { category: 'Google Sheets', label: '同步試算表' },
-  'google_sheets.update': { category: 'Google Sheets', label: '更新試算表' },
-  'manual.trigger': { category: '觸發器', label: '手動執行' },
-  'notification.desktop': { category: '輸出', label: '桌面通知' },
-  'schedule.trigger': { category: '觸發器', label: '排程執行' },
-  'webhook.call': { category: '輸出', label: '呼叫 Webhook' },
+  'data.aggregate': {
+    category: { en: 'Data transform', zhHant: '資料轉換' },
+    label: { en: 'Aggregate data', zhHant: '彙總資料' },
+  },
+  'data.deduplicate': {
+    category: { en: 'Data transform', zhHant: '資料轉換' },
+    label: { en: 'Deduplicate data', zhHant: '資料去重' },
+  },
+  'data.filter': {
+    category: { en: 'Data transform', zhHant: '資料轉換' },
+    label: { en: 'Filter data', zhHant: '篩選資料' },
+  },
+  'data.group': {
+    category: { en: 'Data transform', zhHant: '資料轉換' },
+    label: { en: 'Group data', zhHant: '資料分組' },
+  },
+  'data.map_columns': {
+    category: { en: 'Data transform', zhHant: '資料轉換' },
+    label: { en: 'Map columns', zhHant: '欄位對應' },
+  },
+  'data.sort': {
+    category: { en: 'Data transform', zhHant: '資料轉換' },
+    label: { en: 'Sort data', zhHant: '資料排序' },
+  },
+  'data.validate': {
+    category: { en: 'Data transform', zhHant: '資料轉換' },
+    label: { en: 'Validate data', zhHant: '驗證資料' },
+  },
+  'excel.create_report': {
+    category: { en: 'Excel', zhHant: 'Excel' },
+    label: { en: 'Create Excel report', zhHant: '建立 Excel 報表' },
+  },
+  'excel.merge': {
+    category: { en: 'Excel', zhHant: 'Excel' },
+    label: { en: 'Merge Excel files', zhHant: '合併 Excel' },
+  },
+  'excel.read': {
+    category: { en: 'Excel', zhHant: 'Excel' },
+    label: { en: 'Read Excel', zhHant: '讀取 Excel' },
+  },
+  'excel.split_by_field': {
+    category: { en: 'Excel', zhHant: 'Excel' },
+    label: { en: 'Split Excel by field', zhHant: '拆分 Excel' },
+  },
+  'excel.write': {
+    category: { en: 'Excel', zhHant: 'Excel' },
+    label: { en: 'Write Excel', zhHant: '寫入 Excel' },
+  },
+  'folder.archive_file': {
+    category: { en: 'Local files', zhHant: '本機檔案' },
+    label: { en: 'Archive file', zhHant: '封存檔案' },
+  },
+  'folder.file_changed': {
+    category: { en: 'Trigger', zhHant: '觸發器' },
+    label: { en: 'When a file changes', zhHant: '檔案變更時' },
+  },
+  'folder.file_created': {
+    category: { en: 'Trigger', zhHant: '觸發器' },
+    label: { en: 'When a file is created', zhHant: '檔案建立時' },
+  },
+  'folder.list_files': {
+    category: { en: 'Local files', zhHant: '本機檔案' },
+    label: { en: 'List Excel files', zhHant: '列出 Excel 檔案' },
+  },
+  'folder.move_file': {
+    category: { en: 'Local files', zhHant: '本機檔案' },
+    label: { en: 'Move file', zhHant: '移動檔案' },
+  },
+  'folder.rename_file': {
+    category: { en: 'Local files', zhHant: '本機檔案' },
+    label: { en: 'Rename file', zhHant: '重新命名檔案' },
+  },
+  'google_sheets.append': {
+    category: { en: 'Google Sheets', zhHant: 'Google Sheets' },
+    label: { en: 'Append spreadsheet data', zhHant: '附加試算表資料' },
+  },
+  'google_sheets.read': {
+    category: { en: 'Google Sheets', zhHant: 'Google Sheets' },
+    label: { en: 'Read spreadsheet', zhHant: '讀取試算表' },
+  },
+  'google_sheets.sync': {
+    category: { en: 'Google Sheets', zhHant: 'Google Sheets' },
+    label: { en: 'Sync spreadsheet', zhHant: '同步試算表' },
+  },
+  'google_sheets.update': {
+    category: { en: 'Google Sheets', zhHant: 'Google Sheets' },
+    label: { en: 'Update spreadsheet', zhHant: '更新試算表' },
+  },
+  'manual.trigger': {
+    category: { en: 'Trigger', zhHant: '觸發器' },
+    label: { en: 'Run manually', zhHant: '手動執行' },
+  },
+  'notification.desktop': {
+    category: { en: 'Output', zhHant: '輸出' },
+    label: { en: 'Desktop notification', zhHant: '桌面通知' },
+  },
+  'schedule.trigger': {
+    category: { en: 'Trigger', zhHant: '觸發器' },
+    label: { en: 'Scheduled run', zhHant: '排程執行' },
+  },
+  'webhook.call': {
+    category: { en: 'Output', zhHant: '輸出' },
+    label: { en: 'Call webhook', zhHant: '呼叫 Webhook' },
+  },
 };
 
 export const MOCK_WORKFLOW = WorkflowSchema.parse({

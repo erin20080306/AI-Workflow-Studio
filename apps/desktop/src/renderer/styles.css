@@ -219,6 +219,36 @@ button:disabled {
   gap: 8px;
 }
 
+.language-switcher {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #dfe2ed;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.language-switcher button {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 999px;
+  color: #777e91;
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.language-switcher button:hover {
+  color: #312e81;
+}
+
+.language-switcher .language-active {
+  color: white;
+  background: #24204f;
+}
+
 .privacy-badge,
 .preview-badge,
 .count-pill {

@@ -10,17 +10,18 @@ affected feature from entering production.
 
 ## Findings
 
-| ID      | Severity | Finding                                                                                        | Resolution                                                                                         |
-| ------- | -------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| SEC-001 | High     | A configured paid AI provider could be called before Web Auth existed.                         | Fixed: only Mock is allowed before authenticated workspace context.                                |
-| SEC-002 | Medium   | Google OAuth start did not require the same web-actor gate as callback persistence.            | Fixed: actor validation occurs before state/PKCE cookies or redirect.                              |
-| SEC-003 | High     | Vulnerable transitive `sharp`, `postcss`, `brace-expansion`, and `uuid` versions were present. | Fixed with scoped pnpm overrides; audit now reports no known vulnerabilities.                      |
-| SEC-004 | High     | Real Auth and production repository adapters are not connected.                                | Contained: non-Mock dashboard and server adapters fail closed; production go-live remains blocked. |
+| ID      | Severity | Finding                                                                                        | Resolution                                                                                        |
+| ------- | -------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| SEC-001 | High     | A configured paid AI provider could be called before Web Auth existed.                         | Fixed: only Mock is allowed before authenticated workspace context.                               |
+| SEC-002 | Medium   | Google OAuth start did not require the same web-actor gate as callback persistence.            | Fixed: actor validation occurs before state/PKCE cookies or redirect.                             |
+| SEC-003 | High     | Vulnerable transitive `sharp`, `postcss`, `brace-expansion`, and `uuid` versions were present. | Fixed with scoped pnpm overrides; audit now reports no known vulnerabilities.                     |
+| SEC-004 | High     | Real Web Auth and verified Tenant context were not connected.                                  | Fixed with Supabase SSR Auth, verified claims, membership lookup, onboarding, and guarded routes. |
+| SEC-005 | Medium   | Durable production Agent, Run, billing-provider, and Google repository adapters are not live.  | Contained: affected non-Mock operations fail closed; external production go-live remains blocked. |
 
-There are no unresolved Critical or High vulnerabilities in the currently
-enabled Mock/development boundary. SEC-004 is not treated as a completed
-production feature: the application refuses that mode, and Phase 13 remains in
-progress until real Auth and authorization are implemented and tested.
+There are no unresolved Critical or High vulnerabilities in the implemented
+local boundary. SEC-005 is not represented as a live production feature:
+external publication and affected non-Mock operations remain blocked until
+durable provider adapters are connected and staging-tested.
 
 ## Review evidence
 
@@ -50,23 +51,22 @@ progress until real Auth and authorization are implemented and tested.
 - Browser roles cannot read token/ciphertext tables or call Agent/Google/Run
   service transition functions.
 - Database tests cover Tenant A/Tenant B denial, viewer write denial, owner
-  invariants, function grants, state-transition validation, and seed
-  idempotency.
+  invariants, function grants, state-transition validation, subscription limits,
+  platform-role boundaries, audited plan changes, and seed idempotency.
+- Platform administrator roles are separate from Tenant roles. Registration,
+  profile metadata, and Tenant ownership cannot grant platform access.
 
 ### API authorization
 
-| Boundary              | Current control                                                                         |
-| --------------------- | --------------------------------------------------------------------------------------- |
-| Mock browser APIs     | Fixed synthetic Tenant and user; no production/customer data                            |
-| Non-Mock browser APIs | Fail closed until Supabase session context is connected                                 |
-| AI planner            | Strict bounded JSON input; only Mock is anonymous                                       |
-| Google OAuth          | Actor gate, state, PKCE S256, HttpOnly callback cookies, encrypted tokens               |
-| Agent endpoints       | Bearer device token hash, timestamp window, tenant/device binding, revocation, body cap |
-| Run mutation          | Web actor role checks plus closed Run state transitions                                 |
-
-Real Supabase Web Auth is a remaining Phase 13 gate. No service-role API may be
-enabled until it derives the user and Tenant membership from the verified
-session and repeats the authorization check server-side.
+| Boundary             | Current control                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| Mock browser APIs    | Fixed synthetic Tenant and user; no production/customer data                             |
+| Non-Mock Web session | Supabase SSR claims, verified user, Tenant membership, role, and subscription context    |
+| AI planner           | Strict bounded JSON input; external providers require an authenticated workspace         |
+| Google OAuth         | Actor gate, state, PKCE S256, HttpOnly callback cookies, encrypted tokens                |
+| Agent endpoints      | Bearer device token hash, timestamp window, tenant/device binding, revocation, body cap  |
+| Run mutation         | Web actor role checks, runtime response validation, and closed Run state transitions     |
+| Platform admin       | Separate allowlist, protected server client, role-limited plan change, append-only audit |
 
 ### Local paths and file operations
 
@@ -96,10 +96,11 @@ session and repeats the authorization check server-side.
 
 ## MVP acceptance status
 
-Items 3–19 pass in the deterministic local Mock acceptance path, including
-pairing, offline reconnect, approval-before-dispatch, authorized folder access,
-new Excel output, redacted progress, deduplication, and database Tenant
-isolation. Items 1–2 require real Web registration and Tenant onboarding.
-Items 20–22 have local workflow/configuration evidence but require remote
-GitHub Actions, a real Vercel project, and a published GitHub prerelease before
-they can be marked passed. No remote outcome is claimed.
+Items 1–19 have local implementation and acceptance evidence, including Auth
+screens and server actions, Tenant onboarding, pairing, offline reconnect,
+approval-before-dispatch, authorized folder access, new Excel output, redacted
+progress, deduplication, and database Tenant isolation. Live email delivery and
+a real hosted Supabase session still require staging configuration. Items 20–22
+have local workflow/configuration evidence but require remote GitHub Actions, a
+real Vercel project, and a published prerelease or Store candidate before they
+can be marked passed. No remote outcome is claimed.

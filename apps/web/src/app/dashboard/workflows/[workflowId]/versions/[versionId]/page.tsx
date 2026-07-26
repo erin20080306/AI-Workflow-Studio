@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ChevronRightIcon, ShieldIcon } from '@/components/icons';
+import { LocalizedText } from '@/components/language-provider';
 import { WorkflowReview } from '@/components/workflows/workflow-review';
 import {
   MOCK_WORKFLOW_SUMMARIES,
@@ -47,7 +48,7 @@ export default async function WorkflowVersionPage({ params }: WorkflowVersionPag
         className="mb-5 flex min-w-0 items-center gap-1.5 text-xs text-slate-500"
       >
         <Link className="shrink-0 transition hover:text-indigo-700" href="/dashboard/workflows">
-          工作流
+          <LocalizedText en="Workflows" zhHant="工作流" />
         </Link>
         <ChevronRightIcon className="size-3.5 shrink-0 text-slate-300" />
         <Link
@@ -65,7 +66,7 @@ export default async function WorkflowVersionPage({ params }: WorkflowVersionPag
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">
-            Immutable version
+            <LocalizedText en="Immutable version" zhHant="不可變更版本" />
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">
             {workflow.name} · {version.label}
@@ -79,16 +80,28 @@ export default async function WorkflowVersionPage({ params }: WorkflowVersionPag
               : 'bg-slate-200 text-slate-700'
           }`}
         >
-          {version.status === 'current' ? '目前版本' : '唯讀封存'}
+          {version.status === 'current' ? (
+            <LocalizedText en="Current version" zhHant="目前版本" />
+          ) : (
+            <LocalizedText en="Read-only archive" zhHant="唯讀封存" />
+          )}
         </span>
       </header>
 
       <section className="mt-6 flex items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
         <ShieldIcon className="mt-0.5 size-5 shrink-0 text-indigo-700" />
         <div>
-          <h2 className="text-sm font-semibold text-indigo-950">版本內容不可直接修改</h2>
+          <h2 className="text-sm font-semibold text-indigo-950">
+            <LocalizedText
+              en="This version cannot be edited directly"
+              zhHant="版本內容不可直接修改"
+            />
+          </h2>
           <p className="mt-1 text-xs leading-5 text-indigo-800">
-            檢視與 Dry Run 不會改變此版本。若要編輯，請回到工作流詳情建立新版本。
+            <LocalizedText
+              en="Viewing or running a dry run never changes this version. Return to workflow details to create an editable new version."
+              zhHant="檢視與 Dry Run 不會改變此版本。若要編輯，請回到工作流詳情建立新版本。"
+            />
           </p>
         </div>
       </section>

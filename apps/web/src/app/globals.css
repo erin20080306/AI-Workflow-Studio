@@ -67,6 +67,18 @@ a {
   text-wrap: balance;
 }
 
+.locale-en {
+  display: none;
+}
+
+html[data-locale='en'] .locale-en {
+  display: initial;
+}
+
+html[data-locale='en'] .locale-zh-hant {
+  display: none;
+}
+
 .no-scrollbar {
   scrollbar-width: none;
 }

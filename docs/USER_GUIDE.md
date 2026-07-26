@@ -2,10 +2,12 @@
 
 ## Current supported experience
 
-The current complete local acceptance experience uses synthetic Mock data. It
-does not require an AI key, Google account, Supabase project, or access to real
-customer files. Production registration, billing, and Store publication remain
-Phase 13 work and are not represented as complete.
+The complete local acceptance experience uses synthetic Mock data and does not
+require an AI key, Google account, Supabase project, or customer files. The
+non-Mock Web includes Supabase registration, confirmation, login, recovery,
+logout, and Tenant onboarding, but those flows require a configured staging or
+production Supabase project. No hosted deployment, payment checkout, or Store
+publication is represented as complete.
 
 ## Create and review a workflow
 
@@ -25,7 +27,7 @@ shell commands, source code, arbitrary URLs, and invalid graphs are rejected.
 
 ## Pair the Desktop Agent
 
-1. In Web settings, request a pairing code.
+1. Open **裝置 / Devices** in the Web console and request a pairing code.
 2. Open the Desktop Agent and enter the short-lived code.
 3. Confirm the device appears online.
 4. Use the Agent's system picker to authorize a folder and select the minimum

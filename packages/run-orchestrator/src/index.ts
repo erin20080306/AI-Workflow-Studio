@@ -1,5 +1,6 @@
 export { RunOrchestrationError, type RunOrchestrationErrorCode } from './errors';
 export { RunOrchestrator } from './orchestrator';
+export { WorkflowRunViewSchema } from './schemas';
 export { InMemoryRunStore, type RunRecord } from './store';
 export type {
   AgentCompletionInput,

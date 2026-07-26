@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
+import { LocalizedText } from '@/components/language-provider';
 import { GoogleConnectionsPanel } from '@/components/settings/google-connections-panel';
 import { googleConnectionPageState } from '@/lib/google-connections';
 
@@ -18,33 +19,44 @@ export default async function ConnectionsPage({
     <div className="mx-auto max-w-[1120px]">
       <nav className="text-xs font-semibold text-slate-500">
         <Link className="transition hover:text-indigo-700" href="/dashboard/settings">
-          設定
+          <LocalizedText en="Settings" zhHant="設定" />
         </Link>
         <span className="mx-2 text-slate-300">/</span>
-        <span className="text-slate-800">連線</span>
+        <span className="text-slate-800">
+          <LocalizedText en="Connections" zhHant="連線" />
+        </span>
       </nav>
       <p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">
-        Connected services
+        <LocalizedText en="Connected services" zhHant="已連線服務" />
       </p>
       <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">
-        外部服務連線
+        <LocalizedText en="External service connections" zhHant="外部服務連線" />
       </h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-        管理工作流可引用的 Google Sheets connection。這裡永遠不顯示 Access Token 或 Refresh Token。
+        <LocalizedText
+          en="Manage Google Sheets connections available to workflows. Access and refresh tokens are never displayed here."
+          zhHant="管理工作流可引用的 Google Sheets connection。這裡永遠不顯示 Access Token 或 Refresh Token。"
+        />
       </p>
       {query.google === 'connected' ? (
         <p
           className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800"
           role="status"
         >
-          Google Sheets 連線已建立並加密保存。
+          <LocalizedText
+            en="The Google Sheets connection was created and stored encrypted."
+            zhHant="Google Sheets 連線已建立並加密保存。"
+          />
         </p>
       ) : query.google === 'error' ? (
         <p
           className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"
           role="alert"
         >
-          Google OAuth 未完成。請重新連線；詳細憑證錯誤不會顯示於瀏覽器。
+          <LocalizedText
+            en="Google OAuth did not complete. Reconnect and try again; detailed credential errors are not shown in the browser."
+            zhHant="Google OAuth 未完成。請重新連線；詳細憑證錯誤不會顯示於瀏覽器。"
+          />
         </p>
       ) : null}
       <GoogleConnectionsPanel

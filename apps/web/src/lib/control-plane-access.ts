@@ -8,23 +8,24 @@ export type PlannerAccessDecision =
       readonly allowed: false;
       readonly code: 'AI_AUTH_REQUIRED' | 'AI_EXTERNAL_PROVIDER_REQUIRES_AUTH';
       readonly message: string;
-      readonly status: 403 | 503;
+      readonly status: 401 | 403;
     };
 
 export function plannerAccessDecision(
   mockMode: boolean,
   provider: AiProviderName,
+  workspaceAuthenticated: boolean,
 ): PlannerAccessDecision {
-  if (!mockMode) {
+  if (!mockMode && !workspaceAuthenticated) {
     return {
       allowed: false,
       code: 'AI_AUTH_REQUIRED',
-      message: 'Authenticated planning is not configured for this server.',
-      status: 503,
+      message: 'An authenticated workspace is required.',
+      status: 401,
     };
   }
 
-  if (provider !== 'mock') {
+  if (mockMode && provider !== 'mock') {
     return {
       allowed: false,
       code: 'AI_EXTERNAL_PROVIDER_REQUIRES_AUTH',

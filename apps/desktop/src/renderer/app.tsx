@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
 import type {
   AgentSnapshot,
@@ -8,6 +8,8 @@ import type {
 } from '../shared/contracts';
 
 type View = 'activity' | 'folders' | 'overview' | 'settings';
+type DesktopLocale = 'en' | 'zh-Hant';
+const DESKTOP_LOCALE_KEY = 'ai-workflow-studio-desktop-locale';
 
 const previewSnapshot: AgentSnapshot = {
   agentVersion: '0.1.0-dev',
@@ -160,6 +162,9 @@ function Toggle({
 
 export function DesktopAgentApp() {
   const bridge = window.desktopAgent ?? previewBridge;
+  const [locale, setLocale] = useState<DesktopLocale>(() =>
+    window.localStorage.getItem(DESKTOP_LOCALE_KEY) === 'en' ? 'en' : 'zh-Hant',
+  );
   const [view, setView] = useState<View>('overview');
   const [snapshot, setSnapshot] = useState<AgentSnapshot>(previewSnapshot);
   const [folders, setFolders] = useState<readonly FolderGrantView[]>([]);
@@ -172,8 +177,15 @@ export function DesktopAgentApp() {
     write: false,
   });
   const [busy, setBusy] = useState<string>();
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState(false);
   const previewMode = window.desktopAgent === undefined;
+  const t = (en: string, zhHant: string) => (locale === 'en' ? en : zhHant);
+
+  function changeLocale(nextLocale: DesktopLocale) {
+    setLocale(nextLocale);
+    window.localStorage.setItem(DESKTOP_LOCALE_KEY, nextLocale);
+    document.documentElement.lang = nextLocale;
+  }
 
   useEffect(() => {
     let active = true;
@@ -197,24 +209,30 @@ export function DesktopAgentApp() {
     };
   }, [bridge]);
 
-  const connectionLabel = useMemo(
-    () =>
-      ({
-        offline: '離線',
-        online: '在線',
-        reconnecting: '重新連線中',
-        unpaired: '尚未配對',
-      })[snapshot.connection],
-    [snapshot.connection],
-  );
+  const connectionLabel = {
+    offline: t('Offline', '離線'),
+    online: t('Online', '在線'),
+    reconnecting: t('Reconnecting', '重新連線中'),
+    unpaired: t('Not paired', '尚未配對'),
+  }[snapshot.connection];
+  const updateMessage = {
+    checking: t('Checking for updates…', '正在檢查更新…'),
+    downloading: t('Downloading the approved update…', '正在下載已核准的更新…'),
+    error: t('The update check did not complete.', '更新檢查未完成。'),
+    idle: t('Updates have not been checked.', '尚未檢查更新。'),
+    ready: snapshot.update.downloaded
+      ? t('The approved update is ready to install.', '已核准的更新可供安裝。')
+      : t('An update is available for review.', '有可供檢視的更新。'),
+    'up-to-date': t('This is the latest available version.', '目前已是最新版本。'),
+  }[snapshot.update.status];
 
   async function perform<T>(key: string, action: () => Promise<T>): Promise<T | undefined> {
     setBusy(key);
-    setError(undefined);
+    setError(false);
     try {
       return await action();
     } catch {
-      setError('操作未完成。請檢查配對碼、網路或本機安全儲存後再試。');
+      setError(true);
       return undefined;
     } finally {
       setBusy(undefined);
@@ -247,10 +265,10 @@ export function DesktopAgentApp() {
     readonly label: string;
     readonly mark: string;
   }[] = [
-    { id: 'overview', label: '總覽', mark: '⌁' },
-    { id: 'folders', label: '資料夾權限', mark: '□' },
-    { id: 'activity', label: '執行紀錄', mark: '↗' },
-    { id: 'settings', label: '設定', mark: '◇' },
+    { id: 'overview', label: t('Overview', '總覽'), mark: '⌁' },
+    { id: 'folders', label: t('Folder permissions', '資料夾權限'), mark: '□' },
+    { id: 'activity', label: t('Run history', '執行紀錄'), mark: '↗' },
+    { id: 'settings', label: t('Settings', '設定'), mark: '◇' },
   ];
 
   return (
@@ -283,7 +301,7 @@ export function DesktopAgentApp() {
             <StatusDot connection={snapshot.connection} />
             <span>{connectionLabel}</span>
           </div>
-          <p>{snapshot.deviceName ?? '等待裝置配對'}</p>
+          <p>{snapshot.deviceName ?? t('Waiting for device pairing', '等待裝置配對')}</p>
           <small>v{snapshot.agentVersion}</small>
         </div>
       </aside>
@@ -291,29 +309,54 @@ export function DesktopAgentApp() {
       <main className="main-panel">
         <header className="topbar">
           <div>
-            <span className="eyebrow">Local-first automation</span>
+            <span className="eyebrow">{t('Local-first automation', '本機優先自動化')}</span>
             <h1>
               {view === 'overview'
-                ? 'Agent 總覽'
+                ? t('Agent overview', 'Agent 總覽')
                 : view === 'folders'
-                  ? '資料夾權限'
+                  ? t('Folder permissions', '資料夾權限')
                   : view === 'activity'
-                    ? '執行紀錄'
-                    : 'Agent 設定'}
+                    ? t('Run history', '執行紀錄')
+                    : t('Agent settings', 'Agent 設定')}
             </h1>
           </div>
           <div className="topbar-actions">
-            {previewMode && <span className="preview-badge">Renderer Preview</span>}
+            <div aria-label="Language / 語言" className="language-switcher" role="group">
+              <button
+                aria-pressed={locale === 'zh-Hant'}
+                className={locale === 'zh-Hant' ? 'language-active' : ''}
+                onClick={() => changeLocale('zh-Hant')}
+                type="button"
+              >
+                中文
+              </button>
+              <button
+                aria-pressed={locale === 'en'}
+                className={locale === 'en' ? 'language-active' : ''}
+                onClick={() => changeLocale('en')}
+                type="button"
+              >
+                EN
+              </button>
+            </div>
+            {previewMode && (
+              <span className="preview-badge">{t('Renderer preview', '介面預覽')}</span>
+            )}
             <span className="privacy-badge">
               <span>●</span>
-              {snapshot.privacyMode ? '隱私模式開啟' : '隱私模式關閉'}
+              {snapshot.privacyMode
+                ? t('Privacy mode on', '隱私模式開啟')
+                : t('Privacy mode off', '隱私模式關閉')}
             </span>
           </div>
         </header>
 
         {error && (
           <div className="error-banner" role="alert">
-            {error}
+            {t(
+              'The action did not complete. Check the pairing code, network, or secure local storage and try again.',
+              '操作未完成。請檢查配對碼、網路或本機安全儲存後再試。',
+            )}
           </div>
         )}
 
@@ -322,21 +365,38 @@ export function DesktopAgentApp() {
             {!snapshot.paired ? (
               <section className="pairing-card">
                 <div className="pairing-copy">
-                  <span className="section-kicker">Secure pairing</span>
-                  <h2>連結這台電腦</h2>
+                  <span className="section-kicker">{t('Secure pairing', '安全配對')}</span>
+                  <h2>{t('Connect this computer', '連結這台電腦')}</h2>
                   <p>
-                    先在 Web 控制台建立 12 位配對碼，再於此完成一次性配對。裝置 Token
-                    只會加密保存在作業系統安全儲存。
+                    {t(
+                      'Create a 12-character code in the Web console, then complete one-time pairing here. The device token is encrypted in the operating system’s secure storage.',
+                      '先在 Web 控制台建立 12 位配對碼，再於此完成一次性配對。裝置 Token 只會加密保存在作業系統安全儲存。',
+                    )}
                   </p>
                   <ul>
-                    <li>不將完整 Excel 自動上傳至雲端</li>
-                    <li>只有授權 Folder Alias 能被執行器存取</li>
-                    <li>Token、路徑與資料列不寫入日誌</li>
+                    <li>
+                      {t(
+                        'Complete Excel files are never uploaded automatically',
+                        '不將完整 Excel 自動上傳至雲端',
+                      )}
+                    </li>
+                    <li>
+                      {t(
+                        'The executor accesses only approved folder aliases',
+                        '只有授權 Folder Alias 能被執行器存取',
+                      )}
+                    </li>
+                    <li>
+                      {t(
+                        'Tokens, paths, and rows are excluded from logs',
+                        'Token、路徑與資料列不寫入日誌',
+                      )}
+                    </li>
                   </ul>
                 </div>
                 <form className="pair-form" onSubmit={(event) => void pair(event)}>
                   <label>
-                    Agent Server
+                    {t('Agent server', 'Agent 伺服器')}
                     <input
                       onChange={(event) => setAgentBaseUrl(event.target.value)}
                       spellCheck={false}
@@ -344,7 +404,7 @@ export function DesktopAgentApp() {
                     />
                   </label>
                   <label>
-                    12 位配對碼
+                    {t('12-character pairing code', '12 位配對碼')}
                     <input
                       autoComplete="one-time-code"
                       className="pair-code"
@@ -361,7 +421,9 @@ export function DesktopAgentApp() {
                     disabled={busy === 'pair' || pairingCode.length !== 12}
                     type="submit"
                   >
-                    {busy === 'pair' ? '正在安全配對…' : '完成裝置配對'}
+                    {busy === 'pair'
+                      ? t('Pairing securely…', '正在安全配對…')
+                      : t('Pair device', '完成裝置配對')}
                   </button>
                 </form>
               </section>
@@ -369,12 +431,18 @@ export function DesktopAgentApp() {
               <>
                 <section className="hero-status">
                   <div>
-                    <span className="section-kicker">Device ready</span>
+                    <span className="section-kicker">{t('Device ready', '裝置已就緒')}</span>
                     <h2>{snapshot.deviceName}</h2>
                     <p>
                       {snapshot.executorRunning
-                        ? 'Heartbeat 與 Job polling 正在執行。'
-                        : 'Agent 已配對；啟動執行器後才會輪詢工作。'}
+                        ? t(
+                            'Heartbeat and job polling are active.',
+                            'Heartbeat 與工作輪詢正在執行。',
+                          )
+                        : t(
+                            'The Agent is paired. Start the executor to begin polling for jobs.',
+                            'Agent 已配對；啟動執行器後才會輪詢工作。',
+                          )}
                     </p>
                   </div>
                   <button
@@ -388,47 +456,55 @@ export function DesktopAgentApp() {
                     }
                     type="button"
                   >
-                    {snapshot.executorRunning ? '停止執行器' : '啟動執行器'}
+                    {snapshot.executorRunning
+                      ? t('Stop executor', '停止執行器')
+                      : t('Start executor', '啟動執行器')}
                   </button>
                 </section>
 
                 <section className="metric-grid">
                   <article>
                     <Icon tone="emerald">●</Icon>
-                    <span>連線狀態</span>
+                    <span>{t('Connection', '連線狀態')}</span>
                     <strong>{connectionLabel}</strong>
                     <small>
-                      {snapshot.lastHeartbeatAt ? 'Heartbeat 已驗證' : '等待 Heartbeat'}
+                      {snapshot.lastHeartbeatAt
+                        ? t('Heartbeat verified', 'Heartbeat 已驗證')
+                        : t('Waiting for heartbeat', '等待 Heartbeat')}
                     </small>
                   </article>
                   <article>
                     <Icon>↗</Icon>
-                    <span>待處理工作</span>
+                    <span>{t('Pending jobs', '待處理工作')}</span>
                     <strong>{snapshot.pendingJobCount}</strong>
-                    <small>只顯示此裝置的工作</small>
+                    <small>{t('Jobs for this device only', '只顯示此裝置的工作')}</small>
                   </article>
                   <article>
                     <Icon tone="slate">□</Icon>
-                    <span>授權資料夾</span>
+                    <span>{t('Approved folders', '授權資料夾')}</span>
                     <strong>{folders.length}</strong>
-                    <small>Cloud 不保存原始路徑</small>
+                    <small>{t('The cloud never stores source paths', '雲端不保存原始路徑')}</small>
                   </article>
                   <article>
                     <Icon tone="slate">◇</Icon>
-                    <span>Agent 版本</span>
+                    <span>{t('Agent version', 'Agent 版本')}</span>
                     <strong>{snapshot.agentVersion}</strong>
-                    <small>更新必須由使用者啟動</small>
+                    <small>{t('Updates require user action', '更新必須由使用者啟動')}</small>
                   </article>
                 </section>
 
                 <section className="privacy-panel">
                   <div className="privacy-orb">◎</div>
                   <div>
-                    <span className="section-kicker">Privacy boundary</span>
-                    <h2>完整試算表留在這台裝置</h2>
+                    <span className="section-kicker">{t('Privacy boundary', '隱私邊界')}</span>
+                    <h2>
+                      {t('Complete spreadsheets stay on this device', '完整試算表留在這台裝置')}
+                    </h2>
                     <p>
-                      Agent 只回傳 Run
-                      ID、狀態、耗時、計數與遮罩錯誤；未經明確允許，不上傳完整資料列或本機絕對路徑。
+                      {t(
+                        'The Agent returns only run ID, status, duration, counts, and redacted errors. It never uploads complete rows or absolute local paths without explicit permission.',
+                        'Agent 只回傳執行 ID、狀態、耗時、計數與遮罩錯誤；未經明確允許，不上傳完整資料列或本機絕對路徑。',
+                      )}
                     </p>
                   </div>
                 </section>
@@ -441,9 +517,16 @@ export function DesktopAgentApp() {
           <div className="view-stack">
             <section className="section-card folder-authorize">
               <div>
-                <span className="section-kicker">System picker only</span>
-                <h2>新增授權資料夾</h2>
-                <p>只有經過系統資料夾選擇器確認的 canonical root 才會建立 Folder Alias。</p>
+                <span className="section-kicker">
+                  {t('System picker only', '僅使用系統選擇器')}
+                </span>
+                <h2>{t('Authorize a folder', '新增授權資料夾')}</h2>
+                <p>
+                  {t(
+                    'A folder alias is created only for a canonical root confirmed by the system folder picker.',
+                    '只有經過系統資料夾選擇器確認的標準根目錄才會建立資料夾別名。',
+                  )}
+                </p>
               </div>
               <div className="permission-picker">
                 {(['read', 'write', 'watch'] as const).map((permission) => (
@@ -458,7 +541,11 @@ export function DesktopAgentApp() {
                       }
                       type="checkbox"
                     />
-                    {permission === 'read' ? '讀取' : permission === 'write' ? '寫入' : '監看'}
+                    {permission === 'read'
+                      ? t('Read', '讀取')
+                      : permission === 'write'
+                        ? t('Write', '寫入')
+                        : t('Watch', '監看')}
                   </label>
                 ))}
                 <button
@@ -467,7 +554,7 @@ export function DesktopAgentApp() {
                   onClick={() => void chooseFolder()}
                   type="button"
                 >
-                  開啟系統選擇器
+                  {t('Open system picker', '開啟系統選擇器')}
                 </button>
               </div>
             </section>
@@ -475,13 +562,20 @@ export function DesktopAgentApp() {
             <section className="section-card">
               <div className="section-heading">
                 <div>
-                  <span className="section-kicker">Authorized aliases</span>
-                  <h2>本機權限清單</h2>
+                  <span className="section-kicker">{t('Authorized aliases', '已授權別名')}</span>
+                  <h2>{t('Local permission list', '本機權限清單')}</h2>
                 </div>
-                <span className="count-pill">{folders.length} folders</span>
+                <span className="count-pill">
+                  {folders.length} {t('folders', '個資料夾')}
+                </span>
               </div>
               {folders.length === 0 ? (
-                <div className="empty-state">尚未授權資料夾。未授權路徑一律拒絕。</div>
+                <div className="empty-state">
+                  {t(
+                    'No folders are authorized. Every unauthorized path is denied.',
+                    '尚未授權資料夾。未授權路徑一律拒絕。',
+                  )}
+                </div>
               ) : (
                 <div className="folder-list">
                   {folders.map((folder) => (
@@ -495,7 +589,13 @@ export function DesktopAgentApp() {
                         {Object.entries(folder.permissions)
                           .filter(([, enabled]) => enabled)
                           .map(([permission]) => (
-                            <span key={permission}>{permission}</span>
+                            <span key={permission}>
+                              {permission === 'read'
+                                ? t('Read', '讀取')
+                                : permission === 'write'
+                                  ? t('Write', '寫入')
+                                  : t('Watch', '監看')}
+                            </span>
                           ))}
                       </div>
                       <button
@@ -507,7 +607,7 @@ export function DesktopAgentApp() {
                         }
                         type="button"
                       >
-                        移除
+                        {t('Remove', '移除')}
                       </button>
                     </article>
                   ))}
@@ -521,14 +621,18 @@ export function DesktopAgentApp() {
           <section className="section-card">
             <div className="section-heading">
               <div>
-                <span className="section-kicker">Redacted JSON logs</span>
-                <h2>最近活動</h2>
+                <span className="section-kicker">
+                  {t('Redacted JSON logs', '已遮罩 JSON 日誌')}
+                </span>
+                <h2>{t('Recent activity', '最近活動')}</h2>
               </div>
-              <span className="count-pill">{logs.length} events</span>
+              <span className="count-pill">
+                {logs.length} {t('events', '筆事件')}
+              </span>
             </div>
             <div className="log-list">
               {logs.length === 0 ? (
-                <div className="empty-state">尚無活動記錄。</div>
+                <div className="empty-state">{t('No activity yet.', '尚無活動記錄。')}</div>
               ) : (
                 [...logs].reverse().map((entry, index) => (
                   <article key={`${entry.occurredAt}-${entry.code}-${index}`}>
@@ -537,7 +641,11 @@ export function DesktopAgentApp() {
                       <strong>{entry.code}</strong>
                       <p>{entry.message}</p>
                     </div>
-                    <time>{new Date(entry.occurredAt).toLocaleTimeString('zh-TW')}</time>
+                    <time>
+                      {new Date(entry.occurredAt).toLocaleTimeString(
+                        locale === 'en' ? 'en-US' : 'zh-TW',
+                      )}
+                    </time>
                   </article>
                 ))
               )}
@@ -548,16 +656,21 @@ export function DesktopAgentApp() {
         {view === 'settings' && (
           <div className="settings-grid">
             <section className="section-card">
-              <span className="section-kicker">Local controls</span>
-              <h2>隱私與啟動</h2>
+              <span className="section-kicker">{t('Local controls', '本機控制')}</span>
+              <h2>{t('Privacy and startup', '隱私與啟動')}</h2>
               <div className="setting-row">
                 <div>
-                  <strong>隱私模式</strong>
-                  <p>只回傳計數與遮罩 metadata；不傳完整資料列。</p>
+                  <strong>{t('Privacy mode', '隱私模式')}</strong>
+                  <p>
+                    {t(
+                      'Return counts and redacted metadata only—never complete rows.',
+                      '只回傳計數與遮罩後的中繼資料；不傳完整資料列。',
+                    )}
+                  </p>
                 </div>
                 <Toggle
                   checked={snapshot.privacyMode}
-                  label="切換隱私模式"
+                  label={t('Toggle privacy mode', '切換隱私模式')}
                   onChange={(enabled) =>
                     void perform('privacy', async () => {
                       setSnapshot(await bridge.setPrivacyMode(enabled));
@@ -567,12 +680,17 @@ export function DesktopAgentApp() {
               </div>
               <div className="setting-row">
                 <div>
-                  <strong>開機自動啟動</strong>
-                  <p>登入系統後開啟 Agent；不代表自動執行工作。</p>
+                  <strong>{t('Launch at startup', '開機自動啟動')}</strong>
+                  <p>
+                    {t(
+                      'Open the Agent after system sign-in; jobs still require their configured controls.',
+                      '登入系統後開啟 Agent；不代表自動執行工作。',
+                    )}
+                  </p>
                 </div>
                 <Toggle
                   checked={snapshot.autoStart}
-                  label="切換開機自動啟動"
+                  label={t('Toggle launch at startup', '切換開機自動啟動')}
                   onChange={(enabled) =>
                     void perform('autostart', async () => {
                       setSnapshot(await bridge.setAutoStart(enabled));
@@ -583,9 +701,9 @@ export function DesktopAgentApp() {
             </section>
 
             <section className="section-card update-card">
-              <span className="section-kicker">Manual updates only</span>
-              <h2>軟體更新</h2>
-              <p>{snapshot.update.message}</p>
+              <span className="section-kicker">{t('Manual updates only', '僅手動更新')}</span>
+              <h2>{t('Software updates', '軟體更新')}</h2>
+              <p>{updateMessage}</p>
               <div className="button-row">
                 <button
                   className="secondary-button"
@@ -597,7 +715,7 @@ export function DesktopAgentApp() {
                   }
                   type="button"
                 >
-                  手動檢查更新
+                  {t('Check for updates', '手動檢查更新')}
                 </button>
                 {snapshot.update.status === 'ready' && !snapshot.update.downloaded && (
                   <button
@@ -609,17 +727,25 @@ export function DesktopAgentApp() {
                     }
                     type="button"
                   >
-                    同意並下載
+                    {t('Approve and download', '同意並下載')}
                   </button>
                 )}
               </div>
-              <small>autoDownload = false · 未經按鈕確認不下載</small>
+              <small>
+                autoDownload = false ·{' '}
+                {t('No download without button confirmation', '未經按鈕確認不下載')}
+              </small>
             </section>
 
             <section className="section-card danger-card">
-              <span className="section-kicker">Device session</span>
-              <h2>登出並解除本機配對</h2>
-              <p>停止 polling 並移除 OS 加密的本機 Token。雲端撤銷仍可在 Web 控制台執行。</p>
+              <span className="section-kicker">{t('Device session', '裝置 Session')}</span>
+              <h2>{t('Sign out and unpair locally', '登出並解除本機配對')}</h2>
+              <p>
+                {t(
+                  'Stop polling and remove the OS-encrypted local token. Cloud revocation remains available in the Web console.',
+                  '停止輪詢並移除作業系統加密的本機 Token。雲端撤銷仍可在 Web 控制台執行。',
+                )}
+              </p>
               <button
                 className="danger-button"
                 disabled={!snapshot.paired || busy === 'unpair'}
@@ -632,7 +758,7 @@ export function DesktopAgentApp() {
                 }
                 type="button"
               >
-                清除本機裝置 Session
+                {t('Clear local device session', '清除本機裝置 Session')}
               </button>
             </section>
           </div>

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "locale": "zh-TW",
+  "status": "draft",
+  "title": "AI Workflow Studio",
+  "shortDescription": "用自然語言規劃安全、可核准、可稽核的桌面與雲端自動化工作流。",
+  "description": "AI Workflow Studio 協助你用自然語言建立結構化工作流草稿，再於啟用或執行高風險步驟前完成明確核准。Desktop Agent 以本機優先方式處理已授權資料夾中的 Excel；完整資料列與絕對路徑預設不會上傳至雲端。Web 控制台提供工作流版本、執行狀態、裝置、連線與稽核摘要。AI 只能產生經 Schema 與安全規則驗證的 Workflow JSON，不能產生或執行任意程式碼。",
+  "features": [
+    "自然語言建立可驗證的 Workflow JSON 草稿",
+    "Excel 本機優先處理與資料夾別名權限",
+    "寫入、外部服務與破壞性節點明確核准",
+    "不可變更版本、Dry Run 與稽核時間軸",
+    "繁體中文與英文介面",
+    "Windows x64 與 arm64 Store 套件"
+  ],
+  "searchTerms": ["AI 自動化", "工作流", "Excel 自動化", "桌面 Agent", "資料處理", "Workflow"],
+  "requiredBeforeSubmission": [
+    "最終 Store 截圖",
+    "已公開且可存取的隱私權政策網址",
+    "已公開且可存取的支援網址",
+    "Partner Center 定價與市場設定"
+  ]
+}

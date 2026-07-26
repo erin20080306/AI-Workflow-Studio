@@ -16,11 +16,13 @@ import {
 import { NODE_CATALOG_BY_TYPE, type Workflow } from '@ai-workflow-studio/workflow-schema';
 import { useMemo } from 'react';
 
+import { useLanguage } from '@/components/language-provider';
 import { NODE_PRESENTATION } from '@/lib/mock-workflows';
 
 interface WorkflowFlowNodeData extends Record<string, unknown> {
   readonly category: string;
   readonly label: string;
+  readonly locale: 'en' | 'zh-Hant';
   readonly requiresApproval: boolean;
   readonly risk: string;
 }
@@ -30,7 +32,7 @@ type WorkflowFlowNode = Node<WorkflowFlowNodeData, 'workflow'>;
 function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowFlowNode>) {
   return (
     <button
-      aria-label={`${data.label}，${data.category}`}
+      aria-label={`${data.label}, ${data.category}`}
       className={`min-w-[184px] rounded-2xl border bg-white px-4 py-3 text-left shadow-[0_10px_28px_rgba(15,23,42,0.09)] transition ${
         selected
           ? 'border-indigo-500 ring-4 ring-indigo-100'
@@ -55,7 +57,13 @@ function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowFlowNode>) {
       </div>
       <p className="mt-2 text-sm font-semibold text-slate-950">{data.label}</p>
       <p className="mt-1 text-[11px] text-slate-500">
-        {data.requiresApproval ? '需要核准' : '安全讀取'}
+        {data.requiresApproval
+          ? data.locale === 'en'
+            ? 'Approval required'
+            : '需要核准'
+          : data.locale === 'en'
+            ? 'Safe read'
+            : '安全讀取'}
       </p>
       <Handle
         className="!size-2 !border-2 !border-white !bg-indigo-500"
@@ -70,15 +78,17 @@ const nodeTypes = {
   workflow: WorkflowNodeCard,
 };
 
-function toFlowNodes(workflow: Workflow): readonly WorkflowFlowNode[] {
+function toFlowNodes(workflow: Workflow, locale: 'en' | 'zh-Hant'): readonly WorkflowFlowNode[] {
+  const presentationLocale = locale === 'en' ? 'en' : 'zhHant';
   return workflow.nodes.map((workflowNode, index) => {
     const definition = NODE_CATALOG_BY_TYPE.get(workflowNode.type);
     const presentation = NODE_PRESENTATION[workflowNode.type];
 
     return {
       data: {
-        category: presentation.category,
-        label: presentation.label,
+        category: presentation.category[presentationLocale],
+        label: presentation.label[presentationLocale],
+        locale,
         requiresApproval: definition?.approvalMode !== 'none',
         risk: definition?.riskLevel ?? 'read',
       },
@@ -121,19 +131,20 @@ export function WorkflowFlowCanvas({
   selectedNodeId: string;
   workflow: Workflow;
 }>) {
+  const { locale } = useLanguage();
   const nodes = useMemo(
     () =>
-      toFlowNodes(workflow).map((node) => ({
+      toFlowNodes(workflow, locale).map((node) => ({
         ...node,
         selected: node.id === selectedNodeId,
       })),
-    [selectedNodeId, workflow],
+    [locale, selectedNodeId, workflow],
   );
   const edges = useMemo(() => toFlowEdges(workflow), [workflow]);
 
   return (
     <div
-      aria-label="工作流視覺化畫布"
+      aria-label={locale === 'en' ? 'Workflow visualization canvas' : '工作流視覺化畫布'}
       className="h-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-[#f8faf8]"
       role="region"
     >

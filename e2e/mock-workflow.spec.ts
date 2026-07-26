@@ -1,12 +1,34 @@
 import { expect, test } from '@playwright/test';
 
 test('creates, reviews, and dry-runs a safe Mock Workflow', async ({ page }) => {
+  await page.goto('/');
+  await expect(
+    page.getByRole('heading', { name: '用一句話，讓工作流理解你的需求。' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'EN' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Workflows that understand your words.' }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'Workflows that understand your words.' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '中文' }).click();
+
   await page.goto('/login');
   await page.getByLabel('電子郵件').fill('erin@example.test');
   await page.getByLabel('密碼').fill('safe-mock-password');
   await page.getByRole('button', { name: '進入 Mock 控制台' }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
+  await page.goto('/dashboard/devices');
+  await expect(page.getByRole('heading', { exact: true, name: '裝置' })).toBeVisible();
+  await page.getByLabel('裝置名稱').fill('E2E Desktop Agent');
+  await page.getByRole('button', { name: '產生配對碼' }).click();
+  await expect(page.getByText('配對碼已建立')).toBeVisible();
+  await expect(page.getByText(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{12}$/)).toBeVisible();
+
+  await page.goto('/dashboard');
   await page.getByRole('link', { name: '建立工作流' }).click();
   await expect(page.getByRole('heading', { name: '描述你想自動化的工作' })).toBeVisible();
   await expect(page.getByText('Erin’s MacBook Air')).toBeVisible();
@@ -34,7 +56,7 @@ test('creates, reviews, and dry-runs a safe Mock Workflow', async ({ page }) => 
   await expect(page.getByRole('heading', { name: 'AI 模型與 Provider' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Mock Planner' })).toBeVisible();
   await expect(page.getByText('gpt-5.6-sol')).toBeVisible();
-  await expect(page.getByText('API keys 永遠不送到瀏覽器')).toBeVisible();
+  await expect(page.getByText('API 金鑰永遠不送到瀏覽器')).toBeVisible();
   await page.getByRole('button', { name: '儲存 Mock 設定' }).click();
   await expect(page.getByText('Mock 偏好已更新；未寫入任何金鑰。')).toBeVisible();
 
@@ -62,10 +84,10 @@ test('creates, reviews, and dry-runs a safe Mock Workflow', async ({ page }) => 
     readonly run: { readonly id: string };
   };
   await page.goto(`/dashboard/runs/${runPayload.run.id}`);
-  await expect(page.getByRole('heading', { name: 'Run details' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '執行詳情' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '需要執行核准' })).toBeVisible();
   await page.getByRole('button', { name: '核准並派送' }).click();
-  await expect(page.getByText('queued', { exact: true })).toBeVisible();
+  await expect(page.getByText('佇列中', { exact: true })).toBeVisible();
   await expect(page.getByText('approval.approved', { exact: true })).toBeVisible();
   await expect(page.getByText('agent_job.queued', { exact: true })).toBeVisible();
 });

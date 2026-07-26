@@ -3,26 +3,39 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { DashboardIcon, DeviceIcon, FlowIcon, RunsIcon, SettingsIcon } from './icons';
+import { DashboardIcon, DeviceIcon, FlowIcon, RunsIcon, SettingsIcon, ShieldIcon } from './icons';
+import { useLanguage } from './language-provider';
 
-const navigation = [
-  { href: '/dashboard', icon: DashboardIcon, label: '總覽' },
-  { href: '/dashboard/workflows', icon: FlowIcon, label: '工作流' },
-  { href: '/dashboard/runs', icon: RunsIcon, label: '執行紀錄' },
-  { href: '/dashboard/devices', icon: DeviceIcon, label: '裝置' },
-  { href: '/dashboard/settings', icon: SettingsIcon, label: '設定' },
+const workspaceNavigation = [
+  { en: 'Overview', href: '/dashboard', icon: DashboardIcon, zhHant: '總覽' },
+  { en: 'Workflows', href: '/dashboard/workflows', icon: FlowIcon, zhHant: '工作流' },
+  { en: 'Runs', href: '/dashboard/runs', icon: RunsIcon, zhHant: '執行紀錄' },
+  { en: 'Devices', href: '/dashboard/devices', icon: DeviceIcon, zhHant: '裝置' },
+  { en: 'Settings', href: '/dashboard/settings', icon: SettingsIcon, zhHant: '設定' },
 ] as const;
 
-export function DashboardNavigation() {
+export function DashboardNavigation({
+  platformAdmin,
+}: Readonly<{
+  platformAdmin: boolean;
+}>) {
   const pathname = usePathname();
+  const { locale } = useLanguage();
+  const navigation = platformAdmin
+    ? [
+        ...workspaceNavigation,
+        { en: 'Platform Admin', href: '/admin', icon: ShieldIcon, zhHant: '平台管理' } as const,
+      ]
+    : workspaceNavigation;
 
   return (
     <nav
       aria-label="Dashboard navigation"
       className="no-scrollbar mt-4 flex gap-1 overflow-x-auto pb-1 lg:mt-8 lg:block lg:space-y-1 lg:overflow-visible"
     >
-      {navigation.map(({ href, icon: Icon, label }) => {
+      {navigation.map(({ en, href, icon: Icon, zhHant }) => {
         const isActive = href === '/dashboard' ? pathname === href : pathname.startsWith(href);
+        const label = locale === 'en' ? en : zhHant;
 
         return (
           <Link

@@ -1,9 +1,11 @@
 'use client';
 
-import type { WorkflowRunView } from '@ai-workflow-studio/run-orchestrator';
+import { WorkflowRunViewSchema, type WorkflowRunView } from '@ai-workflow-studio/run-orchestrator';
 import { useEffect, useState } from 'react';
+import { z } from 'zod';
 
 import { CheckIcon, RunsIcon, ShieldIcon } from '@/components/icons';
+import { useLanguage } from '@/components/language-provider';
 
 const statusStyle: Readonly<Record<WorkflowRunView['status'], string>> = {
   awaiting_approval: 'bg-amber-100 text-amber-800',
@@ -15,13 +17,113 @@ const statusStyle: Readonly<Record<WorkflowRunView['status'], string>> = {
   timed_out: 'bg-red-100 text-red-800',
 };
 
+const RunApiResponseSchema = z
+  .object({
+    error: z
+      .object({
+        message: z.string().max(500).optional(),
+      })
+      .passthrough()
+      .optional(),
+    run: WorkflowRunViewSchema.optional(),
+  })
+  .strict();
+
+const statusLabels = {
+  en: {
+    awaiting_approval: 'Awaiting approval',
+    cancelled: 'Cancelled',
+    failed: 'Failed',
+    queued: 'Queued',
+    running: 'Running',
+    succeeded: 'Succeeded',
+    timed_out: 'Timed out',
+  },
+  'zh-Hant': {
+    awaiting_approval: '等待核准',
+    cancelled: '已取消',
+    failed: '失敗',
+    queued: '佇列中',
+    running: '執行中',
+    succeeded: '已成功',
+    timed_out: '已逾時',
+  },
+} as const;
+
+const stepStatusLabels = {
+  en: {
+    cancelled: 'Cancelled',
+    failed: 'Failed',
+    pending: 'Pending',
+    running: 'Running',
+    skipped: 'Skipped',
+    succeeded: 'Succeeded',
+  },
+  'zh-Hant': {
+    cancelled: '已取消',
+    failed: '失敗',
+    pending: '等待中',
+    running: '執行中',
+    skipped: '已略過',
+    succeeded: '已成功',
+  },
+} as const;
+
+const copy = {
+  en: {
+    approve: 'Approve and dispatch',
+    approval: 'Run approval required',
+    approvalHelp:
+      'No Desktop Job is created before approval. Review the write and external-action summary.',
+    attempt: 'Attempt',
+    audit: 'Audit timeline',
+    cancel: 'Cancel run',
+    cancelConfirm: 'Press again to confirm',
+    destructive: 'Destructive',
+    external: 'External',
+    files: 'files',
+    notifications: 'Notifications',
+    operationFailed: 'The action did not complete. Refresh to confirm the current status.',
+    refresh: 'Refresh',
+    reject: 'Reject',
+    retry: 'Retry',
+    rows: 'rows',
+    statusUpdated: 'Run status updated.',
+    timeout: 'Timeout',
+    write: 'Write',
+  },
+  'zh-Hant': {
+    approve: '核准並派送',
+    approval: '需要執行核准',
+    approvalHelp: '核准前不會建立桌面工作。請確認寫入與外部操作摘要。',
+    attempt: '嘗試次數',
+    audit: '稽核時間軸',
+    cancel: '取消執行',
+    cancelConfirm: '再次按下確認取消',
+    destructive: '破壞性',
+    external: '外部服務',
+    files: '個檔案',
+    notifications: '通知',
+    operationFailed: '操作未完成；請重新整理後確認目前狀態。',
+    refresh: '重新整理',
+    reject: '拒絕',
+    retry: '重試',
+    rows: '列',
+    statusUpdated: '執行狀態已更新。',
+    timeout: '逾時時間',
+    write: '寫入',
+  },
+} as const;
+
 interface RunDetailsPanelProps {
   readonly initialRun: WorkflowRunView;
 }
 
 export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
+  const { locale } = useLanguage();
+  const text = copy[locale];
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [message, setMessage] = useState<string>();
+  const [message, setMessage] = useState<'failed' | 'updated'>();
   const [run, setRun] = useState(initialRun);
   const [working, setWorking] = useState(false);
 
@@ -29,11 +131,9 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
     const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
       cache: 'no-store',
     });
-    const value = (await response.json()) as {
-      readonly run?: WorkflowRunView;
-    };
-    if (response.ok && value.run !== undefined) {
-      setRun(value.run);
+    const value = RunApiResponseSchema.safeParse(await response.json());
+    if (response.ok && value.success && value.data.run !== undefined) {
+      setRun(value.data.run);
     }
   }
 
@@ -61,18 +161,19 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
         `/api/runs/${encodeURIComponent(run.id)}/${suffix}`,
         requestInit,
       );
-      const value = (await response.json()) as {
-        readonly error?: { readonly message?: string };
-        readonly run?: WorkflowRunView;
-      };
-      if (!response.ok || value.run === undefined) {
-        throw new Error(value.error?.message ?? 'Run action failed.');
+      const value = RunApiResponseSchema.safeParse(await response.json());
+      if (!response.ok || !value.success || value.data.run === undefined) {
+        throw new Error(
+          value.success
+            ? (value.data.error?.message ?? 'Run action failed.')
+            : 'Run action failed.',
+        );
       }
-      setRun(value.run);
+      setRun(value.data.run);
       setConfirmCancel(false);
-      setMessage('Run 狀態已更新。');
+      setMessage('updated');
     } catch {
-      setMessage('操作未完成；請重新整理後確認目前狀態。');
+      setMessage('failed');
     } finally {
       setWorking(false);
     }
@@ -88,15 +189,16 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                 <span
                   className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${statusStyle[run.status]}`}
                 >
-                  {run.status.replace('_', ' ')}
+                  {statusLabels[locale][run.status]}
                 </span>
                 <span className="text-xs text-slate-400">
-                  Attempt {run.attempts} / {run.maxAttempts}
+                  {text.attempt} {run.attempts} / {run.maxAttempts}
                 </span>
               </div>
               <h2 className="mt-4 text-xl font-semibold text-slate-950">{run.workflowName}</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Timeout {new Date(run.timeoutAt).toLocaleString('zh-TW')}
+                {text.timeout}{' '}
+                {new Date(run.timeoutAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW')}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -117,7 +219,7 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                   }}
                   type="button"
                 >
-                  {confirmCancel ? '再次按下確認取消' : '取消 Run'}
+                  {confirmCancel ? text.cancelConfirm : text.cancel}
                 </button>
               )}
               {(run.status === 'failed' || run.status === 'timed_out') &&
@@ -128,7 +230,7 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                     onClick={() => void post('retry')}
                     type="button"
                   >
-                    重試
+                    {text.retry}
                   </button>
                 )}
               <button
@@ -137,7 +239,7 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                 onClick={() => void refresh(run.id)}
                 type="button"
               >
-                重新整理
+                {text.refresh}
               </button>
             </div>
           </div>
@@ -161,19 +263,19 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                 <div>
                   <p className="text-sm font-semibold text-slate-900">{step.nodeId}</p>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {step.nodeType} · {step.processedFileCount} files · {step.processedRowCount}{' '}
-                    rows
+                    {step.nodeType} · {step.processedFileCount} {text.files} ·{' '}
+                    {step.processedRowCount} {text.rows}
                   </p>
                 </div>
                 <span className="w-fit rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">
-                  {step.status}
+                  {stepStatusLabels[locale][step.status]}
                 </span>
               </article>
             ))}
           </div>
           {message === undefined ? null : (
             <p aria-live="polite" className="mt-4 text-xs font-semibold text-indigo-700">
-              {message}
+              {message === 'updated' ? text.statusUpdated : text.operationFailed}
             </p>
           )}
         </section>
@@ -185,17 +287,15 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                 <ShieldIcon className="size-5" />
               </span>
               <div>
-                <h2 className="text-base font-semibold text-amber-950">需要執行核准</h2>
-                <p className="mt-1 text-xs leading-5 text-amber-800">
-                  核准前不會建立 Desktop Job。請確認寫入與外部操作摘要。
-                </p>
+                <h2 className="text-base font-semibold text-amber-950">{text.approval}</h2>
+                <p className="mt-1 text-xs leading-5 text-amber-800">{text.approvalHelp}</p>
               </div>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               {[
-                ['Write', run.approval.riskSummary.write.length],
-                ['External', run.approval.riskSummary.external.length],
-                ['Destructive', run.approval.riskSummary.destructive.length],
+                [text.write, run.approval.riskSummary.write.length],
+                [text.external, run.approval.riskSummary.external.length],
+                [text.destructive, run.approval.riskSummary.destructive.length],
               ].map(([label, count]) => (
                 <div className="rounded-xl bg-white p-3" key={String(label)}>
                   <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
@@ -217,7 +317,7 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                 }
                 type="button"
               >
-                核准並派送
+                {text.approve}
               </button>
               <button
                 className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-xs font-semibold text-red-700"
@@ -230,7 +330,7 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                 }
                 type="button"
               >
-                拒絕
+                {text.reject}
               </button>
             </div>
           </section>
@@ -240,13 +340,14 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
       <aside className="space-y-5">
         <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-sm">
           <RunsIcon className="size-6 text-indigo-300" />
-          <h2 className="mt-4 text-base font-semibold">Audit timeline</h2>
+          <h2 className="mt-4 text-base font-semibold">{text.audit}</h2>
           <div className="mt-4 space-y-4">
             {[...run.audit].reverse().map((entry) => (
               <div className="border-l border-white/15 pl-4" key={entry.id}>
                 <p className="text-xs font-semibold text-white">{entry.action}</p>
                 <p className="mt-1 text-[10px] text-slate-400">
-                  {entry.actorType} · {new Date(entry.createdAt).toLocaleString('zh-TW')}
+                  {entry.actorType} ·{' '}
+                  {new Date(entry.createdAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW')}
                 </p>
               </div>
             ))}
@@ -255,7 +356,7 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <CheckIcon className="size-6 text-emerald-600" />
-          <h2 className="mt-4 text-base font-semibold text-slate-950">Notifications</h2>
+          <h2 className="mt-4 text-base font-semibold text-slate-950">{text.notifications}</h2>
           <div className="mt-4 space-y-3">
             {[...run.notifications].reverse().map((notification) => (
               <div className="rounded-xl bg-slate-50 p-3" key={notification.id}>
