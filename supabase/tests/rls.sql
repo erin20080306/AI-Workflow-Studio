@@ -234,6 +234,7 @@ begin
     'device_heartbeats',
     'folder_aliases',
     'connections',
+    'connection_operations',
     'ai_provider_settings',
     'workflows',
     'workflow_versions',

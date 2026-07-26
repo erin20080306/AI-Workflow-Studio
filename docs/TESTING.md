@@ -60,6 +60,9 @@ twice to verify idempotency, and stops the container through an exit trap.
 Agent database assertions also verify hidden pairing hashes, service-role-only
 functions, tenant/device-bound atomic claims, active duplicate-claim rejection,
 claim-token-bound leases, expired-lease rejection, and event idempotency.
+Google database assertions verify that connection ciphertext and write claims
+are inaccessible to authenticated clients, tenant/connection foreign keys hold,
+idempotency hashes conflict safely, and completed metadata results replay.
 
 ### End to end
 
@@ -75,6 +78,12 @@ boundary on the AI model settings page. A second API E2E pairs a Mock Agent,
 heartbeats, polls, claims, renews, reports deduplicated progress, completes
 idempotently, revokes the device, and verifies the old token fails. CI installs
 only Chromium immediately before this test.
+
+The workflow browser E2E also opens the Google connection settings page,
+performs a Mock health check, renders the spreadsheet metadata list, and asserts
+that token fixture values do not appear in the page. Connector integration tests
+inject OAuth and Sheets transports, so no Google credential or network call is
+required.
 
 ### Build and packaging
 

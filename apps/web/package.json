@@ -12,6 +12,7 @@
   "dependencies": {
     "@ai-workflow-studio/agent-protocol": "workspace:*",
     "@ai-workflow-studio/ai-gateway": "workspace:*",
+    "@ai-workflow-studio/google-sheets": "workspace:*",
     "@ai-workflow-studio/shared": "workspace:*",
     "@ai-workflow-studio/workflow-engine": "workspace:*",
     "@ai-workflow-studio/workflow-schema": "workspace:*",

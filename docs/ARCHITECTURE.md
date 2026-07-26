@@ -54,6 +54,13 @@ semantic validators remain authoritative. A bounded repair loop may request a
 complete replacement plan; it never patches, executes, or returns invalid
 content. See `docs/AI_GATEWAY.md`.
 
+Google authorization is modeled as an independent tenant-owned connection.
+OAuth state and PKCE verification remain server-side; AES-256-GCM token
+envelopes are bound to tenant, connection, and token kind. The connector exposes
+validated read/append/update/sync primitives behind repository and idempotency
+ports. Browser-facing views contain status and metadata only. See
+`docs/GOOGLE_SHEETS.md`.
+
 ## Desktop data plane
 
 Electron owns local folder authorization, file watching, Excel processing,

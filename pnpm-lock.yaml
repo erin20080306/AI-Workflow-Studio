@@ -93,6 +93,9 @@ importers:
       '@ai-workflow-studio/ai-gateway':
         specifier: workspace:*
         version: link:../../packages/ai-gateway
+      '@ai-workflow-studio/google-sheets':
+        specifier: workspace:*
+        version: link:../../packages/google-sheets
       '@ai-workflow-studio/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -161,6 +164,16 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+
+  packages/google-sheets:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
 
   packages/local-executor:
     dependencies:

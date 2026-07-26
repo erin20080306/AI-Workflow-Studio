@@ -32,6 +32,11 @@ packages must not be copied into the web application.
 The authoritative variable list will live in `apps/web/.env.example` once the web
 application is introduced. Example files contain names and explanations only.
 
+Google OAuth additionally requires an HTTPS callback registered exactly as
+`GOOGLE_REDIRECT_URI` and a unique 32-byte base64 `APP_ENCRYPTION_KEY`. These
+values are never exposed through `NEXT_PUBLIC_` variables. Missing Google values
+disable live connection creation without breaking the build or Mock mode.
+
 ## Desktop releases
 
 Windows artifacts are built on Windows runners and macOS artifacts on macOS

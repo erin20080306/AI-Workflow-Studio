@@ -17,6 +17,7 @@ apps/web                  Next.js control plane
 apps/desktop              Electron local Agent
 packages/agent-protocol   Pairing and durable job contracts
 packages/ai-gateway       Validated provider adapters
+packages/google-sheets    OAuth and bounded Google Sheets operations
 packages/local-executor   Bounded Excel/CSV processing
 packages/workflow-schema  Workflow v1 schemas and catalog
 packages/workflow-engine  Deterministic orchestration primitives
@@ -57,6 +58,14 @@ temporary output validation, same-directory atomic rename, and SHA-256
 verification. The MVP does not promise preservation of VBA, pivot tables,
 native charts, external data connections, complex workbook styling, or every
 Excel-specific feature. See [`docs/EXCEL_EXECUTOR.md`](docs/EXCEL_EXECUTOR.md).
+
+## Google Sheets
+
+Google authorization is a separate, server-side OAuth connection using PKCE,
+state validation, offline access, encrypted tokens, refresh and revoke support,
+bounded Sheets requests, and durable idempotency contracts. Credentials are
+optional for local builds; Mock integration tests never contact Google. See
+[`docs/GOOGLE_SHEETS.md`](docs/GOOGLE_SHEETS.md).
 
 ## Release status
 

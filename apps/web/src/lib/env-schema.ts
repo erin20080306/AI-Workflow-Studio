@@ -4,6 +4,19 @@ const emptyToUndefined = (value: unknown): unknown => (value === '' ? undefined 
 
 const optionalUrl = z.preprocess(emptyToUndefined, z.string().url().optional());
 const optionalSecret = z.preprocess(emptyToUndefined, z.string().min(24).optional());
+const optionalEncryptionKey = z.preprocess(
+  emptyToUndefined,
+  z
+    .string()
+    .refine(
+      (value) =>
+        /^[A-Za-z0-9+/]{43}=$/.test(value) && Buffer.from(value, 'base64').byteLength === 32,
+      {
+        message: 'Encryption key must decode to 32 bytes',
+      },
+    )
+    .optional(),
+);
 const optionalModel = z.preprocess(
   emptyToUndefined,
   z
@@ -16,7 +29,7 @@ const environmentSchema = z.object({
   AGENT_TOKEN_PEPPER: optionalSecret,
   ANTHROPIC_API_KEY: optionalSecret,
   ANTHROPIC_MODEL: optionalModel,
-  APP_ENCRYPTION_KEY: optionalSecret,
+  APP_ENCRYPTION_KEY: optionalEncryptionKey,
   CRON_SECRET: optionalSecret,
   GEMINI_API_KEY: optionalSecret,
   GEMINI_MODEL: optionalModel,
@@ -70,7 +83,8 @@ export function parseEnvironment(input: Record<string, string | undefined>): App
     googleConfigured: Boolean(
       parsed.data.GOOGLE_CLIENT_ID &&
       parsed.data.GOOGLE_CLIENT_SECRET &&
-      parsed.data.GOOGLE_REDIRECT_URI,
+      parsed.data.GOOGLE_REDIRECT_URI &&
+      parsed.data.APP_ENCRYPTION_KEY,
     ),
     mockMode: parsed.data.NEXT_PUBLIC_MOCK_MODE === 'true' || !supabaseConfigured,
     providers: {

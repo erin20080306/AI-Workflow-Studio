@@ -37,4 +37,15 @@ test('creates, reviews, and dry-runs a safe Mock Workflow', async ({ page }) => 
   await expect(page.getByText('API keys 永遠不送到瀏覽器')).toBeVisible();
   await page.getByRole('button', { name: '儲存 Mock 設定' }).click();
   await expect(page.getByText('Mock 偏好已更新；未寫入任何金鑰。')).toBeVisible();
+
+  await page.goto('/dashboard/settings/connections');
+  await expect(page.getByRole('heading', { name: '外部服務連線' })).toBeVisible();
+  await expect(page.getByText('營運報表（Mock）')).toBeVisible();
+  await expect(page.getByText('Server OAuth 尚未設定')).toBeVisible();
+  await page.getByRole('button', { name: '健康檢查' }).click();
+  await expect(page.getByText('Google Sheets 連線正常，試算表清單已更新。')).toBeVisible();
+  await expect(page.getByText('每日訂單彙整')).toBeVisible();
+  await expect(page.getByText('營運追蹤')).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('refresh-token-fixture');
+  await expect(page.locator('body')).not.toContainText('access-token-fixture');
 });

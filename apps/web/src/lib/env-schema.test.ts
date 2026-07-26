@@ -54,4 +54,21 @@ describe('parseEnvironment', () => {
       'Invalid environment configuration: OPENAI_MODEL',
     );
   });
+
+  it('enables Google only with complete OAuth settings and a 256-bit base64 key', () => {
+    expect(
+      parseEnvironment({
+        APP_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
+        GOOGLE_CLIENT_ID: 'google-client-id',
+        GOOGLE_CLIENT_SECRET: 'google-client-secret-with-safe-length',
+        GOOGLE_REDIRECT_URI: 'https://app.example.test/api/connections/google/callback',
+      }).googleConfigured,
+    ).toBe(true);
+
+    expect(() =>
+      parseEnvironment({
+        APP_ENCRYPTION_KEY: 'not-a-valid-encryption-key',
+      }),
+    ).toThrowError('Invalid environment configuration: APP_ENCRYPTION_KEY');
+  });
 });

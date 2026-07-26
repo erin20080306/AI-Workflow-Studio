@@ -87,12 +87,23 @@ structured error codes, masked messages, column names/types, and only explicitly
 approved masked samples. Complete local spreadsheet data is not uploaded as a
 required workflow step.
 
+Google list routes return spreadsheet and sheet metadata only. OAuth token
+responses, refresh tokens, access tokens, and ciphertext are excluded from the
+browser view and API error envelope. Google writes store only request hashes and
+result counts in the idempotency ledger.
+
 ## Secrets
 
 Secrets belong in local ignored environment files or managed deployment secret
 stores. Example files never contain working values. Encryption and hashing keys
 must be independently generated and rotatable. Tokens must not appear in URLs,
 client state, workflow JSON, logs, fixtures, or artifacts.
+
+Google access and refresh tokens use separate AES-256-GCM envelopes with
+tenant/connection/type additional authenticated data. OAuth state is
+constant-time validated, PKCE uses S256, callback cookies are HttpOnly and
+single-purpose, and revocation clears local ciphertext even if the remote revoke
+call fails.
 
 ## AI provider boundary
 

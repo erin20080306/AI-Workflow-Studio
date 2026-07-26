@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 9 — Local Excel/CSV executor (completed)
+Phase 10 — Google Sheets connector (completed)
 
 ## Repository baseline
 
@@ -766,3 +766,94 @@ Status: completed
 ### Commit
 
 - `feat: add safe local spreadsheet executor` (this phase commit)
+
+## Phase 10
+
+Status: completed
+
+### Implemented
+
+- Added `@ai-workflow-studio/google-sheets` with strict OAuth, token encryption,
+  connection lifecycle, and bounded REST client contracts.
+- Added Google web-server OAuth start and callback routes with 256-bit state,
+  PKCE S256, offline consent, HttpOnly callback-scoped cookies, constant-time
+  state comparison, bounded inputs, and generic browser errors.
+- Requested only Sheets read/write and Drive metadata-read scopes. A connection
+  is rejected unless the exchange includes a refresh token and both scopes.
+- Added versioned AES-256-GCM envelopes with independent access/refresh
+  ciphertext and tenant/connection/token-kind authenticated context. Token-free
+  views are the only connection type returned to browser components.
+- Added automatic access-token refresh, encrypted token replacement, remote
+  revoke with unconditional local credential clearing, connection health state,
+  spreadsheet metadata list, and sheet metadata list.
+- Added runtime-validated read, append, batch update, and deterministic keyed
+  sync operations. Requests are capped at 2 MB, responses at 5 MB, and all row,
+  column, range, and batch dimensions are bounded.
+- Added capped exponential backoff with jitter and bounded `Retry-After` support
+  for safe reads and idempotent writes. Ambiguous append outcomes stop without
+  retry to avoid duplicate rows.
+- Added request-hash idempotency with completed-result replay, active/different
+  input conflict, and permanent ambiguous-append suppression.
+- Added a service-only `connection_operations` migration with tenant-bound
+  foreign keys and atomic claim/finish/release functions. Authenticated clients
+  cannot read connection ciphertext, operation rows, or call the write-claim
+  functions.
+- Added an accessible connection settings page with health checks, spreadsheet
+  metadata, two-step revoke, OAuth result feedback, explicit Mock labeling, and
+  no token fields.
+- Added complete connector, OAuth, encryption, retry, idempotency, Mock, limits,
+  deployment, and production-adapter documentation.
+
+### Dependency purposes
+
+- The package uses the platform `fetch`, Web APIs, Node cryptography, and the
+  existing Zod runtime validator; no Google SDK or new third-party runtime
+  dependency is required.
+- Workspace linking adds the connector to the Next.js server boundary without
+  placing credentials in a client package.
+
+### Files changed
+
+- `packages/google-sheets` OAuth, cipher, client, connection service, errors,
+  types, exports, and Mock integration tests.
+- Google connection API routes, server adapter, settings UI, environment
+  validation, and browser E2E coverage.
+- Durable connection-operation migration, RLS/privilege tests, and database test
+  runner.
+- Root workspace metadata, environment example, README, Google connector guide,
+  architecture, security, testing, deployment, execution plan, and status.
+
+### Validation
+
+- `pnpm install`: passed — no new third-party dependency
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 75 tests across 15 files, including 10 Google connector
+  integration tests
+- `pnpm test:e2e`: passed — 2 Chromium E2Es, including Google health metadata
+  and browser token-absence assertions
+- `pnpm db:test`: passed — fresh migrations, tenant isolation, server-only
+  operation claims, conflict, replay, and foreign-key enforcement
+- `pnpm peers check`: passed
+- `pnpm build:web`: passed without Google or other optional credentials
+- `pnpm build:desktop`: passed as a connector regression gate
+- Browser QA: passed — no horizontal overflow, console errors, or credential
+  values; health interaction rendered both Mock spreadsheets
+
+### Known limitations
+
+- The current Next.js Mock boundary persists encrypted connections in memory.
+  Production must implement the existing repository ports with an authenticated
+  Supabase tenant adapter before live OAuth routes are enabled.
+- Drive access is intentionally metadata-only. The connector does not create,
+  delete, share, move, or change permissions on Drive files.
+- Sync updates the explicitly configured range and pads removed trailing rows
+  within the prior returned height. It does not clear cells outside that range.
+- A genuinely ambiguous append is not automatically recoverable. An operator
+  must inspect the destination before deciding whether to issue a new operation
+  with a new idempotency key.
+
+### Commit
+
+- `feat: add secure google sheets connector` (this phase commit)
