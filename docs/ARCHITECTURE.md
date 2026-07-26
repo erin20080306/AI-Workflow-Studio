@@ -20,7 +20,26 @@ Natural language
   -> auditable run and step results
 ```
 
-## Planned monorepo
+```mermaid
+flowchart LR
+  U["Authenticated user"] --> W["Next.js control plane"]
+  W --> A["Validated AI planner"]
+  A --> V["Workflow v1 validator"]
+  V --> R["Approval + run orchestrator"]
+  R --> J["Tenant-bound Agent job"]
+  J --> D["Paired Electron Agent"]
+  D --> F["Approved local folder"]
+  D --> S["Redacted step events"]
+  S --> W
+  W --> G["Google Sheets connector"]
+  W <--> P[("Supabase Auth + PostgreSQL/RLS")]
+```
+
+The browser never talks directly to the local filesystem. The control plane
+stores an opaque folder alias and dispatches a tenant/device-bound Job; only the
+paired Agent resolves that alias to a locally approved canonical path.
+
+## Monorepo
 
 ```text
 apps/
@@ -127,6 +146,6 @@ revalidates the Workflow and runs only its locally registered subset. See
 
 ## Product naming
 
-The product name will be exported by one shared configuration module in Phase 1.
-Application code and metadata must consume that configuration instead of
-scattering string literals.
+The product name is exported by `packages/shared/src/product.ts`. Application
+code and metadata consume that configuration instead of scattering product-name
+literals.

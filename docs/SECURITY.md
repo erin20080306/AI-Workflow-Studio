@@ -129,6 +129,12 @@ validation classifications and paths; the rejected raw response is not logged
 or echoed. Usage records exclude prompts and generated content. A usage-record
 failure withholds the output rather than creating an unaccounted plan.
 
+Until the authenticated production session/repository boundary is connected,
+the public development control plane permits only the deterministic Mock
+planner. Supplying a real provider key does not make an external provider
+callable by an anonymous browser. Non-Mock dashboard access and Google OAuth
+start also fail closed.
+
 ## Security review gates
 
 - Dependency and license audit.
@@ -140,3 +146,6 @@ failure withholds the output rather than creating an unaccounted plan.
 - Log and error redaction tests.
 - Destructive-action and external-transfer approval review.
 - Artifact secret scan and checksum verification.
+
+The recorded Phase 13 findings, evidence, and unresolved go-live items are in
+[`SECURITY_REVIEW.md`](./SECURITY_REVIEW.md).

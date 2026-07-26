@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { ArrowRightIcon } from '@/components/icons';
+import { getEnvironment } from '@/lib/env';
 
 export const metadata: Metadata = {
   title: '登入',
@@ -10,6 +11,9 @@ export const metadata: Metadata = {
 
 async function enterMockDashboard() {
   'use server';
+  if (!getEnvironment().mockMode) {
+    redirect('/login?status=authentication-required');
+  }
   redirect('/dashboard');
 }
 

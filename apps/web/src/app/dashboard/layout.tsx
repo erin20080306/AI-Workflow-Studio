@@ -1,16 +1,22 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { Brand } from '@/components/brand';
 import { DashboardNavigation } from '@/components/dashboard-navigation';
 import { SparkIcon } from '@/components/icons';
 import { MockModeBadge } from '@/components/mock-mode-badge';
+import { getEnvironment } from '@/lib/env';
 
 export const metadata: Metadata = {
   title: '控制台',
 };
 
 export default function DashboardLayout({ children }: Readonly<{ children: ReactNode }>) {
+  if (!getEnvironment().mockMode) {
+    redirect('/login?status=authentication-required');
+  }
+
   return (
     <div className="min-h-screen bg-[#f4f6f2] lg:grid lg:grid-cols-[244px_1fr]">
       <aside className="border-b border-slate-200 bg-slate-950 px-4 py-4 text-white lg:fixed lg:inset-y-0 lg:w-[244px] lg:border-b-0 lg:px-5 lg:py-6">

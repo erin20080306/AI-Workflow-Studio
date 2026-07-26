@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 11 — Run orchestration (completed)
+Phase 13 — Security and final acceptance (in progress)
 
 ## Repository baseline
 
@@ -1053,3 +1053,56 @@ Status: completed locally
 ### Commit
 
 - `ci: add release and deployment controls` (this phase commit)
+
+## Phase 13
+
+Status: in progress
+
+### Implemented so far
+
+- Audited the dependency graph and replaced vulnerable transitive versions with
+  scoped pnpm workspace overrides. `pnpm audit --audit-level high` now reports
+  no known vulnerabilities.
+- Closed the pre-Auth paid-provider exposure: until an authenticated workspace
+  context is connected, the planner accepts only the deterministic Mock
+  provider. External providers fail closed.
+- Required a verified web actor before starting Google OAuth and redirected the
+  dashboard away from non-Mock mode until the real session boundary is
+  connected.
+- Added a client-bundle scanner and focused tests for server-only variable
+  names, configured secret values, credential patterns, private keys, and local
+  workspace paths.
+- Began the documented security and acceptance review.
+
+### Validation so far
+
+- `pnpm audit --audit-level high`: passed — no known vulnerabilities
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all 10 code workspaces
+- `pnpm test`: passed — 91 tests across 20 files
+- `pnpm build:web`: passed — 34 generated pages with synthetic server secrets
+- `pnpm security:scan-client`: passed — 23 built browser assets, no synthetic
+  secret, server-only variable name, credential pattern, private key, or local
+  path detected
+- `pnpm db:test`: passed — fresh migrations, Tenant isolation, privileged
+  function denial, state transitions, and idempotent seed
+- `pnpm build:desktop`: passed
+- `pnpm test:e2e`: passed — both Chromium Mock acceptance paths
+
+### Remaining before completion
+
+- Complete the remaining security review after real Auth, Super Admin, and
+  subscription enforcement are implemented.
+- Connect real Supabase registration, login, logout, recovery, verified Tenant
+  onboarding, and server-side route authorization.
+- Add the separately authorized platform Super Admin and subscription
+  entitlement model without storing or seeding an administrator password.
+- Complete the Traditional Chinese/English professional UI and branded Store
+  assets.
+- Verify remote GitHub CI, Vercel, Supabase, GitHub prerelease, and Microsoft
+  Store packaging only after the required account authorization is available.
+
+### Commit
+
+- Pending

@@ -13,22 +13,22 @@ test, and build checks and has been committed.
 
 ## Phases
 
-| Phase | Scope                         | Acceptance gate                                                                | Status    |
-| ----- | ----------------------------- | ------------------------------------------------------------------------------ | --------- |
-| 0     | Repository audit              | Repository state, build baseline, architecture, and risks documented           | completed |
-| 1     | Monorepo and guardrails       | Install, format, lint, typecheck, and unit tests pass                          | completed |
-| 2     | Next.js web foundation        | App Router shell, auth screens, mock mode, and production web build pass       | completed |
-| 3     | Supabase schema and tenancy   | Fresh migrations and tenant-isolation tests pass                               | completed |
-| 4     | Workflow schema and engine    | Schema, registry, DAG, risk, dry-run, and executor tests pass                  | completed |
-| 5     | Workflow web UI               | Mock workflow E2E and web build pass                                           | completed |
-| 6     | AI gateway                    | Provider adapters build without keys; strict JSON and mock tests pass          | completed |
-| 7     | Pairing and job API           | Token, tenant, claim, lease, and revocation tests pass                         | completed |
-| 8     | Desktop agent foundation      | Development build and unsigned test package pass; folder access is constrained | completed |
-| 9     | Local Excel executor          | Fixture, idempotency, atomic output, backup, and traversal tests pass          | completed |
-| 10    | Google Sheets connector       | Mock OAuth/Sheets tests pass; credentials are optional and server-only         | completed |
-| 11    | Run orchestration             | End-to-end mock run, reconnect, approval, and de-duplication pass              | completed |
-| 12    | GitHub release and Vercel     | CI, production web build, platform desktop builds, and secret checks pass      | pending   |
-| 13    | Security and final acceptance | Security review and all MVP acceptance criteria pass                           | pending   |
+| Phase | Scope                         | Acceptance gate                                                                | Status      |
+| ----- | ----------------------------- | ------------------------------------------------------------------------------ | ----------- |
+| 0     | Repository audit              | Repository state, build baseline, architecture, and risks documented           | completed   |
+| 1     | Monorepo and guardrails       | Install, format, lint, typecheck, and unit tests pass                          | completed   |
+| 2     | Next.js web foundation        | App Router shell, auth screens, mock mode, and production web build pass       | completed   |
+| 3     | Supabase schema and tenancy   | Fresh migrations and tenant-isolation tests pass                               | completed   |
+| 4     | Workflow schema and engine    | Schema, registry, DAG, risk, dry-run, and executor tests pass                  | completed   |
+| 5     | Workflow web UI               | Mock workflow E2E and web build pass                                           | completed   |
+| 6     | AI gateway                    | Provider adapters build without keys; strict JSON and mock tests pass          | completed   |
+| 7     | Pairing and job API           | Token, tenant, claim, lease, and revocation tests pass                         | completed   |
+| 8     | Desktop agent foundation      | Development build and unsigned test package pass; folder access is constrained | completed   |
+| 9     | Local Excel executor          | Fixture, idempotency, atomic output, backup, and traversal tests pass          | completed   |
+| 10    | Google Sheets connector       | Mock OAuth/Sheets tests pass; credentials are optional and server-only         | completed   |
+| 11    | Run orchestration             | End-to-end mock run, reconnect, approval, and de-duplication pass              | completed   |
+| 12    | GitHub release and Vercel     | CI, production web build, platform desktop builds, and secret checks pass      | completed   |
+| 13    | Security and final acceptance | Security review, go-live additions, and all MVP acceptance criteria pass       | in-progress |
 
 ## Phase 0 — Repository audit
 
@@ -122,4 +122,9 @@ environment checklist, and release checklist.
 
 Review dependencies, RLS, API authorization, path containment, token handling,
 client bundles, redaction, destructive actions, documentation, troubleshooting,
-and the complete mock MVP acceptance path.
+and the complete MVP acceptance path. The user-requested go-live scope also
+includes real Supabase registration/session/Tenant onboarding, a separately
+authorized platform Super Admin, subscription entitlements, bilingual
+Traditional Chinese/English product UI, branded Store assets, and truthful
+deployment/release verification. External publication remains blocked until its
+corresponding provider access and release requirements are available.

@@ -38,6 +38,7 @@ pnpm test
 pnpm test:e2e
 pnpm db:test
 pnpm build:web
+pnpm security:scan-client
 pnpm build:desktop
 ```
 
@@ -78,6 +79,19 @@ notifications remain in the control plane. See
 
 ## Release status
 
-No production release has been published. Desktop packages created before the
-formal release phase are unsigned development artifacts. Do not distribute them
-as production installers.
+Release controls, checksums, signing-aware metadata, native CI matrices, Vercel
+configuration, and a Microsoft Store AppX draft configuration are implemented
+locally. No production deployment or release has been published. Unsigned
+packages remain development/prerelease artifacts and must not be presented as
+stable production installers. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md),
+[`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md), and
+[`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
+
+## Guides
+
+- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md): Mock MVP operation and safety
+  behavior.
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): local development,
+  database, Web, Desktop, OAuth, and release diagnosis.
+- [`docs/PRODUCTION_CHECKLIST.md`](docs/PRODUCTION_CHECKLIST.md): external
+  account, Auth, environment, and go-live requirements.

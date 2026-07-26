@@ -4,11 +4,13 @@ import { cookies } from 'next/headers';
 
 import { googleApiError } from '@/lib/google-api';
 import { googleOAuthClient } from '@/lib/google-connections';
+import { getWebActor } from '@/lib/agent-server';
 
 const CALLBACK_PATH = '/api/connections/google/callback';
 
 export async function GET(): Promise<Response> {
   try {
+    getWebActor();
     const state = randomBytes(32).toString('base64url');
     const pkce = createGooglePkcePair();
     const cookieStore = await cookies();

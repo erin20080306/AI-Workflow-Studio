@@ -5,6 +5,8 @@ import {
 } from '@ai-workflow-studio/ai-gateway';
 
 import { createServerAiGateway } from '@/lib/ai-gateway';
+import { plannerAccessDecision } from '@/lib/control-plane-access';
+import { getEnvironment } from '@/lib/env';
 
 const MAX_REQUEST_BYTES = 20_000;
 const ApiPlannerRequestSchema = PlannerRequestSchema.extend({
@@ -64,6 +66,24 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { provider, ...plannerRequest } = parsed.data;
+  const access = plannerAccessDecision(getEnvironment().mockMode, provider);
+  if (!access.allowed) {
+    return Response.json(
+      {
+        error: {
+          code: access.code,
+          message: access.message,
+        },
+      },
+      {
+        headers: {
+          'cache-control': 'no-store',
+        },
+        status: access.status,
+      },
+    );
+  }
+
   try {
     const result = await createServerAiGateway(provider).plan(plannerRequest, request.signal);
     return Response.json(

@@ -19,6 +19,7 @@
     "lint": "eslint .",
     "release:scan": "node scripts/release-artifacts.mjs scan",
     "release:verify": "node scripts/release-artifacts.mjs verify-tree",
+    "security:scan-client": "node scripts/scan-client-bundle.mjs --directory apps/web/.next/static",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:coverage": "vitest run --coverage",

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { ArrowRightIcon } from '@/components/icons';
+import { getEnvironment } from '@/lib/env';
 
 export const metadata: Metadata = {
   title: '建立帳戶',
@@ -10,6 +11,9 @@ export const metadata: Metadata = {
 
 async function enterMockWorkspace() {
   'use server';
+  if (!getEnvironment().mockMode) {
+    redirect('/register?status=authentication-required');
+  }
   redirect('/dashboard');
 }
 
