@@ -30,6 +30,7 @@ test, and build checks and has been committed.
 | 12    | GitHub release and Vercel     | CI, production web build, platform desktop builds, and secret checks pass      | completed |
 | 13    | Security and final acceptance | Security review, go-live additions, and all MVP acceptance criteria pass       | completed |
 | 14    | Hosted Web staging            | Hosted migrations, Auth configuration, Vercel deployment, and smoke test pass  | completed |
+| 15    | Remote CI repair              | Linux quality checks and macOS/Windows package jobs pass remotely              | completed |
 
 ## Phase 0 — Repository audit
 
@@ -138,3 +139,11 @@ apply and verify immutable migrations, configure secure Auth redirects and
 confirmation controls, store server-only values in protected Vercel environment
 variables, deploy the Web workspace, and smoke-test the real registration and
 session boundary.
+
+## Phase 15 — Remote CI repair
+
+Repair GitHub Actions runner bootstrap ordering so the configured pnpm version
+exists before `setup-node` requests its pnpm cache. Keep third-party actions
+pinned to immutable commits, make browser-test locators resilient to framework
+developer tooling, and verify Linux quality/Web checks plus unsigned macOS and
+Windows package jobs on the remote runners.

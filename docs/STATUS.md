@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 14 — Hosted Web staging (completed)
+Phase 15 — Remote CI repair (completed)
 
 ## Repository baseline
 
@@ -1188,3 +1188,43 @@ Status: completed
   adapters remain unconfigured and continue to fail closed.
 - The first platform administrator still requires a verified Auth User UUID and
   a separate manual role grant; no password or user-specific seed is stored.
+
+## Phase 15
+
+Status: completed
+
+### Implemented
+
+- Diagnosed remote CI run `30209256783`: all three jobs stopped in
+  `setup-node` because pnpm caching was requested before pnpm existed on PATH.
+- Added the official `pnpm/action-setup` action before `setup-node` in both CI
+  jobs, pinned it to an immutable verified `v4` commit, installed the repository
+  package-manager version, and removed the later redundant Corepack step.
+- Tightened the bilingual Playwright language-toggle locators to exact
+  accessible-name matching so the `EN` button cannot also match the Next.js
+  developer-tools button.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all 10 code workspaces
+- `pnpm test`: passed — 105 tests across 24 files
+- `pnpm build:web`: passed — 31 static pages generated
+- `pnpm test:e2e`: passed — two Chromium acceptance paths
+- GitHub Actions run `30210029021`: passed
+  - Quality and web build: passed
+  - Desktop package (macOS): passed
+  - Desktop package (Windows): passed
+
+### Known follow-up
+
+- GitHub currently warns that the pinned `checkout`, `setup-node`, and pnpm
+  actions target the deprecated Node.js 20 action runtime and are being forced
+  onto Node.js 24. This warning is non-blocking; upgrading those action majors
+  should be handled as a separate reviewed maintenance change.
+
+### Commits
+
+- `fix(ci): install pnpm before cache setup`
+- `test(e2e): target language toggles exactly`
