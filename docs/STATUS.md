@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 0 — Repository Audit (completed)
+Phase 1 — Monorepo and Guardrails (completed)
 
 ## Repository baseline
 
@@ -65,4 +65,62 @@ Status: completed
 
 ### Commit
 
-- `chore: audit repository and establish project rules` (this phase commit)
+- `78e16c3` — `chore: audit repository and establish project rules`
+
+## Phase 1
+
+Status: completed
+
+### Implemented
+
+- Added a pnpm workspace with strict Node and pnpm engine requirements and a
+  single shared lockfile.
+- Added strict shared TypeScript options, ESLint flat configuration, Prettier,
+  Vitest, and terminating root quality scripts.
+- Added the shared product identity configuration and a unit test so future
+  renaming has one source of truth.
+- Added dependency, build-output, local-environment, log, database, editor, and
+  operating-system ignore rules.
+- Added a least-privilege CI baseline with concurrency cancellation and a
+  bounded job timeout.
+- Resolved the initial TypeScript 7 peer mismatch by selecting the current
+  TypeScript 6 line supported by `typescript-eslint`; `pnpm peers check` reports
+  no remaining issues.
+
+### Dependency purposes
+
+- TypeScript and Node type definitions: strict cross-package static checking.
+- ESLint, `@eslint/js`, and `typescript-eslint`: JavaScript and TypeScript lint
+  rules, including explicit bans on `any` and TypeScript suppression comments.
+- Prettier: deterministic repository formatting.
+- Vitest and its V8 coverage provider: terminating unit tests and coverage.
+
+### Files changed
+
+- Root workspace, package, TypeScript, lint, format, Vitest, ignore, and lock
+  files.
+- `packages/shared` product configuration and unit test.
+- `.github/workflows/ci.yml`.
+- Phase documentation formatting and status.
+
+### Validation
+
+- `pnpm install --frozen-lockfile`: passed
+- `pnpm peers check`: passed
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 1 test
+- `pnpm build:web`: not applicable — web app begins in Phase 2
+- `pnpm build:desktop`: not applicable — desktop app begins in Phase 8
+
+### Known limitations
+
+- CI includes the required web build step, which becomes runnable after Phase 2.
+- The shared support address uses the reserved `.invalid` domain until a real
+  support address is configured.
+- No application runtime code is part of this guardrail phase.
+
+### Commit
+
+- `chore: initialize monorepo and project guardrails` (this phase commit)

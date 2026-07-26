@@ -1,0 +1,33 @@
+{
+  "name": "ai-workflow-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A safe natural-language automation platform for local spreadsheets and connected services.",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "build:desktop": "pnpm --filter @ai-workflow-studio/desktop build",
+    "build:web": "pnpm --filter @ai-workflow-studio/web build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.8.0",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  }
+}

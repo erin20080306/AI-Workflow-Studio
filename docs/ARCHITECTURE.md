@@ -64,16 +64,16 @@ cloud workflow data only by device-scoped folder aliases.
 
 ## Initial architecture risks
 
-| Risk | Consequence | Planned control |
-| --- | --- | --- |
-| AI returns executable or invented operations | Arbitrary execution | Strict JSON, Zod, registry allowlist, bounded repair |
-| Tenant identifier is trusted from a client | Cross-tenant exposure | Auth-derived tenant context, membership checks, RLS |
-| Folder path traversal or symlink escape | Unauthorized local access | Canonical paths, realpath containment, permission grants |
-| Duplicate/leased jobs execute twice | Duplicate writes | Atomic claim, leases, idempotency keys, file hashes |
-| Token or row data leaks through logs | Credential/privacy breach | Central redaction and metadata-only desktop reporting |
-| Partial Excel writes corrupt output | Data loss | New output by default, temp files, verification, atomic rename, backup |
-| Provider credentials missing at build time | Broken development/release | Optional adapters and deterministic mock mode |
-| Unsigned desktop release is presented as production | User trust/security issue | Development artifact labeling and signing-aware release gates |
+| Risk                                                | Consequence                | Planned control                                                        |
+| --------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------- |
+| AI returns executable or invented operations        | Arbitrary execution        | Strict JSON, Zod, registry allowlist, bounded repair                   |
+| Tenant identifier is trusted from a client          | Cross-tenant exposure      | Auth-derived tenant context, membership checks, RLS                    |
+| Folder path traversal or symlink escape             | Unauthorized local access  | Canonical paths, realpath containment, permission grants               |
+| Duplicate/leased jobs execute twice                 | Duplicate writes           | Atomic claim, leases, idempotency keys, file hashes                    |
+| Token or row data leaks through logs                | Credential/privacy breach  | Central redaction and metadata-only desktop reporting                  |
+| Partial Excel writes corrupt output                 | Data loss                  | New output by default, temp files, verification, atomic rename, backup |
+| Provider credentials missing at build time          | Broken development/release | Optional adapters and deterministic mock mode                          |
+| Unsigned desktop release is presented as production | User trust/security issue  | Development artifact labeling and signing-aware release gates          |
 
 ## Product naming
 

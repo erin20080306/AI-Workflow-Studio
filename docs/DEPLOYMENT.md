@@ -11,12 +11,12 @@
 
 ## Planned Vercel configuration
 
-| Setting | Value |
-| --- | --- |
-| Root Directory | `apps/web` |
-| Framework | Next.js |
+| Setting         | Value                            |
+| --------------- | -------------------------------- |
+| Root Directory  | `apps/web`                       |
+| Framework       | Next.js                          |
 | Install Command | `pnpm install --frozen-lockfile` |
-| Build Command | `pnpm build` |
+| Build Command   | `pnpm build`                     |
 
 Workspace package resolution must be configured at the monorepo level. Shared
 packages must not be copied into the web application.
