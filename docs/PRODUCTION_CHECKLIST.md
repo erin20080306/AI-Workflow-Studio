@@ -49,7 +49,7 @@ Unavailable non-Mock operations fail closed by design.
       origins.
 - [ ] Choose email confirmation, password policy, recovery, abuse protection,
       and rate-limit settings before enabling public sign-up.
-- [ ] Create the first platform Super Admin through an authenticated invitation
+- [x] Create the first platform Super Admin through an authenticated invitation
       and a server-side role grant. Never seed or store its password in SQL,
       source code, Vercel variables, or GitHub secrets.
 - [ ] Enable database backups and test a restore procedure.
@@ -120,13 +120,10 @@ a client bundle or log.
 
 ## Current blockers
 
-- Production Supabase has not been configured or staging-tested.
 - Durable production Agent, Run, and Google repository adapters are not
   connected; their affected non-Mock operations fail closed.
-- A real platform administrator has not been granted. The repository stores no
-  administrator password or user-specific bootstrap data.
 - Entitlements are enforced in PostgreSQL, but checkout, invoices, tax, webhook
   processing, and a payment provider are not connected.
-- No production deployment, signed desktop installer, Microsoft Store
-  submission/certification, or GitHub Release has been created. The Store
-  identity, branded package assets, and bilingual listing copy remain drafts.
+- No signed desktop installer, Microsoft Store submission/certification, or
+  GitHub Release has been created. The Store identity, branded package assets,
+  and bilingual listing copy remain drafts.

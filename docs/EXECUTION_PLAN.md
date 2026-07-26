@@ -31,6 +31,7 @@ test, and build checks and has been committed.
 | 13    | Security and final acceptance | Security review, go-live additions, and all MVP acceptance criteria pass       | completed |
 | 14    | Hosted Web staging            | Hosted migrations, Auth configuration, Vercel deployment, and smoke test pass  | completed |
 | 15    | Remote CI repair              | Linux quality checks and macOS/Windows package jobs pass remotely              | completed |
+| 16    | Platform Admin bootstrap      | A verified Auth user has an active server-granted Super Admin role             | completed |
 
 ## Phase 0 — Repository audit
 
@@ -147,3 +148,10 @@ exists before `setup-node` requests its pnpm cache. Keep third-party actions
 pinned to immutable commits, make browser-test locators resilient to framework
 developer tooling, and verify Linux quality/Web checks plus unsigned macOS and
 Windows package jobs on the remote runners.
+
+## Phase 16 — Platform Admin bootstrap
+
+Verify the intended production Auth user through the protected provider
+boundary, grant the initial `super_admin` role with the documented server-side
+transaction, and read the resulting role record back without committing any
+user identifier, email address, handle, credential, or provider response.

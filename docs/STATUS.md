@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 15 — Remote CI repair (completed)
+Phase 16 — Platform Admin bootstrap (completed)
 
 ## Repository baseline
 
@@ -1186,8 +1186,6 @@ Status: completed
 
 - AI provider, Google OAuth, payment-provider, and durable non-Auth production
   adapters remain unconfigured and continue to fail closed.
-- The first platform administrator still requires a verified Auth User UUID and
-  a separate manual role grant; no password or user-specific seed is stored.
 
 ## Phase 15
 
@@ -1228,3 +1226,29 @@ Status: completed
 
 - `fix(ci): install pnpm before cache setup`
 - `test(e2e): target language toggles exactly`
+
+## Phase 16
+
+Status: completed
+
+### Implemented
+
+- Verified the intended production Auth user exists and has a confirmed email
+  address before granting any privileged role.
+- Confirmed the user did not already have a platform-administrator record.
+- Granted the first active `super_admin` role through the protected linked
+  database boundary using the documented production bootstrap transaction.
+- Kept the administrator UUID, email address, handle, password, tokens, and
+  provider response out of the repository.
+
+### Validation
+
+- Pre-grant Auth-user and email-confirmation check: passed
+- Pre-grant platform-role absence check: passed
+- Production bootstrap transaction: committed
+- Post-grant role readback: passed — active `super_admin`
+
+### Follow-up
+
+- Sign in normally and open `/admin` to verify the authenticated browser
+  session receives the server-granted platform-administration view.
