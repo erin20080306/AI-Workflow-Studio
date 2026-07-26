@@ -5,7 +5,7 @@ test('creates, reviews, and dry-runs a safe Mock Workflow', async ({ page }) => 
   await expect(
     page.getByRole('heading', { name: '用一句話，讓工作流理解你的需求。' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'EN' }).click();
+  await page.getByRole('button', { exact: true, name: 'EN' }).click();
   await expect(
     page.getByRole('heading', { name: 'Workflows that understand your words.' }),
   ).toBeVisible();
@@ -13,7 +13,7 @@ test('creates, reviews, and dry-runs a safe Mock Workflow', async ({ page }) => 
   await expect(
     page.getByRole('heading', { name: 'Workflows that understand your words.' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: '中文' }).click();
+  await page.getByRole('button', { exact: true, name: '中文' }).click();
 
   await page.goto('/login');
   await page.getByLabel('電子郵件').fill('erin@example.test');
