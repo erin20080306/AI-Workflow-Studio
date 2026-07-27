@@ -1,11 +1,12 @@
 # Website Studio
 
-## Phase 23 boundary
+## Phase 24 boundary
 
 Website Studio is a separate authenticated workspace for planning a website
-before any model generation or publishing is allowed. The current phase creates
-tenant-isolated Website Projects and a validated brief. It does not create,
-execute, preview, deploy, or publish website code.
+before publishing is allowed. Phase 24 creates Tenant-isolated Website Projects,
+validates the brief, and lets Auto, OpenAI, Claude, Gemini, or development Mock
+produce a versioned Website Spec. It does not execute, preview, deploy, or
+publish website code.
 
 The six required decisions are:
 
@@ -22,7 +23,9 @@ become a `draft` until the complete brief passes the shared Zod schema.
 ## Data model and authorization
 
 `website_projects` stores the project name, tenant slug, status, bounded brief
-JSON, completion count, and timestamps. The table has RLS enabled.
+JSON, completion count, and timestamps. `website_specs` stores immutable
+versioned specifications, provider/model audit metadata, validation attempts,
+and timestamps. Both tables have RLS enabled.
 Authenticated members may read only their Tenant rows. Browser roles receive no
 insert, update, or delete privilege; mutations use the existing server-only
 Supabase administrator client after deriving the actor and Tenant from the
@@ -32,8 +35,10 @@ Viewer memberships cannot mutate. API routes never accept a client-provided
 Tenant identifier. Cross-Tenant project identifiers are returned as not found.
 
 Audit events record only the project identifier, action, completed-step count,
-and names of changed fields. They do not copy the brief, generated content,
-credentials, provider output, or unpublished customer material.
+names of changed fields, provider, model, schema version, specification version,
+and validation-attempt count. They do not copy the brief, generated content,
+credentials, prompts, provider response bodies, or unpublished customer
+material.
 
 ## Validation and limits
 
@@ -44,6 +49,13 @@ credentials, provider output, or unpublished customer material.
 - Calls to action: 1–8 unique bounded labels.
 - Unknown properties and malformed JSON fail closed.
 - Requests are limited to 32 KB.
+- Website Specs accept only registered sections, curated theme tokens, bounded
+  text, internal page/section/contact actions, and ID-based asset references.
+- Page slugs must exactly match the validated brief.
+- Duplicate IDs, missing targets, missing assets, code fences, scripts,
+  commands, HTML, and external/data URLs fail closed.
+- Provider output is limited to 1 MB and receives at most one bounded repair
+  attempt containing validation paths only, never rejected output.
 
 The database additionally constrains status/progress/timestamp combinations. A
 stored `draft` must have all six steps, a completion timestamp, and a draft
@@ -55,19 +67,28 @@ timestamp.
 and requires all six validated decisions. Phase 23 then locks the draft to avoid
 silent unversioned changes.
 
-Phase 26 introduces reversible and versioned editing. Until then, a changed
-brief should be created as a new Website Project.
+Phase 24 creates specification version 1 idempotently. Phase 26 introduces
+reversible versioned editing. Until then, a changed brief should be created as a
+new Website Project.
+
+## Model and credential boundary
+
+- Auto safely routes to the first configured provider.
+- Ordinary users see only available provider labels, descriptions, and
+  generation levels. They do not receive provider configuration state, keys, or
+  actual model identifiers.
+- Provider keys remain server-only Vercel variables. See
+  `docs/AI_PROVIDER_SETUP.md`.
+- Usage is conservatively reserved before provider access and recorded against
+  the Tenant's `website_generation` budget.
 
 ## Future gated phases
 
-- Phase 24: OpenAI, Claude, Gemini, Auto, development Mock, and a strict
-  versioned Website Spec made only from registered component/content JSON.
 - Phase 25: isolated desktop, tablet, and mobile preview canvas.
 - Phase 26: validated direct and natural-language edits, undo/redo, versions,
   comparison, and restoration.
 - Phase 27: explicit publish approval, quality gates, deployment, domains,
   history, and rollback.
 
-No model may return executable JavaScript, Python, shell commands, build scripts,
-or unbounded URLs. API keys remain server-only deployment variables and are
-never entered by ordinary users.
+No model output may release executable JavaScript, Python, shell commands, build
+scripts, HTML/CSS source, or unbounded URLs.

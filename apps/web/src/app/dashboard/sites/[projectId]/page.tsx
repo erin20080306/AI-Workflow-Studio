@@ -4,6 +4,9 @@ import { z } from 'zod';
 
 import { WebsiteBriefWorkspace } from '@/components/sites/website-brief-workspace';
 import { requireWorkspaceContext } from '@/lib/auth/context';
+import { getEnvironment } from '@/lib/env';
+import { buildWebsiteGenerationModelOptions } from '@/lib/website-generation-models';
+import { getWebsiteSpecGeneration, websiteSpecClientView } from '@/lib/website-spec-server';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
 export const metadata: Metadata = {
@@ -21,9 +24,13 @@ export default async function WebsiteBriefPage({
   if (!parsed.success) notFound();
   const context = await requireWorkspaceContext();
   try {
+    const project = await getWebsiteProject(context, parsed.data.projectId);
+    const generation = await getWebsiteSpecGeneration(context, project.id);
     return (
       <WebsiteBriefWorkspace
-        initialProject={await getWebsiteProject(context, parsed.data.projectId)}
+        initialGeneration={generation === undefined ? undefined : websiteSpecClientView(generation)}
+        initialProject={project}
+        modelOptions={buildWebsiteGenerationModelOptions(getEnvironment())}
       />
     );
   } catch (error) {

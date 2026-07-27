@@ -9,6 +9,7 @@ import {
   MockAiAdapter,
   OpenAiAdapter,
   RedactedConsoleUsageSink,
+  StructuredOutputGateway,
   type AiChatAdapter,
   type AiProviderAdapter,
   type AiProviderName,
@@ -54,6 +55,13 @@ function createAdapter(provider: AiProviderName): AiProviderAdapter & AiChatAdap
         model: environment.providerModels.openai,
       });
   }
+}
+
+export function createServerStructuredOutputGateway(
+  provider: AiProviderName,
+  usageSink: UsageSink,
+): StructuredOutputGateway {
+  return new StructuredOutputGateway(createAdapter(provider), usageSink);
 }
 
 export function createServerAiGateway(

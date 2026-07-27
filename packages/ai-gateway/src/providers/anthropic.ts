@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import { AiGatewayError } from '../errors';
-import { PLANNER_PROVIDER_JSON_SCHEMA } from '../provider-schema';
 import type {
   AiChatAdapter,
   AiProviderAdapter,
@@ -188,12 +187,12 @@ export class AnthropicAdapter implements AiProviderAdapter, AiChatAdapter {
   async complete(request: ProviderCompletionRequest): Promise<ProviderCompletion> {
     const raw = await postJson({
       body: {
-        max_tokens: 12_000,
+        max_tokens: request.maxOutputTokens,
         messages: [{ content: request.userPrompt, role: 'user' }],
         model: this.model,
         output_config: {
           format: {
-            schema: PLANNER_PROVIDER_JSON_SCHEMA,
+            schema: request.jsonSchema,
             type: 'json_schema',
           },
         },

@@ -47,7 +47,12 @@ export type PlannerRequest = z.infer<typeof PlannerRequestSchema>;
 
 export interface ProviderCompletionRequest {
   readonly attempt: number;
-  readonly plannerRequest: PlannerRequest;
+  readonly jsonSchema: Readonly<Record<string, unknown>>;
+  readonly maxOutputTokens: number;
+  readonly mockOutput?: unknown;
+  readonly operation: 'website_generation' | 'workflow_plan';
+  readonly plannerRequest?: PlannerRequest;
+  readonly schemaName: string;
   readonly signal?: AbortSignal;
   readonly systemPrompt: string;
   readonly userPrompt: string;
@@ -123,7 +128,7 @@ export interface UsageRecord {
   readonly durationMs: number;
   readonly inputTokens: number;
   readonly model: string;
-  readonly operation: 'chat' | 'workflow_plan';
+  readonly operation: 'chat' | 'website_generation' | 'workflow_plan';
   readonly outcome: 'cancelled' | 'failed' | 'invalid' | 'succeeded';
   readonly outputTokens: number;
   readonly provider: AiProviderName;

@@ -6,6 +6,7 @@ import {
   completeWebsiteBrief,
   websiteBriefProgress,
 } from './website';
+import { WebsiteSpecSchema, createWebsiteSpecForBriefSchema } from './spec';
 
 const completeBrief = {
   audience: '營運團隊與需要安全自動化工具的中小企業使用者。',
@@ -56,5 +57,147 @@ describe('Website brief validation', () => {
     ).toThrow();
     expect(() => WebsiteBriefDraftSchema.parse({ callsToAction: ['Start', 'start'] })).toThrow();
     expect(() => WebsiteBriefPatchSchema.parse({ providerApiKey: 'secret' })).toThrow();
+  });
+});
+
+const validWebsiteSpec = {
+  assets: [],
+  locale: 'zh-Hant',
+  name: 'AI Workflow Studio',
+  navigation: {
+    brandLabel: 'AI Workflow Studio',
+    items: [{ label: '首頁', pageSlug: 'home' }],
+  },
+  pages: [
+    {
+      metaDescription: '安全建立、驗證並核准自動化網站工作流程。',
+      sections: [
+        {
+          body: '將自然語言需求轉成可檢視、可核准的網站結構。',
+          id: 'home-hero',
+          layout: 'split',
+          primaryAction: {
+            label: '免費開始',
+            target: { channel: 'form', kind: 'contact' },
+          },
+          title: '安全建立網站工作流程',
+          type: 'hero',
+        },
+        {
+          copyright: 'AI Workflow Studio · 保留所有權利',
+          id: 'home-footer',
+          links: [
+            {
+              label: '首頁',
+              target: { kind: 'page', pageSlug: 'home' },
+            },
+          ],
+          type: 'footer',
+        },
+      ],
+      slug: 'home',
+      title: '首頁',
+    },
+  ],
+  schemaVersion: 1,
+  theme: {
+    appearance: 'light',
+    density: 'airy',
+    palette: 'indigo-mint',
+    radius: 'rounded',
+    typography: 'modern-sans',
+  },
+} as const;
+
+describe('Website Spec validation', () => {
+  it('accepts only registered, internally linked component JSON', () => {
+    const spec = WebsiteSpecSchema.parse(validWebsiteSpec);
+    expect(spec.pages[0]?.sections.map((section) => section.type)).toEqual(['hero', 'footer']);
+  });
+
+  it('rejects executable content, arbitrary URLs, and unknown components', () => {
+    expect(() =>
+      WebsiteSpecSchema.parse({
+        ...validWebsiteSpec,
+        pages: [
+          {
+            ...validWebsiteSpec.pages[0],
+            sections: [
+              {
+                body: 'Run this command now: pnpm exec node unsafe.js',
+                id: 'unsafe',
+                layout: 'text',
+                title: 'Unsafe content',
+                type: 'content',
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      WebsiteSpecSchema.parse({
+        ...validWebsiteSpec,
+        navigation: {
+          ...validWebsiteSpec.navigation,
+          items: [{ label: '外部網站', pageSlug: 'https://example.com' }],
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      WebsiteSpecSchema.parse({
+        ...validWebsiteSpec,
+        pages: [
+          {
+            ...validWebsiteSpec.pages[0],
+            sections: [{ code: 'alert(1)', id: 'custom', type: 'custom-html' }],
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it('rejects missing page, section, and asset references', () => {
+    expect(() =>
+      WebsiteSpecSchema.parse({
+        ...validWebsiteSpec,
+        assets: [],
+        pages: [
+          {
+            ...validWebsiteSpec.pages[0],
+            sections: [
+              {
+                assetId: 'missing-asset',
+                body: '足夠長度的安全內容，不包含外部網址或程式碼。',
+                id: 'home-content',
+                layout: 'image-left',
+                title: '內容介紹',
+                type: 'content',
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      WebsiteSpecSchema.parse({
+        ...validWebsiteSpec,
+        navigation: {
+          ...validWebsiteSpec.navigation,
+          items: [{ label: '不存在', pageSlug: 'missing' }],
+        },
+      }),
+    ).toThrow();
+  });
+
+  it('requires generated pages to exactly match the validated brief', () => {
+    const brief = completeWebsiteBrief(WebsiteBriefDraftSchema.parse(completeBrief));
+    expect(createWebsiteSpecForBriefSchema(brief).parse(validWebsiteSpec).pages).toHaveLength(1);
+    expect(() =>
+      createWebsiteSpecForBriefSchema({
+        ...brief,
+        pages: [...brief.pages, { goal: '說明方案內容與價格。', slug: 'pricing', title: '方案' }],
+      }).parse(validWebsiteSpec),
+    ).toThrow();
   });
 });

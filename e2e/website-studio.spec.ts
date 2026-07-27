@@ -50,6 +50,13 @@ test('collects every guided decision before creating a locked website draft', as
   await expect(page.getByText('已建立通過驗證的網站草稿；發布功能仍維持鎖定。')).toBeVisible();
   await expect(page.getByText('草稿已鎖定', { exact: true })).toBeVisible();
   await expect(page.getByText('此草稿會保持鎖定，直到版本化編輯階段開放。')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '將需求轉成安全的網站結構' })).toBeVisible();
+  await expect(page.getByText('Mock Studio')).toBeVisible();
+  await expect(page.getByText('開發測試')).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('mock-website-spec-v1');
+  await page.getByRole('button', { name: '產生已驗證網站規格' }).click();
+  await expect(page.getByText('網站規格已通過驗證')).toBeVisible();
+  await expect(page.getByText('響應式預覽畫布將於 Phase 25 開放')).toBeVisible();
 
   const projectId = new URL(page.url()).pathname.split('/').at(-1);
   expect(projectId).toBeDefined();
@@ -62,6 +69,31 @@ test('collects every guided decision before creating a locked website draft', as
     };
   };
   expect(payload.project).toMatchObject({ completedSteps: 6, status: 'draft' });
+
+  const generatedAgain = await page.request.post(`/api/websites/${projectId!}/spec`, {
+    data: { locale: 'zh-Hant', model: 'mock' },
+  });
+  expect(generatedAgain.status()).toBe(201);
+  const generatedPayload = (await generatedAgain.json()) as {
+    readonly generation: {
+      readonly model?: string;
+      readonly spec: {
+        readonly pages: readonly {
+          readonly sections: readonly { readonly type: string }[];
+        }[];
+        readonly schemaVersion: number;
+      };
+      readonly version: number;
+    };
+  };
+  expect(generatedPayload.generation.model).toBeUndefined();
+  expect(generatedPayload.generation.version).toBe(1);
+  expect(generatedPayload.generation.spec.schemaVersion).toBe(1);
+  expect(
+    generatedPayload.generation.spec.pages.flatMap((generatedPage) =>
+      generatedPage.sections.map((section) => section.type),
+    ),
+  ).toEqual(['hero', 'feature-grid', 'cta', 'footer']);
 
   const lockedUpdate = await page.request.patch(`/api/websites/${projectId!}`, {
     data: { purpose: 'This update must remain locked after draft creation.' },

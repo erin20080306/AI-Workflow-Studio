@@ -3,6 +3,7 @@ import type { WorkflowValidationIssue } from '@ai-workflow-studio/workflow-schem
 import { AiGatewayError } from './errors';
 import { parseStrictPlannerOutput } from './json';
 import { buildPlannerUserPrompt, PLANNER_SYSTEM_PROMPT } from './prompts';
+import { PLANNER_PROVIDER_JSON_SCHEMA } from './provider-schema';
 import type {
   AiProviderAdapter,
   PlannerRequest,
@@ -52,7 +53,11 @@ export class AiGateway {
       try {
         completion = await this.adapter.complete({
           attempt,
+          jsonSchema: PLANNER_PROVIDER_JSON_SCHEMA,
+          maxOutputTokens: 12_000,
+          operation: 'workflow_plan',
           plannerRequest: request,
+          schemaName: 'workflow_plan',
           ...(signal === undefined ? {} : { signal }),
           systemPrompt: PLANNER_SYSTEM_PROMPT,
           userPrompt: buildPlannerUserPrompt(request, priorIssues),

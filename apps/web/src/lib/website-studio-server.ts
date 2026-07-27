@@ -34,7 +34,11 @@ const WebsiteProjectRowSchema = z.object({
 });
 
 export type WebsiteStudioErrorCode =
-  'WEBSITE_FORBIDDEN' | 'WEBSITE_INVALID' | 'WEBSITE_NOT_FOUND' | 'WEBSITE_STATE_CONFLICT';
+  | 'WEBSITE_FORBIDDEN'
+  | 'WEBSITE_INVALID'
+  | 'WEBSITE_NOT_FOUND'
+  | 'WEBSITE_PROVIDER_UNAVAILABLE'
+  | 'WEBSITE_STATE_CONFLICT';
 
 export class WebsiteStudioError extends Error {
   readonly code: WebsiteStudioErrorCode;

@@ -9,6 +9,7 @@ import {
   type WebsiteBriefStep,
   type WebsitePage,
   type WebsiteProject,
+  type WebsiteSpecClientGeneration,
 } from '@ai-workflow-studio/website-schema';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -24,6 +25,8 @@ import {
   SparkIcon,
 } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
+import { WebsiteSpecGenerator } from '@/components/sites/website-spec-generator';
+import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
 
 const ProjectResponseSchema = z.object({ project: WebsiteProjectSchema });
 
@@ -43,11 +46,12 @@ const copy = {
       'This phase creates a structured project draft only. It cannot publish, run code, or access credentials.',
     goal: 'Page goal',
     locked: 'This draft is locked until versioned editing is introduced.',
-    modelLater: 'OpenAI, Claude, Gemini, and Auto guidance arrive in the next gated phase.',
+    modelLater:
+      'After the brief is locked, choose Auto, OpenAI, Claude, or Gemini to generate a validated component specification.',
     next: 'Save and continue',
     pageSlug: 'URL slug',
     pageTitle: 'Page title',
-    phase: 'Foundation · Phase 23',
+    phase: 'Website Studio · Phase 24',
     progress: 'Brief progress',
     publish: 'Publishing unavailable until Phase 27',
     remove: 'Remove',
@@ -101,11 +105,11 @@ const copy = {
     draftHelp: '本階段只建立結構化專案草稿，不會發布網站、執行程式碼或讀取憑證。',
     goal: '頁面任務',
     locked: '此草稿會保持鎖定，直到版本化編輯階段開放。',
-    modelLater: 'OpenAI、Claude、Gemini 與 Auto 引導會在下一個安全階段加入。',
+    modelLater: '需求鎖定後，可選擇 Auto、OpenAI、Claude 或 Gemini 產生已驗證元件規格。',
     next: '儲存並繼續',
     pageSlug: '網址代稱',
     pageTitle: '頁面名稱',
-    phase: '基礎階段 · Phase 23',
+    phase: '網站工作室 · Phase 24',
     progress: '需求完成度',
     publish: '發布功能將於 Phase 27 開放',
     remove: '移除',
@@ -157,9 +161,13 @@ function updatePageField(
 }
 
 export function WebsiteBriefWorkspace({
+  initialGeneration,
   initialProject,
+  modelOptions,
 }: Readonly<{
+  initialGeneration: WebsiteSpecClientGeneration | undefined;
   initialProject: WebsiteProject;
+  modelOptions: readonly WebsiteGenerationModelOption[];
 }>) {
   const { locale } = useLanguage();
   const text = copy[locale];
@@ -550,6 +558,16 @@ export function WebsiteBriefWorkspace({
           </section>
         </aside>
       </div>
+
+      {locked ? (
+        <div className="mt-5">
+          <WebsiteSpecGenerator
+            initialGeneration={initialGeneration}
+            modelOptions={modelOptions}
+            projectId={project.id}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

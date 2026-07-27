@@ -162,13 +162,16 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
       body: {
         input: request.userPrompt,
         instructions: request.systemPrompt,
-        max_output_tokens: 12_000,
+        max_output_tokens: request.maxOutputTokens,
         model: this.model,
         reasoning: { effort: 'medium' },
         store: false,
         text: {
           format: {
-            type: 'json_object',
+            name: request.schemaName,
+            schema: request.jsonSchema,
+            strict: true,
+            type: 'json_schema',
           },
         },
       },

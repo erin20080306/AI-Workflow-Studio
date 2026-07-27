@@ -49,6 +49,24 @@ export class MockAiAdapter implements AiProviderAdapter, AiChatAdapter {
   }
 
   async complete(request: ProviderCompletionRequest): Promise<ProviderCompletion> {
+    if (request.operation === 'website_generation') {
+      const text = JSON.stringify(request.mockOutput ?? {});
+      const inputTokens = estimateTokens(request.systemPrompt + request.userPrompt);
+      const outputTokens = estimateTokens(text);
+      return {
+        model: 'mock-website-spec-v1',
+        requestId: `mock-website-${request.attempt}`,
+        text,
+        usage: {
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+        },
+      };
+    }
+    if (request.plannerRequest === undefined) {
+      throw new Error('Mock workflow planning requires a planner request.');
+    }
     const { executionTarget } = request.plannerRequest.context;
     const folderAliasId = request.plannerRequest.context.allowedFolderAliasIds[0];
     const workflow =

@@ -39,7 +39,7 @@ test, and build checks and has been committed.
 | 21    | Schedules and connectors      | Recurring runs and selected business connectors pass integration tests           | completed |
 | 22    | Usage and operations          | Provider usage, quotas, billing controls, and production observability pass      | completed |
 | 23    | Website Studio foundation     | Guided briefs create validated, tenant-isolated website projects                 | completed |
-| 24    | AI website specification      | Multi-model guidance produces only validated component and content specs         | pending   |
+| 24    | AI website specification      | Multi-model guidance produces only validated component and content specs         | completed |
 | 25    | Responsive preview canvas     | Sandboxed desktop, tablet, and mobile previews remain isolated and deterministic | pending   |
 | 26    | Visual editing and versions   | Natural-language and direct edits are reversible, versioned, and auditable       | pending   |
 | 27    | Website publishing            | Approved builds pass quality gates and deploy without exposing credentials       | pending   |

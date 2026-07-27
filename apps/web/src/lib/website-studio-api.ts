@@ -7,6 +7,7 @@ const statusByCode: Readonly<Record<WebsiteStudioError['code'], number>> = {
   WEBSITE_FORBIDDEN: 403,
   WEBSITE_INVALID: 400,
   WEBSITE_NOT_FOUND: 404,
+  WEBSITE_PROVIDER_UNAVAILABLE: 503,
   WEBSITE_STATE_CONFLICT: 409,
 };
 

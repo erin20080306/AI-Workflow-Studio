@@ -75,7 +75,11 @@ describe('AiGateway', () => {
   it('repairs an invalid first response once and aggregates usage', async () => {
     const mockCompletion = await new MockAiAdapter().complete({
       attempt: 2,
+      jsonSchema: {},
+      maxOutputTokens: 12_000,
+      operation: 'workflow_plan',
       plannerRequest,
+      schemaName: 'workflow_plan',
       systemPrompt: 'system',
       userPrompt: 'user',
     });

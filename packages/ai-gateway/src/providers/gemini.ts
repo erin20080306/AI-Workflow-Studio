@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import { AiGatewayError } from '../errors';
-import { PLANNER_PROVIDER_JSON_SCHEMA } from '../provider-schema';
 import type {
   AiChatAdapter,
   AiProviderAdapter,
@@ -163,8 +162,9 @@ export class GeminiAdapter implements AiProviderAdapter, AiChatAdapter {
           },
         ],
         generationConfig: {
+          maxOutputTokens: request.maxOutputTokens,
           responseMimeType: 'application/json',
-          responseSchema: PLANNER_PROVIDER_JSON_SCHEMA,
+          responseSchema: request.jsonSchema,
         },
         systemInstruction: {
           parts: [{ text: request.systemPrompt }],

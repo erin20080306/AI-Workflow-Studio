@@ -78,6 +78,41 @@ values
     '{"purpose":"Tenant B private purpose"}'
   );
 
+insert into public.website_specs (
+  tenant_id,
+  project_id,
+  version_number,
+  schema_version,
+  provider,
+  model,
+  attempts,
+  spec,
+  created_by
+)
+values
+  (
+    'e2000000-0000-4000-8000-000000000001',
+    'e3000000-0000-4000-8000-000000000001',
+    1,
+    1,
+    'openai',
+    'test-model-a',
+    1,
+    '{"schemaVersion":1,"name":"Tenant A private spec"}',
+    'e1000000-0000-4000-8000-000000000001'
+  ),
+  (
+    'e2000000-0000-4000-8000-000000000002',
+    'e3000000-0000-4000-8000-000000000002',
+    1,
+    1,
+    'gemini',
+    'test-model-b',
+    1,
+    '{"schemaVersion":1,"name":"Tenant B private spec"}',
+    'e1000000-0000-4000-8000-000000000002'
+  );
+
 reset role;
 set local role authenticated;
 select set_config(
@@ -92,12 +127,33 @@ select tests.assert_true(
 );
 
 select tests.assert_true(
+  (select count(*) from public.website_specs) = 1,
+  'a member must only see website specs from their tenant'
+);
+
+select tests.assert_true(
+  not exists (
+    select 1
+    from public.website_specs
+    where project_id = 'e3000000-0000-4000-8000-000000000002'
+  ),
+  'a tenant member must not read another tenant website spec'
+);
+
+select tests.assert_true(
   not exists (
     select 1
     from public.website_projects
     where id = 'e3000000-0000-4000-8000-000000000002'
   ),
   'a tenant member must not read another tenant website brief'
+);
+
+select tests.assert_true(
+  not has_table_privilege('authenticated', 'public.website_specs', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_specs', 'update')
+  and not has_table_privilege('authenticated', 'public.website_specs', 'delete'),
+  'website spec mutations must remain behind authenticated server routes'
 );
 
 select tests.assert_true(

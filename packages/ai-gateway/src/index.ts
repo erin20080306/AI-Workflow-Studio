@@ -1,6 +1,11 @@
 export { AiGatewayError, type AiGatewayErrorCode } from './errors';
 export { AiChatGateway, boundChatMessages, CHAT_SYSTEM_PROMPT } from './chat';
 export { AiGateway } from './gateway';
+export {
+  StructuredOutputGateway,
+  type StructuredOutputRequest,
+  type StructuredOutputResult,
+} from './structured';
 export { parseStrictPlannerOutput, type PlannerOutputValidation } from './json';
 export { PLANNER_PROVIDER_JSON_SCHEMA } from './provider-schema';
 export { buildPlannerUserPrompt, PLANNER_SYSTEM_PROMPT } from './prompts';

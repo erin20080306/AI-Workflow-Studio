@@ -11,6 +11,9 @@ const API_KEY = 'test-api-key-not-a-real-secret';
 
 const completionRequest: ProviderCompletionRequest = {
   attempt: 1,
+  jsonSchema: { properties: {}, type: 'object' },
+  maxOutputTokens: 12_000,
+  operation: 'workflow_plan',
   plannerRequest: {
     context: {
       allowedFolderAliasIds: [FOLDER_ID],
@@ -21,6 +24,7 @@ const completionRequest: ProviderCompletionRequest = {
     maxRepairAttempts: 1,
     prompt: '建立一份安全且不覆寫來源檔案的 Excel 訂單彙整工作流。',
   },
+  schemaName: 'workflow_plan',
   systemPrompt: 'Return JSON.',
   userPrompt: 'Plan the workflow.',
 };
@@ -87,14 +91,26 @@ describe('provider adapters', () => {
     }).complete(completionRequest);
     const body = JSON.parse(String(capturedInit?.body)) as {
       readonly store: boolean;
-      readonly text: { readonly format: { readonly type: string } };
+      readonly text: {
+        readonly format: {
+          readonly name: string;
+          readonly strict: boolean;
+          readonly type: string;
+        };
+      };
     };
 
     expect(capturedUrl).toBe('https://api.openai.com/v1/responses');
     expect(new Headers(capturedInit?.headers).get('authorization')).toBe(`Bearer ${API_KEY}`);
     expect(body).toMatchObject({
       store: false,
-      text: { format: { type: 'json_object' } },
+      text: {
+        format: {
+          name: 'workflow_plan',
+          strict: true,
+          type: 'json_schema',
+        },
+      },
     });
     expect(String(capturedInit?.body)).not.toContain(API_KEY);
     expect(completion).toMatchObject({

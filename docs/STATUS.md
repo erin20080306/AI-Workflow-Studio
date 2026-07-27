@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 24 — AI website specification (pending)
+Phase 25 — Responsive preview canvas (pending)
 
 ## Repository baseline
 
@@ -1822,3 +1822,80 @@ Status: completed
 ### Commit
 
 - `feat(web): add guided Website Studio foundation` (this phase commit)
+
+## Phase 24 — AI website specification
+
+Status: completed
+
+### Implemented
+
+- Added a strict versioned Website Spec schema that accepts only curated theme
+  tokens, bounded plain text, ID-based asset references, internal actions, and
+  registered Hero, Feature Grid, Stats, Testimonial, Pricing, FAQ, CTA, Content,
+  and Footer sections.
+- Added semantic validation for unique page/section IDs, exact brief-page
+  coverage, navigation/action targets, asset references, and rejection of
+  unknown components, code fences, scripts, HTML, external/data URLs, and
+  executable package, shell, Python, or Node instructions.
+- Generalized the existing OpenAI, Claude, and Gemini structured-output adapters
+  to receive an operation-specific JSON Schema and bounded output limit. OpenAI
+  uses strict Responses API JSON Schema output, while Claude and Gemini receive
+  the same validated provider schema.
+- Added a provider-neutral structured-output gateway with strict JSON parsing, a
+  1 MB response bound, one repair attempt, validation-path-only repair feedback,
+  aggregate usage accounting, and fail-closed output release.
+- Added Auto, OpenAI, Claude, Gemini, and development Mock Website Studio
+  routing. Auto uses the first configured provider, unavailable providers are
+  omitted, and no provider key, configuration flag, or actual model identifier
+  is serialized to the ordinary user interface.
+- Added the bilingual model-and-level selection interface after a brief becomes
+  a draft. It summarizes only the validated specification version, page count,
+  registered section count, provider label, and attempt count; responsive
+  preview and publishing remain visibly gated.
+- Added authenticated idempotent Website Spec generation, Tenant budget
+  reservation, metadata-only audit, viewer blocking, and a server-only
+  persistence path.
+- Added immutable `website_specs` persistence with composite Tenant/project
+  integrity, version uniqueness, RLS member reads, service-role-only mutation,
+  and cross-Tenant isolation coverage.
+- Added administrator setup documentation for OpenAI, Claude, Gemini, and
+  Vercel Sensitive environment variables. Ordinary users never enter API keys.
+- Clarified that assistant source upload is 1 MiB per supported text file and is
+  unavailable in Production only when no AI provider can create the associated
+  conversation. Ask remains read-only; execution still requires a validated
+  versioned plan, review, approval when needed, and an authorized Desktop Agent.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all code workspaces, including Website Spec and
+  structured AI output
+- `pnpm test`: passed — 141 tests across 34 files
+- `pnpm db:test`: passed — fresh migrations, Website Spec RLS, cross-Tenant
+  isolation, browser read-only privileges, and existing idempotent seed coverage
+- `pnpm test:e2e`: passed — eight Chromium paths, including validated Mock
+  Website Spec generation, provider/model-detail hiding, idempotent generation,
+  registered component output, and all earlier assistant/workflow paths
+- `pnpm build:web`: passed — 40 generated pages plus the authenticated Website
+  Spec generation route
+- `pnpm security:scan-client`: passed — 32 built client files inspected
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- Phase 24 creates validated Website Spec JSON only. It does not render a
+  desktop/tablet/mobile preview, edit components, publish code, deploy a site,
+  manage domains, or execute model-generated source.
+- Real OpenAI, Claude, and Gemini network requests require the corresponding
+  server-only Vercel key and provider billing/quota. Tests use deterministic Mock
+  output and secret-free provider transport fixtures.
+- Project briefs and specification version 1 remain locked until reversible
+  editing and additional versions are introduced in Phase 26.
+- The current production deployment has not been changed by this phase. A local
+  build, Git commit, or GitHub push must not be described as a Vercel deployment
+  or published customer website.
+
+### Commit
+
+- `feat(web): add validated multi-model website specs` (this phase commit)
