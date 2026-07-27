@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 18 — Durable multi-model chat (completed)
+Phase 19 — Tool and artifact workspace (completed)
 
 ## Repository baseline
 
@@ -1375,3 +1375,74 @@ Status: completed
   23–27.
 - This phase was not deployed to Production; successful local checks and a
   GitHub push must not be described as a Vercel deployment.
+
+## Phase 19
+
+Status: completed
+
+### Implemented
+
+- Added a strict shared tool registry with only two allowlisted capabilities:
+  bounded source-context preparation and Markdown artifact creation. Every
+  invocation and result is runtime-validated with Zod and carries explicit
+  tenant and conversation authority.
+- Added tenant-isolated attachment, message-source, tool-result, artifact, and
+  artifact-source tables with composite tenant/conversation foreign keys,
+  RLS enabled, direct browser privileges revoked, service-role-only access, and
+  cross-tenant database tests.
+- Added authenticated resource APIs for uploading, listing, and downloading
+  `.txt`, `.md`, `.csv`, and `.json` sources up to 64 KiB, with MIME/extension
+  checks, UTF-8 byte limits, JSON validation, filename sanitization, SHA-256
+  fingerprints, and bounded per-message and per-conversation counts.
+- Added explicit source selection and stable `[S1]` through `[S5]` citations.
+  Sources are delimited as untrusted data and cannot become instructions,
+  tools, filesystem paths, credentials, or executable code.
+- Added auditable Markdown artifacts derived from completed assistant messages,
+  with bounded content, linked source provenance, safe attachment downloads,
+  and tool success/failure records.
+- Reworked the AI Workspace into a responsive Codex-style three-column
+  experience with conversations, chat and Plan composer, attachment chips,
+  source previews, artifact previews, and mobile stacking without horizontal
+  overflow.
+- Kept workflow execution, destructive operations, arbitrary code, shell,
+  JavaScript, Python, unrestricted filesystem access, and Website publishing
+  unavailable. Provider API keys remain server-only and are never returned to
+  ordinary users or embedded in the client bundle.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all code workspaces
+- `pnpm test`: passed — 118 tests across 27 files
+- `pnpm db:test`: passed — fresh migrations, tenant isolation, RLS and
+  service-role restrictions, and idempotent seed tests
+- `pnpm build:web`: passed — Production build includes attachment, artifact,
+  and resource routes plus the updated AI Workspace
+- `pnpm security:scan-client`: passed — 29 built client files inspected
+- `pnpm test:e2e`: passed — 5 Chromium paths, including explicit source
+  citation and auditable Markdown artifact creation
+- Codex in-app browser desktop check: passed at 1440 px — three-column layout,
+  no horizontal overflow, and sources/artifacts remain visually separated
+- Codex in-app browser mobile check: passed at 390 px — stacked layout and no
+  horizontal overflow
+- Fresh Production preview console check: passed — no browser errors
+
+### Known limitations
+
+- Live OpenAI, Claude, and Gemini choices remain unavailable until their
+  respective server-only Vercel variables are configured and a new deployment
+  is completed.
+- Accepted sources are intentionally limited to UTF-8 text, Markdown, CSV, and
+  JSON. PDF, image OCR, large-file storage, and retrieval indexing are deferred.
+- Tools prepare context or create downloadable Markdown only; they cannot run a
+  workflow. Reviewed dispatch and explicit approvals begin in Phase 20.
+- Website Studio, its guided website specification, sandboxed responsive
+  preview canvas, reversible editing, and publishing remain scheduled for
+  Phases 23–27.
+- This phase was not deployed to Production; successful local checks and a
+  GitHub push must not be described as a Vercel deployment.
+
+### Commit
+
+- `feat(web): add bounded sources and artifacts` (this phase commit)

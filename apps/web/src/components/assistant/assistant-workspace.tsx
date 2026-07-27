@@ -1,7 +1,11 @@
 'use client';
 
 import { AIPlannerOutputSchema, type AIPlannerOutput } from '@ai-workflow-studio/workflow-schema';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_ATTACHMENT_BYTES,
+} from '@ai-workflow-studio/tool-registry';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { z } from 'zod';
 
 import {
@@ -18,6 +22,7 @@ import {
   AssistantConversationListResponseSchema,
   AssistantConversationResponseSchema,
   AssistantConversationMessageSchema,
+  AssistantConversationSummarySchema,
   type AssistantConversationMessage,
   type AssistantConversationMode,
   type AssistantConversationSummary,
@@ -27,6 +32,13 @@ import {
   type AssistantModelId,
   type AssistantModelOption,
 } from '@/lib/assistant-models';
+import {
+  AssistantArtifactSummarySchema,
+  AssistantAttachmentSummarySchema,
+  AssistantResourcesResponseSchema,
+  type AssistantArtifactSummary,
+  type AssistantAttachmentSummary,
+} from '@/lib/assistant-resource-schema';
 import { MOCK_DEVICE_ID, MOCK_FOLDER_ALIAS_ID, NODE_PRESENTATION } from '@/lib/mock-workflows';
 
 const PlannerResponseSchema = z
@@ -40,13 +52,29 @@ const PlannerResponseSchema = z
   })
   .passthrough();
 
+const ConversationCreateResponseSchema = z
+  .object({ conversation: AssistantConversationSummarySchema })
+  .strict();
+const AttachmentUploadResponseSchema = z
+  .object({ attachment: AssistantAttachmentSummarySchema })
+  .strict();
+const ArtifactCreateResponseSchema = z
+  .object({ artifact: AssistantArtifactSummarySchema })
+  .strict();
+
 const copy = {
   en: {
     ask: 'Ask',
     askBody:
-      'Ask mode streams an explanation and saves the conversation. It cannot call tools or perform actions.',
+      'Ask mode streams an explanation, saves the conversation, and may read only the sources you explicitly select. It cannot run workflow actions.',
     assistant: 'AI Workspace',
-    attachment: 'Attachments · Phase 19',
+    artifact: 'Create Markdown',
+    artifactCreated: 'Markdown artifact created',
+    artifacts: 'Artifacts',
+    attachment: 'Add source',
+    attachmentHelp: '.txt, .md, .csv, or .json · up to 64 KB',
+    attachmentLimit: 'Select up to 5 sources for one message.',
+    attachmentTooLarge: 'The source must be 64 KB or smaller.',
     cancelled: 'Generation stopped. The partial response was kept for audit.',
     configured: 'Ready',
     conversations: 'Conversations',
@@ -70,18 +98,19 @@ const copy = {
       'Ask how to design a safe workflow, compare approaches, or clarify requirements…',
     placeholderPlan:
       'Example: Every weekday, consolidate Excel orders, remove duplicates, and prepare a report for review.',
-    promptHelpAsk: 'Ask mode saves the conversation but never runs tools.',
+    promptHelpAsk: 'Ask mode can read selected sources but never runs workflow actions.',
     promptHelpPlan: 'Use at least 12 characters. The plan remains a draft.',
     promptShortAsk: 'Please enter at least 2 characters.',
     promptShortPlan: 'Please describe the plan in at least 12 characters.',
     run: 'Run',
     runLater: 'Phase 20',
     safetyBody:
-      'Provider keys remain server-only. Context is bounded, usage is recorded, and no tool contract is available in this phase.',
-    safetyTitle: 'Streaming without tool authority',
+      'Provider keys remain server-only. Only explicit source reads and user-triggered Markdown artifacts are available; both are bounded, Tenant-isolated, and audited.',
+    safetyTitle: 'Bounded, auditable tools',
     sendAsk: 'Send',
     sendPlan: 'Create plan',
-    stage: 'Phase 18',
+    sources: 'Sources',
+    stage: 'Phase 19',
     steps: 'steps',
     stop: 'Stop generating',
     streaming: 'Generating…',
@@ -91,9 +120,15 @@ const copy = {
   },
   'zh-Hant': {
     ask: '詢問',
-    askBody: '詢問模式會串流說明並保存對話，但不能呼叫工具或執行任何動作。',
+    askBody: '詢問模式會串流說明並保存對話，只能讀取你明確選取的來源，不能執行工作流動作。',
+    artifact: '建立 Markdown',
+    artifactCreated: '已建立 Markdown 產出',
+    artifacts: '產出檔案',
     assistant: 'AI 工作台',
-    attachment: '附件 · Phase 19',
+    attachment: '加入來源',
+    attachmentHelp: '.txt、.md、.csv 或 .json，最多 64 KB',
+    attachmentLimit: '每則訊息最多選取 5 個來源。',
+    attachmentTooLarge: '來源檔案必須小於或等於 64 KB。',
     cancelled: '已停止產生；部分回應會保留以供稽核。',
     configured: '已就緒',
     conversations: '對話紀錄',
@@ -114,17 +149,19 @@ const copy = {
     planHeading: '計畫檢視',
     placeholderAsk: '詢問如何設計安全工作流、比較做法，或協助釐清需求⋯',
     placeholderPlan: '例如：每個工作日整合 Excel 訂單、移除重複資料，再產生一份供我檢查的報表。',
-    promptHelpAsk: '詢問模式會保存對話，但絕不執行工具。',
+    promptHelpAsk: '詢問模式可讀取已選來源，但絕不執行工作流動作。',
     promptHelpPlan: '至少輸入 12 個字；產生的計畫仍是草稿。',
     promptShortAsk: '請至少輸入 2 個字。',
     promptShortPlan: '請至少用 12 個字完整描述規劃需求。',
     run: '執行',
     runLater: 'Phase 20',
-    safetyBody: 'Provider 金鑰只在伺服器；對話內容有上限、用量會記錄，本階段沒有任何工具權限。',
-    safetyTitle: '可串流，但沒有工具權限',
+    safetyBody:
+      'Provider 金鑰只在伺服器。本階段只開放「明確來源讀取」與「使用者觸發的 Markdown 產出」，都有上限、Tenant 隔離與稽核紀錄。',
+    safetyTitle: '受限且可稽核的工具',
     sendAsk: '送出',
     sendPlan: '建立計畫',
-    stage: 'Phase 18',
+    sources: '參考來源',
+    stage: 'Phase 19',
     steps: '個步驟',
     stop: '停止產生',
     streaming: '產生中⋯',
@@ -188,7 +225,13 @@ export function AssistantWorkspace({
   const [conversationId, setConversationId] = useState<string>();
   const [conversations, setConversations] = useState<readonly AssistantConversationSummary[]>([]);
   const [messages, setMessages] = useState<readonly AssistantConversationMessage[]>([]);
+  const [attachments, setAttachments] = useState<readonly AssistantAttachmentSummary[]>([]);
+  const [artifacts, setArtifacts] = useState<readonly AssistantArtifactSummary[]>([]);
+  const [selectedAttachmentIds, setSelectedAttachmentIds] = useState<readonly string[]>([]);
+  const [resourceStatus, setResourceStatus] = useState<string>();
+  const [uploading, setUploading] = useState(false);
   const abortRef = useRef<AbortController | undefined>(undefined);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cancelledRef = useRef(false);
   const streamingBodyRef = useRef('');
   const resolvedProvider = useMemo(
@@ -213,12 +256,33 @@ export function AssistantWorkspace({
     void refreshConversations();
   }, []);
 
+  async function refreshResources(id: string): Promise<void> {
+    const response = await fetch(`/api/ai/resources?conversationId=${encodeURIComponent(id)}`, {
+      cache: 'no-store',
+    });
+    const parsed = AssistantResourcesResponseSchema.safeParse(await response.json());
+    if (!response.ok || !parsed.success) {
+      throw new Error('Invalid assistant resources response');
+    }
+    setAttachments(parsed.data.attachments);
+    setArtifacts(parsed.data.artifacts);
+    setSelectedAttachmentIds((current) =>
+      current.filter((attachmentId) =>
+        parsed.data.attachments.some((attachment) => attachment.id === attachmentId),
+      ),
+    );
+  }
+
   function resetConversation(): void {
     if (pending) {
       return;
     }
     setConversationId(undefined);
     setMessages([]);
+    setAttachments([]);
+    setArtifacts([]);
+    setSelectedAttachmentIds([]);
+    setResourceStatus(undefined);
     setPlan(undefined);
     setPrompt('');
     setPromptError(undefined);
@@ -251,10 +315,114 @@ export function AssistantWorkspace({
       setPromptError(undefined);
       setStreamingBody('');
       streamingBodyRef.current = '';
+      await refreshResources(parsed.data.conversation.id);
     } catch {
       setPromptError('unavailable');
     } finally {
       setLoadingHistory(false);
+    }
+  }
+
+  async function ensureResourceConversation(): Promise<string> {
+    if (conversationId !== undefined) {
+      return conversationId;
+    }
+    if (resolvedProvider === undefined) {
+      throw new Error('No provider');
+    }
+    const response = await fetch('/api/ai/conversations', {
+      body: JSON.stringify({
+        mode,
+        provider: resolvedProvider,
+        title: locale === 'en' ? 'Source workspace' : '來源工作區',
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    });
+    const parsed = ConversationCreateResponseSchema.safeParse(await response.json());
+    if (!response.ok || !parsed.success) {
+      throw new Error('Conversation could not be created');
+    }
+    setConversationId(parsed.data.conversation.id);
+    await refreshConversations();
+    return parsed.data.conversation.id;
+  }
+
+  async function uploadSource(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file === undefined) {
+      return;
+    }
+    if (file.size < 1 || file.size > MAX_ATTACHMENT_BYTES) {
+      setResourceStatus(text.attachmentTooLarge);
+      return;
+    }
+    setUploading(true);
+    setResourceStatus(undefined);
+    try {
+      const id = await ensureResourceConversation();
+      const response = await fetch('/api/ai/attachments', {
+        body: JSON.stringify({
+          content: await file.text(),
+          conversationId: id,
+          filename: file.name,
+          mimeType: file.type,
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const parsed = AttachmentUploadResponseSchema.safeParse(await response.json());
+      if (!response.ok || !parsed.success) {
+        throw new Error('Source upload failed');
+      }
+      await refreshResources(id);
+      setSelectedAttachmentIds((current) => [...current, parsed.data.attachment.id].slice(-5));
+    } catch {
+      setResourceStatus(text.error);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function toggleAttachment(attachmentId: string): void {
+    setResourceStatus(undefined);
+    setSelectedAttachmentIds((current) => {
+      if (current.includes(attachmentId)) {
+        return current.filter((id) => id !== attachmentId);
+      }
+      if (current.length >= MAX_ATTACHMENTS_PER_MESSAGE) {
+        setResourceStatus(text.attachmentLimit);
+        return current;
+      }
+      return [...current, attachmentId];
+    });
+  }
+
+  async function createArtifact(message: AssistantConversationMessage): Promise<void> {
+    if (conversationId === undefined || message.role !== 'assistant') {
+      return;
+    }
+    setResourceStatus(undefined);
+    try {
+      const response = await fetch('/api/ai/artifacts', {
+        body: JSON.stringify({
+          conversationId,
+          messageId: message.id,
+          sourceAttachmentIds: selectedAttachmentIds,
+          title: currentTitle,
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const parsed = ArtifactCreateResponseSchema.safeParse(await response.json());
+      if (!response.ok || !parsed.success) {
+        throw new Error('Artifact creation failed');
+      }
+      await refreshResources(conversationId);
+      setResourceStatus(text.artifactCreated);
+    } catch {
+      setResourceStatus(text.error);
     }
   }
 
@@ -278,6 +446,7 @@ export function AssistantWorkspace({
     abortRef.current = controller;
     const response = await fetch('/api/ai/chat', {
       body: JSON.stringify({
+        attachmentIds: selectedAttachmentIds,
         ...(conversationId === undefined ? {} : { conversationId }),
         locale,
         message: requestPrompt,
@@ -352,6 +521,7 @@ export function AssistantWorkspace({
     abortRef.current = controller;
     const response = await fetch('/api/ai/plan', {
       body: JSON.stringify({
+        attachmentIds: selectedAttachmentIds,
         ...(conversationId === undefined ? {} : { conversationId }),
         context: {
           allowedFolderAliasIds: mockMode ? [MOCK_FOLDER_ALIAS_ID] : [],
@@ -408,6 +578,9 @@ export function AssistantWorkspace({
         await sendPlan(requestPrompt, optimisticUser);
       }
       await refreshConversations();
+      if (conversationId !== undefined) {
+        await refreshResources(conversationId);
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         cancelledRef.current = true;
@@ -461,7 +634,7 @@ export function AssistantWorkspace({
       </header>
 
       <div className="assistant-workspace-grid grid min-h-[700px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <aside className="border-b border-slate-200 bg-slate-950 p-4 text-white">
+        <aside className="border-slate-200 bg-slate-950 p-4 text-white">
           <button
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 disabled:opacity-50"
             disabled={pending}
@@ -600,9 +773,21 @@ export function AssistantWorkspace({
                 >
                   <p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p>
                   {message.role === 'assistant' && (
-                    <p className="mt-2 font-mono text-[10px] text-slate-400">
-                      {message.provider} · {message.model} · {message.status}
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-mono text-[10px] text-slate-400">
+                        {message.provider} · {message.model} · {message.status}
+                      </p>
+                      {message.status === 'completed' && (
+                        <button
+                          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-indigo-700 transition hover:border-indigo-300"
+                          disabled={pending}
+                          onClick={() => void createArtifact(message)}
+                          type="button"
+                        >
+                          {text.artifact}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </article>
@@ -633,6 +818,32 @@ export function AssistantWorkspace({
                 {text.noProvider}
               </div>
             )}
+            {attachments.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {attachments.map((attachment) => {
+                  const selected = selectedAttachmentIds.includes(attachment.id);
+                  const citationIndex = selectedAttachmentIds.indexOf(attachment.id);
+                  return (
+                    <button
+                      aria-pressed={selected}
+                      className={`max-w-full truncate rounded-full border px-2.5 py-1 text-[10px] font-semibold transition ${
+                        selected
+                          ? 'border-indigo-300 bg-indigo-50 text-indigo-800'
+                          : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                      }`}
+                      disabled={pending}
+                      key={attachment.id}
+                      onClick={() => toggleAttachment(attachment.id)}
+                      title={attachment.filename}
+                      type="button"
+                    >
+                      {selected ? `[S${citationIndex + 1}] ` : ''}
+                      {attachment.filename}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="rounded-2xl border border-slate-300 bg-white p-3 shadow-sm focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-50">
               <textarea
                 aria-describedby="assistant-prompt-help"
@@ -647,13 +858,24 @@ export function AssistantWorkspace({
                 value={prompt}
               />
               <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                <button
-                  className="cursor-not-allowed rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-slate-400"
-                  disabled
-                  type="button"
-                >
-                  + {text.attachment}
-                </button>
+                <div>
+                  <input
+                    accept=".txt,.md,.markdown,.csv,.json,application/json,text/csv,text/markdown,text/plain"
+                    className="sr-only"
+                    onChange={(event) => void uploadSource(event)}
+                    ref={fileInputRef}
+                    type="file"
+                  />
+                  <button
+                    className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700 disabled:cursor-not-allowed disabled:text-slate-300"
+                    disabled={pending || uploading || resolvedProvider === undefined}
+                    onClick={() => fileInputRef.current?.click()}
+                    type="button"
+                  >
+                    + {uploading ? text.streaming : text.attachment}
+                  </button>
+                  <p className="mt-1 text-[9px] text-slate-400">{text.attachmentHelp}</p>
+                </div>
                 {pending ? (
                   <button
                     className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
@@ -697,6 +919,11 @@ export function AssistantWorkspace({
                         ? text.promptHelpAsk
                         : text.promptHelpPlan}
               </p>
+              {resourceStatus !== undefined && (
+                <p className="text-[10px] font-semibold text-indigo-700" role="status">
+                  {resourceStatus}
+                </p>
+              )}
               <div aria-label="Assistant mode" className="flex items-center gap-1" role="group">
                 <button
                   aria-pressed={mode === 'ask'}
@@ -742,7 +969,7 @@ export function AssistantWorkspace({
           </form>
         </section>
 
-        <aside className="border-t border-slate-200 bg-slate-50 p-5">
+        <aside className="border-slate-200 bg-slate-50 p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-600">
@@ -805,6 +1032,57 @@ export function AssistantWorkspace({
               </div>
             </div>
           )}
+
+          <div className="mt-6 border-t border-slate-200 pt-5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              {text.sources}
+            </p>
+            {attachments.length === 0 ? (
+              <p className="mt-2 text-[10px] leading-5 text-slate-400">{text.attachmentHelp}</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {attachments.map((attachment) => (
+                  <a
+                    className="block rounded-xl border border-slate-200 bg-white p-3 transition hover:border-indigo-300"
+                    href={`/api/ai/attachments/${encodeURIComponent(attachment.id)}`}
+                    key={attachment.id}
+                  >
+                    <p className="truncate text-[10px] font-semibold text-slate-800">
+                      {attachment.filename}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-[9px] leading-4 text-slate-400">
+                      {attachment.preview}
+                    </p>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 border-t border-slate-200 pt-5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              {text.artifacts}
+            </p>
+            <div className="mt-3 space-y-2">
+              {artifacts.map((artifact) => (
+                <a
+                  className="block rounded-xl border border-slate-200 bg-white p-3 transition hover:border-indigo-300"
+                  href={`/api/ai/artifacts/${encodeURIComponent(artifact.id)}`}
+                  key={artifact.id}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-[10px] font-semibold text-slate-800">
+                      {artifact.title}
+                    </p>
+                    <span className="shrink-0 text-[9px] text-indigo-600">.md ↓</span>
+                  </div>
+                  <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[9px] leading-4 text-slate-400">
+                    {artifact.preview}
+                  </p>
+                </a>
+              ))}
+            </div>
+          </div>
         </aside>
       </div>
     </div>

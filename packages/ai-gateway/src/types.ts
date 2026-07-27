@@ -1,3 +1,7 @@
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  PreparedSourceSchema,
+} from '@ai-workflow-studio/tool-registry';
 import { ExecutionTargetSchema, type AIPlannerOutput } from '@ai-workflow-studio/workflow-schema';
 import { z } from 'zod';
 
@@ -18,6 +22,7 @@ export const ChatRequestSchema = z
     locale: z.enum(['en', 'zh-Hant']).default('zh-Hant'),
     maxOutputTokens: z.number().int().min(64).max(4_096).default(2_048),
     messages: z.array(ChatMessageSchema).min(1).max(40),
+    sources: z.array(PreparedSourceSchema).max(MAX_ATTACHMENTS_PER_MESSAGE).default([]),
   })
   .strict();
 

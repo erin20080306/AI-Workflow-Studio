@@ -34,7 +34,7 @@ test, and build checks and has been committed.
 | 16    | Platform Admin bootstrap      | A verified Auth user has an active server-granted Super Admin role               | completed |
 | 17    | AI conversation workspace     | Bilingual planner chat, safe modes, and configured model selection pass          | completed |
 | 18    | Durable multi-model chat      | Authenticated streaming conversations persist with tenant isolation              | completed |
-| 19    | Tool and artifact workspace   | Files, sources, tool registry, and generated artifacts are bounded and audited   | pending   |
+| 19    | Tool and artifact workspace   | Files, sources, tool registry, and generated artifacts are bounded and audited   | completed |
 | 20    | Approval-aware execution      | Reviewed plans can dispatch idempotent jobs with explicit approval gates         | pending   |
 | 21    | Schedules and connectors      | Recurring runs and selected business connectors pass integration tests           | pending   |
 | 22    | Usage and operations          | Provider usage, quotas, billing controls, and production observability pass      | pending   |

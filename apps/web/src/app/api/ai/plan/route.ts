@@ -3,14 +3,20 @@ import {
   AiProviderNameSchema,
   PlannerRequestSchema,
 } from '@ai-workflow-studio/ai-gateway';
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  renderPreparedSources,
+} from '@ai-workflow-studio/tool-registry';
 import { z } from 'zod';
 
+import { assistantErrorDetails } from '@/lib/assistant-api';
 import {
   appendAssistantMessage,
   createAssistantUsageSink,
   ensureAssistantConversation,
 } from '@/lib/assistant-conversation-server';
 import type { AssistantConversationSummary } from '@/lib/assistant-conversation-schema';
+import { prepareAssistantSources } from '@/lib/assistant-resource-server';
 import {
   getWorkspaceContext,
   mockWorkspaceContext,
@@ -22,22 +28,10 @@ import { getEnvironment } from '@/lib/env';
 
 const MAX_REQUEST_BYTES = 20_000;
 const ApiPlannerRequestSchema = PlannerRequestSchema.extend({
+  attachmentIds: z.array(z.string().uuid()).max(MAX_ATTACHMENTS_PER_MESSAGE).default([]),
   conversationId: z.string().uuid().optional(),
   provider: AiProviderNameSchema.default('mock'),
 }).strict();
-
-const statusByCode = {
-  AI_OUTPUT_INVALID: 422,
-  AI_PROVIDER_AUTHENTICATION_FAILED: 502,
-  AI_PROVIDER_CANCELLED: 499,
-  AI_PROVIDER_NOT_CONFIGURED: 503,
-  AI_PROVIDER_RATE_LIMITED: 429,
-  AI_PROVIDER_REQUEST_FAILED: 502,
-  AI_PROVIDER_RESPONSE_INVALID: 502,
-  AI_PROVIDER_TIMEOUT: 504,
-  AI_REQUEST_INVALID: 400,
-  AI_USAGE_LOG_FAILED: 503,
-} as const;
 
 export async function POST(request: Request): Promise<Response> {
   const contentLength = Number(request.headers.get('content-length') ?? '0');
@@ -79,7 +73,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const { provider, ...plannerRequest } = parsed.data;
+  const { attachmentIds, provider, ...plannerRequest } = parsed.data;
   const { conversationId, ...validatedPlannerRequest } = plannerRequest;
   const environment = getEnvironment();
   let workspace: WorkspaceContext | null = environment.mockMode ? mockWorkspaceContext() : null;
@@ -135,10 +129,22 @@ export async function POST(request: Request): Promise<Response> {
       conversationId: conversation.id,
       role: 'user',
     });
+    const sources = await prepareAssistantSources(workspace, {
+      attachmentIds,
+      conversationId: conversation.id,
+      maxCharacters: 4_000,
+      messageId: userMessage.id,
+    });
     const result = await createServerAiGateway(
       provider,
       createAssistantUsageSink(workspace, conversation.id),
-    ).plan(validatedPlannerRequest, request.signal);
+    ).plan(
+      {
+        ...validatedPlannerRequest,
+        prompt: renderPreparedSources(validatedPlannerRequest.prompt, sources, 8_000),
+      },
+      request.signal,
+    );
     const assistantMessage = await appendAssistantMessage(workspace, {
       body: result.output.explanation,
       conversationId: conversation.id,
@@ -184,25 +190,15 @@ export async function POST(request: Request): Promise<Response> {
         // Preserve the original provider or persistence error.
       }
     }
-    if (error instanceof AiGatewayError) {
-      return Response.json(
-        {
-          error: {
-            code: error.code,
-            message: error.message,
-          },
-        },
-        { status: statusByCode[error.code] },
-      );
-    }
+    const safe = assistantErrorDetails(error);
     return Response.json(
       {
         error: {
-          code: 'AI_PROVIDER_REQUEST_FAILED',
-          message: 'AI planning could not be completed.',
+          code: safe.code,
+          message: safe.message,
         },
       },
-      { status: 500 },
+      { headers: { 'cache-control': 'no-store' }, status: safe.status },
     );
   }
 }

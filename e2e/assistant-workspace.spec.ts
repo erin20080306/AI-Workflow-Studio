@@ -49,5 +49,31 @@ test('persists a validated Plan conversation', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '每日訂單彙整' })).toBeVisible();
   await expect(page.getByText('4 個步驟')).toBeVisible();
   await expect(page.getByText('mock · mock-planner-v1 · completed')).toBeVisible();
-  await expect(page.getByText('可串流，但沒有工具權限', { exact: true })).toBeVisible();
+  await expect(page.getByText('受限且可稽核的工具', { exact: true })).toBeVisible();
+});
+
+test('uses an explicit source and creates an auditable Markdown artifact', async ({ page }) => {
+  await page.goto('/dashboard/assistant');
+  await page.getByRole('button', { name: '新增對話' }).click();
+
+  await page.locator('input[type="file"]').setInputFiles({
+    buffer: Buffer.from('Order ID,Amount\nA-100,1200\nA-101,800', 'utf8'),
+    mimeType: 'text/csv',
+    name: 'orders.csv',
+  });
+
+  const sourceChip = page.getByRole('button', { name: '[S1] orders.csv' });
+  await expect(sourceChip).toBeVisible();
+  await expect(sourceChip).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByLabel('與 AI 對話、釐清並規劃工作').fill('請摘要選取的訂單來源');
+  await page.getByRole('button', { name: '送出' }).click();
+
+  await expect(page.getByText(/\[S1\] orders\.csv/).first()).toBeVisible();
+  await page.getByRole('button', { name: '建立 Markdown' }).click();
+  await expect(page.getByText('已建立 Markdown 產出')).toBeVisible();
+  await expect(page.getByRole('link', { name: /來源工作區.*\.md/ })).toHaveAttribute(
+    'href',
+    /\/api\/ai\/artifacts\//,
+  );
 });

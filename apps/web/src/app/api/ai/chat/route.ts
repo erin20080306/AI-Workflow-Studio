@@ -1,4 +1,8 @@
 import { AiGatewayError, AiProviderNameSchema } from '@ai-workflow-studio/ai-gateway';
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  type PreparedSource,
+} from '@ai-workflow-studio/tool-registry';
 import { z } from 'zod';
 
 import { assistantErrorDetails, readAssistantJson } from '@/lib/assistant-api';
@@ -12,6 +16,7 @@ import {
   ensureAssistantConversation,
   getAssistantConversation,
 } from '@/lib/assistant-conversation-server';
+import { prepareAssistantSources } from '@/lib/assistant-resource-server';
 import { requireWorkspaceContext, type WorkspaceContext } from '@/lib/auth/context';
 import { plannerAccessDecision } from '@/lib/control-plane-access';
 import { getEnvironment } from '@/lib/env';
@@ -19,6 +24,7 @@ import { createServerAiChatGateway } from '@/lib/ai-gateway';
 
 const ChatApiRequestSchema = z
   .object({
+    attachmentIds: z.array(z.string().uuid()).max(MAX_ATTACHMENTS_PER_MESSAGE).default([]),
     conversationId: z.string().uuid().optional(),
     locale: z.enum(['en', 'zh-Hant']).default('zh-Hant'),
     message: z.string().trim().min(2).max(12_000),
@@ -59,6 +65,7 @@ export async function POST(request: Request): Promise<Response> {
   const model = environment.providerModels[input.provider];
   let conversation: AssistantConversationSummary;
   let userMessage: AssistantConversationMessage;
+  let sources: readonly PreparedSource[];
   try {
     conversation = await ensureAssistantConversation(workspace, {
       ...(input.conversationId === undefined ? {} : { conversationId: input.conversationId }),
@@ -71,6 +78,12 @@ export async function POST(request: Request): Promise<Response> {
       body: input.message,
       conversationId: conversation.id,
       role: 'user',
+    });
+    sources = await prepareAssistantSources(workspace, {
+      attachmentIds: input.attachmentIds,
+      conversationId: conversation.id,
+      maxCharacters: 16_000,
+      messageId: userMessage.id,
     });
   } catch (error) {
     const safe = assistantErrorDetails(error);
@@ -115,6 +128,7 @@ export async function POST(request: Request): Promise<Response> {
               locale: input.locale,
               maxOutputTokens: 2_048,
               messages: history,
+              sources,
             },
             abortController.signal,
           )) {

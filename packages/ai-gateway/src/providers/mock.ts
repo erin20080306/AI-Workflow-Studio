@@ -17,10 +17,16 @@ export class MockAiAdapter implements AiProviderAdapter, AiChatAdapter {
 
   async *streamChat(request: ProviderChatRequest): AsyncIterable<ProviderChatEvent> {
     const latest = request.messages.at(-1)?.content ?? '';
+    const citations =
+      request.chatRequest.sources.length === 0
+        ? ''
+        : `\n\n${request.chatRequest.sources
+            .map((source) => `[${source.citationLabel}] ${source.filename}`)
+            .join(' · ')}`;
     const text =
       request.chatRequest.locale === 'en'
-        ? `I understand your request: “${latest}”\n\nAsk mode can explain and refine the approach, but it cannot run tools. Switch to Plan when you want validated Workflow JSON for review.`
-        : `我理解你的需求：「${latest}」\n\n詢問模式可以協助釐清需求與說明做法，但不會執行工具。需要產生可審核的 Workflow JSON 時，請切換到「規劃」。`;
+        ? `I understand your request: “${latest}”\n\nAsk mode can explain and refine the approach. It can read only the sources you explicitly selected and cannot run workflow actions.${citations}`
+        : `我理解你的需求：「${latest}」\n\n詢問模式可以協助釐清需求與說明做法。它只能讀取你明確選取的來源，不會執行工作流動作。${citations}`;
     const chunks = text.match(/.{1,14}/gu) ?? [text];
     for (const chunk of chunks) {
       await Promise.resolve();
@@ -117,8 +123,7 @@ export class MockAiAdapter implements AiProviderAdapter, AiChatAdapter {
           };
     const text = JSON.stringify({
       assumptions: ['使用者已確認 Mock 執行裝置與資料夾別名。'],
-      explanation:
-        '先列出與讀取受限 Excel，再做確定性的訂單編號去重，最後建立不覆寫既有檔案的新報表。',
+      explanation: `先列出與讀取受限 Excel，再做確定性的訂單編號去重，最後建立不覆寫既有檔案的新報表。${request.userPrompt.includes('[S1]') ? ' 參考來源 [S1]。' : ''}`,
       mappingProposals: [],
       workflow,
     });

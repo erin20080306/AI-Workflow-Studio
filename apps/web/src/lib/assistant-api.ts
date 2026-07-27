@@ -7,6 +7,10 @@ import {
   AssistantPersistenceError,
   type AssistantPersistenceErrorCode,
 } from '@/lib/assistant-conversation-server';
+import {
+  AssistantResourceError,
+  type AssistantResourceErrorCode,
+} from '@/lib/assistant-resource-server';
 import { AuthenticationError, type AuthenticationErrorCode } from '@/lib/auth/context';
 
 const MAX_REQUEST_BYTES = 20_000;
@@ -36,13 +40,23 @@ const statusByPersistenceCode: Readonly<Record<AssistantPersistenceErrorCode, nu
   ASSISTANT_PERSISTENCE_FAILED: 503,
 };
 
-export async function readAssistantJson(request: Request): Promise<unknown> {
+const statusByResourceCode: Readonly<Record<AssistantResourceErrorCode, number>> = {
+  ASSISTANT_RESOURCE_FAILED: 503,
+  ASSISTANT_RESOURCE_INVALID: 400,
+  ASSISTANT_RESOURCE_LIMIT_EXCEEDED: 413,
+  ASSISTANT_RESOURCE_NOT_FOUND: 404,
+};
+
+export async function readAssistantJson(
+  request: Request,
+  maxRequestBytes = MAX_REQUEST_BYTES,
+): Promise<unknown> {
   const contentLength = Number(request.headers.get('content-length') ?? '0');
-  if (!Number.isFinite(contentLength) || contentLength > MAX_REQUEST_BYTES) {
+  if (!Number.isFinite(contentLength) || contentLength > maxRequestBytes) {
     throw new AiGatewayError('AI_REQUEST_INVALID', 'The AI request is too large.');
   }
   const body = await request.text();
-  if (new TextEncoder().encode(body).byteLength > MAX_REQUEST_BYTES) {
+  if (new TextEncoder().encode(body).byteLength > maxRequestBytes) {
     throw new AiGatewayError('AI_REQUEST_INVALID', 'The AI request is too large.');
   }
   try {
@@ -78,6 +92,13 @@ export function assistantErrorDetails(error: unknown): {
       code: error.code,
       message: error.message,
       status: statusByPersistenceCode[error.code],
+    };
+  }
+  if (error instanceof AssistantResourceError) {
+    return {
+      code: error.code,
+      message: error.message,
+      status: statusByResourceCode[error.code],
     };
   }
   if (error instanceof z.ZodError) {

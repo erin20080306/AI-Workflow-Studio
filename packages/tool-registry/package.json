@@ -1,5 +1,5 @@
 {
-  "name": "@ai-workflow-studio/ai-gateway",
+  "name": "@ai-workflow-studio/tool-registry",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,8 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-workflow-studio/tool-registry": "workspace:*",
-    "@ai-workflow-studio/workflow-schema": "workspace:*",
     "zod": "^4.4.3"
   }
 }
