@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { ArrowRightIcon, FlowIcon, SettingsIcon, ShieldIcon, SparkIcon } from '@/components/icons';
+import { ArrowRightIcon, FlowIcon, SettingsIcon, ShieldIcon } from '@/components/icons';
 import { LocalizedText } from '@/components/language-provider';
 
 export const metadata: Metadata = {
@@ -16,14 +16,6 @@ const settings = [
     icon: FlowIcon,
     labelEn: 'Connected services',
     labelZhHant: '外部服務連線',
-  },
-  {
-    descriptionEn: 'Choose a workflow planning provider and review availability and usage.',
-    descriptionZhHant: '選擇工作流規劃 Provider、檢查可用狀態與用量。',
-    href: '/dashboard/settings/ai-models',
-    icon: SparkIcon,
-    labelEn: 'AI models and providers',
-    labelZhHant: 'AI 模型與 Provider',
   },
   {
     descriptionEn: 'Review tenant roles, approval rules, and security boundaries.',
@@ -54,24 +46,24 @@ export default function SettingsPage() {
       </h1>
       <p className="mt-2 text-sm text-slate-600">
         <LocalizedText
-          en="Manage providers, security boundaries, and workspace preferences."
-          zhHant="管理 Provider、安全界線與工作區偏好。"
+          en="Manage connected services, security boundaries, and workspace preferences."
+          zhHant="管理外部服務、安全界線與工作區偏好。"
         />
       </p>
 
-      <section className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {settings.map(
           ({ descriptionEn, descriptionZhHant, href, icon: Icon, labelEn, labelZhHant }, index) => (
             <Link
               className={`group rounded-2xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                index < 2 ? 'border-indigo-200' : 'border-slate-200'
+                index === 0 ? 'border-indigo-200' : 'border-slate-200'
               }`}
               href={href}
               key={labelEn}
             >
               <span
                 className={`grid size-11 place-items-center rounded-xl ${
-                  index < 2 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
+                  index === 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 <Icon className="size-5" />
@@ -85,8 +77,6 @@ export default function SettingsPage() {
               <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-indigo-700">
                 {index === 0 ? (
                   <LocalizedText en="Manage connections" zhHant="管理連線" />
-                ) : index === 1 ? (
-                  <LocalizedText en="Manage providers" zhHant="管理 Provider" />
                 ) : (
                   <LocalizedText en="In progress" zhHant="建置中" />
                 )}

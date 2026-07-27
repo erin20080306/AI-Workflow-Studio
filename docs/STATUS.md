@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 16 — Platform Admin bootstrap (completed)
+Phase 17 — AI conversation workspace (completed)
 
 ## Repository baseline
 
@@ -1252,3 +1252,64 @@ Status: completed
 
 - Sign in normally and open `/admin` to verify the authenticated browser
   session receives the server-granted platform-administration view.
+
+## Phase 17
+
+Status: completed
+
+### Implemented
+
+- Added a bilingual Codex-inspired AI Workspace with a local conversation,
+  natural-language request composer, safe model selection, planning progress,
+  and a separate validated-plan panel.
+- Added Auto, OpenAI, Claude, Gemini, and development-only Mock model options.
+  Auto resolves only to an available server-configured provider.
+- Connected Plan mode to the existing server-only AI gateway and complete
+  Workflow v1 validation. The screen cannot save, dispatch, or execute a
+  workflow.
+- Kept Ask, attachments, durable history, and Run visibly disabled and labeled
+  with their later gated phases.
+- Made every assistant response retain its own provider/model attribution
+  instead of reusing the most recent model globally.
+- Removed AI Provider configuration from ordinary workspace settings. The old
+  workspace URL now redirects back to the safe general settings page.
+- Added a platform-admin-only Provider status page that shows only configured
+  booleans, model names, and Vercel environment-variable names. It contains no
+  secret input and never reads or returns API key values.
+- Documented that production provider keys remain encrypted Vercel Server-only
+  environment variables without a `NEXT_PUBLIC_` prefix.
+- Added a responsive three-panel desktop layout and stacked mobile layout
+  without horizontal overflow.
+- Added Website Studio phases 23–27 for a later guided brief, validated website
+  specification, sandboxed responsive preview canvas, reversible visual edits,
+  and explicitly approved publishing.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all 10 code workspaces
+- `pnpm test`: passed — 108 tests across 25 files
+- `pnpm build:web`: passed — 31 static pages generated; dynamic
+  `/dashboard/assistant` and protected `/admin/ai-providers` routes included
+- `pnpm test:e2e`: passed — 3 Chromium acceptance paths
+- `pnpm security:scan-client`: passed — 29 built client files inspected
+- In-app browser desktop check: passed at 1440 px — three-panel layout, no
+  horizontal overflow, no ordinary-user API-key/provider-settings text
+- In-app browser mobile check: passed at 390 px — stacked layout and no
+  horizontal overflow
+- In-app browser planning check: passed — validated four-step Mock plan with
+  explicit non-execution boundary
+
+### Known limitations
+
+- Live OpenAI, Claude, and Gemini selection remains unavailable until the
+  corresponding Vercel Production variables are configured and the application
+  is redeployed. No key value was added during this phase.
+- Conversation persistence and general Ask mode are Phase 18.
+- Attachments and generated artifacts are Phase 19.
+- Reviewed workflow dispatch and explicit approvals are Phase 20.
+- Website creation and its preview canvas begin in Phase 23 after the AI
+  workspace execution and operations phases pass their gates.
+- This phase was not deployed to Production; a successful local build must not
+  be treated as a Vercel deployment.

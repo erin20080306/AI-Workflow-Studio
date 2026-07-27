@@ -65,6 +65,12 @@ provider availability and model names, never key values. Provider base URLs are
 fixed to official HTTPS services by default rather than accepted from planner
 requests.
 
+Production key values are configured only as encrypted Vercel environment
+variables without a `NEXT_PUBLIC_` prefix. The platform-administration provider
+page reports only a boolean readiness state, the environment-variable name, and
+the selected model. It contains no key input and never receives a key value.
+Ordinary workspace settings have no provider-configuration route or card.
+
 ## Validation and repair
 
 - Requests permit only a prompt, locale, timezone, a trusted execution target,

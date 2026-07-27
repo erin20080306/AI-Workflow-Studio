@@ -1,5 +1,7 @@
 import { PRODUCT_PLANS } from '@ai-workflow-studio/shared/plans';
+import Link from 'next/link';
 
+import { SparkIcon } from '@/components/icons';
 import { LocalizedText } from '@/components/language-provider';
 import {
   getPlatformAdminOverview,
@@ -67,6 +69,13 @@ export default async function AdminPage({
             />
           </p>
         </div>
+        <Link
+          className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          href="/admin/ai-providers"
+        >
+          <SparkIcon className="size-4" />
+          <LocalizedText en="AI provider status" zhHant="AI Provider 狀態" />
+        </Link>
       </div>
 
       {statusMessage !== undefined && (

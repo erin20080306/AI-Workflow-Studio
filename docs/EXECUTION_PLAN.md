@@ -13,25 +13,36 @@ test, and build checks and has been committed.
 
 ## Phases
 
-| Phase | Scope                         | Acceptance gate                                                                | Status    |
-| ----- | ----------------------------- | ------------------------------------------------------------------------------ | --------- |
-| 0     | Repository audit              | Repository state, build baseline, architecture, and risks documented           | completed |
-| 1     | Monorepo and guardrails       | Install, format, lint, typecheck, and unit tests pass                          | completed |
-| 2     | Next.js web foundation        | App Router shell, auth screens, mock mode, and production web build pass       | completed |
-| 3     | Supabase schema and tenancy   | Fresh migrations and tenant-isolation tests pass                               | completed |
-| 4     | Workflow schema and engine    | Schema, registry, DAG, risk, dry-run, and executor tests pass                  | completed |
-| 5     | Workflow web UI               | Mock workflow E2E and web build pass                                           | completed |
-| 6     | AI gateway                    | Provider adapters build without keys; strict JSON and mock tests pass          | completed |
-| 7     | Pairing and job API           | Token, tenant, claim, lease, and revocation tests pass                         | completed |
-| 8     | Desktop agent foundation      | Development build and unsigned test package pass; folder access is constrained | completed |
-| 9     | Local Excel executor          | Fixture, idempotency, atomic output, backup, and traversal tests pass          | completed |
-| 10    | Google Sheets connector       | Mock OAuth/Sheets tests pass; credentials are optional and server-only         | completed |
-| 11    | Run orchestration             | End-to-end mock run, reconnect, approval, and de-duplication pass              | completed |
-| 12    | GitHub release and Vercel     | CI, production web build, platform desktop builds, and secret checks pass      | completed |
-| 13    | Security and final acceptance | Security review, go-live additions, and all MVP acceptance criteria pass       | completed |
-| 14    | Hosted Web staging            | Hosted migrations, Auth configuration, Vercel deployment, and smoke test pass  | completed |
-| 15    | Remote CI repair              | Linux quality checks and macOS/Windows package jobs pass remotely              | completed |
-| 16    | Platform Admin bootstrap      | A verified Auth user has an active server-granted Super Admin role             | completed |
+| Phase | Scope                         | Acceptance gate                                                                  | Status    |
+| ----- | ----------------------------- | -------------------------------------------------------------------------------- | --------- |
+| 0     | Repository audit              | Repository state, build baseline, architecture, and risks documented             | completed |
+| 1     | Monorepo and guardrails       | Install, format, lint, typecheck, and unit tests pass                            | completed |
+| 2     | Next.js web foundation        | App Router shell, auth screens, mock mode, and production web build pass         | completed |
+| 3     | Supabase schema and tenancy   | Fresh migrations and tenant-isolation tests pass                                 | completed |
+| 4     | Workflow schema and engine    | Schema, registry, DAG, risk, dry-run, and executor tests pass                    | completed |
+| 5     | Workflow web UI               | Mock workflow E2E and web build pass                                             | completed |
+| 6     | AI gateway                    | Provider adapters build without keys; strict JSON and mock tests pass            | completed |
+| 7     | Pairing and job API           | Token, tenant, claim, lease, and revocation tests pass                           | completed |
+| 8     | Desktop agent foundation      | Development build and unsigned test package pass; folder access is constrained   | completed |
+| 9     | Local Excel executor          | Fixture, idempotency, atomic output, backup, and traversal tests pass            | completed |
+| 10    | Google Sheets connector       | Mock OAuth/Sheets tests pass; credentials are optional and server-only           | completed |
+| 11    | Run orchestration             | End-to-end mock run, reconnect, approval, and de-duplication pass                | completed |
+| 12    | GitHub release and Vercel     | CI, production web build, platform desktop builds, and secret checks pass        | completed |
+| 13    | Security and final acceptance | Security review, go-live additions, and all MVP acceptance criteria pass         | completed |
+| 14    | Hosted Web staging            | Hosted migrations, Auth configuration, Vercel deployment, and smoke test pass    | completed |
+| 15    | Remote CI repair              | Linux quality checks and macOS/Windows package jobs pass remotely                | completed |
+| 16    | Platform Admin bootstrap      | A verified Auth user has an active server-granted Super Admin role               | completed |
+| 17    | AI conversation workspace     | Bilingual planner chat, safe modes, and configured model selection pass          | completed |
+| 18    | Durable multi-model chat      | Authenticated streaming conversations persist with tenant isolation              | pending   |
+| 19    | Tool and artifact workspace   | Files, sources, tool registry, and generated artifacts are bounded and audited   | pending   |
+| 20    | Approval-aware execution      | Reviewed plans can dispatch idempotent jobs with explicit approval gates         | pending   |
+| 21    | Schedules and connectors      | Recurring runs and selected business connectors pass integration tests           | pending   |
+| 22    | Usage and operations          | Provider usage, quotas, billing controls, and production observability pass      | pending   |
+| 23    | Website Studio foundation     | Guided briefs create validated, tenant-isolated website projects                 | pending   |
+| 24    | AI website specification      | Multi-model guidance produces only validated component and content specs         | pending   |
+| 25    | Responsive preview canvas     | Sandboxed desktop, tablet, and mobile previews remain isolated and deterministic | pending   |
+| 26    | Visual editing and versions   | Natural-language and direct edits are reversible, versioned, and auditable       | pending   |
+| 27    | Website publishing            | Approved builds pass quality gates and deploy without exposing credentials       | pending   |
 
 ## Phase 0 — Repository audit
 
@@ -155,3 +166,84 @@ Verify the intended production Auth user through the protected provider
 boundary, grant the initial `super_admin` role with the documented server-side
 transaction, and read the resulting role record back without committing any
 user identifier, email address, handle, credential, or provider response.
+
+## Phase 17 — AI conversation workspace
+
+Add a Codex-inspired bilingual workspace where an authenticated user can enter a
+natural-language automation request, choose Auto, OpenAI, Claude, Gemini, or the
+development-only Mock provider, and receive a validated Workflow v1 plan in a
+conversation layout. The model picker must reflect server-side configuration
+without exposing API keys. Live keys remain exclusively in Vercel server-only
+environment variables. Only the platform-administration area may display
+provider readiness and model names; ordinary workspace settings must not expose
+provider configuration. Only Plan mode is active in this phase; Ask, Run,
+attachments, and durable history must be visibly labeled as later phases.
+
+## Phase 18 — Durable multi-model chat
+
+Add tenant-isolated conversation and message persistence, server-side streaming,
+provider-neutral chat contracts, cancellation, bounded context, usage records,
+and safe conversation continuation for OpenAI, Anthropic, and Gemini.
+
+## Phase 19 — Tool and artifact workspace
+
+Add a typed tool registry, approved file/context attachment, source citations,
+artifact previews and downloads, and auditable tool results. Tool output must be
+validated and must not expand filesystem or credential authority.
+
+## Phase 20 — Approval-aware execution
+
+Turn a reviewed plan into a versioned workflow draft and connect explicit
+approval to the existing run orchestrator and Desktop Agent. Ask and Plan remain
+read-only; Run may dispatch only validated nodes and must preserve idempotency,
+audit events, folder boundaries, and destructive-action approvals.
+
+## Phase 21 — Schedules and connectors
+
+Add recurring schedules and prioritized business connectors behind explicit
+workspace authorization. Each connector must use server-only credentials,
+bounded scopes, revocation, health checks, retries, and integration tests.
+
+## Phase 22 — Usage and operations
+
+Add provider usage and cost visibility, tenant quotas, subscription enforcement,
+rate limits, operational dashboards, alerting, and a final production acceptance
+pass for the expanded AI workspace.
+
+## Phase 23 — Website Studio foundation
+
+Add a separate Website Studio product area with tenant-isolated projects and a
+Codex-style guided brief. The assistant must collect purpose, audience, pages,
+brand direction, content, and desired calls to action before it can create a
+site draft. Projects remain drafts and cannot publish in this phase.
+
+## Phase 24 — AI website specification
+
+Add OpenAI, Claude, Gemini, Auto, and development Mock support for a versioned
+Website Spec schema. Models may produce only validated layout, theme, content,
+asset-reference, and registered-component JSON. They must never produce or
+execute arbitrary JavaScript, Python, shell commands, build scripts, or
+unbounded URLs.
+
+## Phase 25 — Responsive preview canvas
+
+Render validated Website Specs in a sandboxed preview canvas with desktop,
+tablet, and mobile viewports, zoom, page navigation, loading and error states,
+and strict preview-origin isolation. Add accessibility, overflow, responsive,
+asset, and deterministic-render tests before any publishing work begins.
+
+## Phase 26 — Visual editing and versions
+
+Add natural-language section edits, direct property controls, reorder and
+duplicate operations, undo/redo, named versions, comparison, and restoration.
+Every model and user change must be validated, reversible, tenant-scoped, and
+recorded without prompts, secrets, or unpublished private content leaking into
+operational logs.
+
+## Phase 27 — Website publishing
+
+Add explicit publish approval, production builds, SEO metadata, sitemap,
+robots, accessibility and link gates, domains, deployment history, rollback,
+and credential-safe hosting integration. Publishing is a material external
+action and must never occur from a model response without the authenticated
+user's final approval.

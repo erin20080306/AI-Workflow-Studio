@@ -3,11 +3,20 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { DashboardIcon, DeviceIcon, FlowIcon, RunsIcon, SettingsIcon, ShieldIcon } from './icons';
+import {
+  ChatIcon,
+  DashboardIcon,
+  DeviceIcon,
+  FlowIcon,
+  RunsIcon,
+  SettingsIcon,
+  ShieldIcon,
+} from './icons';
 import { useLanguage } from './language-provider';
 
 const workspaceNavigation = [
   { en: 'Overview', href: '/dashboard', icon: DashboardIcon, zhHant: '總覽' },
+  { en: 'AI Workspace', href: '/dashboard/assistant', icon: ChatIcon, zhHant: 'AI 工作台' },
   { en: 'Workflows', href: '/dashboard/workflows', icon: FlowIcon, zhHant: '工作流' },
   { en: 'Runs', href: '/dashboard/runs', icon: RunsIcon, zhHant: '執行紀錄' },
   { en: 'Devices', href: '/dashboard/devices', icon: DeviceIcon, zhHant: '裝置' },

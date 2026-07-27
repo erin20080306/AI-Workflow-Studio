@@ -52,6 +52,15 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+export function ChatIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <path d="M5 5h14v10H9l-4 4V5Z" />
+      <path d="M8 9h8M8 12h5" />
+    </IconFrame>
+  );
+}
+
 export function FileIcon(props: IconProps) {
   return (
     <IconFrame {...props}>

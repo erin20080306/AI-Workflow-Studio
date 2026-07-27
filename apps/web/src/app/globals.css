@@ -63,6 +63,10 @@ a {
   background-size: 18px 18px;
 }
 
+.assistant-workspace-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .text-balance {
   text-wrap: balance;
 }
@@ -109,5 +113,21 @@ html[data-locale='en'] .locale-zh-hant {
 
   .skeleton {
     animation: none;
+  }
+}
+
+@media (min-width: 88rem) {
+  .assistant-workspace-grid {
+    grid-template-columns: 220px minmax(0, 1fr) 340px;
+  }
+
+  .assistant-workspace-grid > aside:first-child {
+    border-right-width: 1px;
+    border-bottom-width: 0;
+  }
+
+  .assistant-workspace-grid > aside:last-child {
+    border-top-width: 0;
+    border-left-width: 1px;
   }
 }
