@@ -3,8 +3,8 @@
 AI Workflow Studio supports OpenAI, Claude, and Gemini through server-only
 environment variables. Ordinary registered users never enter, read, or manage
 provider keys. The platform administrator configures one or more providers in
-Vercel, and the user interface displays only the available provider label and
-generation level.
+Vercel. Members may see the public provider, model, and generation-level names
+needed to choose a model, but never credential or readiness details.
 
 ## Create the keys
 
@@ -15,7 +15,9 @@ generation level.
 3. Open **Project settings → API Keys**.
 4. Select **Create new secret key**.
 5. Prefer a Restricted key when the available permission controls cover the
-   application workload.
+   application workload. It must allow model listing/read plus Responses/model
+   inference for the selected models; otherwise the server readiness check will
+   fail closed before a billable request.
 6. Copy the value once and store it in a password manager or secrets manager.
 
 The server variable name is `OPENAI_API_KEY`.
@@ -43,7 +45,8 @@ Official reference:
 2. Accept the Gemini API terms if prompted.
 3. Select or import the Google Cloud project that will own billing and quota.
 4. Create the API key and restrict the owning project and API usage where
-   Google Cloud controls allow it.
+   Google Cloud controls allow it. The restriction must allow the Generative
+   Language API model-list and generation methods.
 5. Copy the key into a secrets manager.
 
 The server variable name is `GEMINI_API_KEY`.
@@ -83,6 +86,10 @@ Vercel references:
   `.txt`, `.md`, `.csv`, and `.json` files up to 1 MiB each.
 - If no provider is configured in a Production Supabase deployment, Ask, Plan,
   source attachment, and Website Spec generation fail closed. This is expected.
+- Super Admin provider status verifies the credential and mapped model instead
+  of treating variable presence as readiness. `Authentication failed` usually
+  means an invalid key or insufficient model-list permission; `Quota limited`
+  means provider billing, quota, or rate limits must be reviewed.
 - Ask mode is read-only. Plan mode may produce only validated Workflow JSON.
   Execution additionally requires a versioned draft, risk review, any required
   approval, and an authorized Desktop Agent.

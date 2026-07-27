@@ -73,10 +73,11 @@ new Website Project.
 
 ## Model and credential boundary
 
-- Auto safely routes to the first configured provider.
-- Ordinary users see only available provider labels, descriptions, and
-  generation levels. They do not receive provider configuration state, keys, or
-  actual model identifiers.
+- Auto safely routes to the first verified provider and mapped model.
+- Ordinary users see provider labels, generation levels, and the allowlisted
+  public model names behind those levels. They do not receive provider
+  readiness diagnostics, environment names, credential state, keys, or
+  administrative mapping controls.
 - Provider keys remain server-only Vercel variables. See
   `docs/AI_PROVIDER_SETUP.md`.
 - Usage is conservatively reserved before provider access and recorded against
@@ -84,10 +85,10 @@ new Website Project.
 
 ## Future gated phases
 
-- Phase 25: isolated desktop, tablet, and mobile preview canvas.
-- Phase 26: validated direct and natural-language edits, undo/redo, versions,
+- Phase 26: isolated desktop, tablet, and mobile preview canvas.
+- Phase 27: validated direct and natural-language edits, undo/redo, versions,
   comparison, and restoration.
-- Phase 27: explicit publish approval, quality gates, deployment, domains,
+- Phase 28: explicit publish approval, quality gates, deployment, domains,
   history, and rollback.
 
 No model output may release executable JavaScript, Python, shell commands, build

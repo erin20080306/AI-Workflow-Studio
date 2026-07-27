@@ -1957,3 +1957,37 @@ Status: completed
 ### Commit
 
 - `feat(web): add subscription-aware AI model tiers` (this phase commit)
+
+### Production-readiness follow-up
+
+- Ordinary Assistant and Website Studio selectors now show the allowlisted
+  OpenAI, Claude, and Gemini model names behind every tier. Locked tiers remain
+  visible so a member can understand the subscription upgrade path.
+- Added cached server-side provider verification against each provider's model
+  listing API. Auto skips credentials that fail authentication, providers at
+  quota, unreachable providers, and model mappings unavailable to the provider
+  account.
+- Added safe bilingual errors for authentication, quota, missing-model, and
+  temporary provider failures without returning provider response bodies,
+  credentials, environment names, or administrative diagnostics to members.
+- Upgraded the Super Admin provider page from key-presence indicators to
+  verified, authentication-failed, quota-limited, temporarily-unavailable, or
+  not-configured states.
+- Provider health probes are bounded to five seconds, model-list responses are
+  capped at 2 MB, successful results are cached for five minutes, and all
+  external payloads are validated before routing decisions use them.
+
+#### Follow-up validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 152 tests across 37 files
+- `pnpm build:web`: passed — 40 generated pages, including verified provider
+  status, tier model names, Assistant, and Website Studio
+- `pnpm test:e2e`: passed — eight Chromium paths, including model-name
+  visibility, streaming Ask, validated Plan, approval-aware execution, sources,
+  schedules, usage, and Website Studio
+- `pnpm security:scan-client`: passed — 33 built client files inspected; no
+  credentials, server-only environment names, or local paths were present
+- `pnpm build:desktop`: not applicable — no Desktop code changed

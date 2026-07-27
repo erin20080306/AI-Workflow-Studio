@@ -15,6 +15,9 @@ test('streams and restores a tenant-scoped Ask conversation', async ({ page }) =
   await expect(modelSelector).toContainText('Claude');
   await expect(modelSelector).toContainText('Gemini');
   await expect(modelSelector).toContainText('Mock Studio');
+  await expect(page.getByText('gpt-5.6-luna')).toBeVisible();
+  await expect(page.getByText('claude-haiku-4-5-20251001')).toBeVisible();
+  await expect(page.getByText('gemini-3.5-flash-lite')).toBeVisible();
   await expect(page.locator('body')).not.toContainText('mock-chat-v1');
   await expect(page.locator('body')).not.toContainText('mock-planner-v1');
   await expect(page.getByRole('button', { name: '詢問' })).toHaveAttribute('aria-pressed', 'true');

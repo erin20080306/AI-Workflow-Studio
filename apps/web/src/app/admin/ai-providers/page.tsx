@@ -6,6 +6,7 @@ import { LocalizedText } from '@/components/language-provider';
 import { updateAiModelMappingAction } from '@/app/admin/actions';
 import { ALLOWED_AI_MODELS_BY_TIER, type ProductionAiProvider } from '@/lib/ai-model-catalog';
 import { listAiModelMappings } from '@/lib/ai-model-routing';
+import { listAiProviderHealth, type AiProviderHealthStatus } from '@/lib/ai-provider-health';
 import { getEnvironment } from '@/lib/env';
 
 export const metadata: Metadata = {
@@ -34,6 +35,43 @@ const tierCopy = {
   standard: { en: 'Standard', zhHant: '標準' },
 } as const;
 
+const healthCopy: Readonly<
+  Record<
+    AiProviderHealthStatus,
+    {
+      readonly className: string;
+      readonly en: string;
+      readonly zhHant: string;
+    }
+  >
+> = {
+  authentication_failed: {
+    className: 'bg-rose-100 text-rose-800',
+    en: 'Authentication failed',
+    zhHant: '驗證失敗',
+  },
+  available: {
+    className: 'bg-emerald-100 text-emerald-800',
+    en: 'Verified',
+    zhHant: '已驗證',
+  },
+  not_configured: {
+    className: 'bg-slate-100 text-slate-500',
+    en: 'Not configured',
+    zhHant: '尚未設定',
+  },
+  rate_limited: {
+    className: 'bg-amber-100 text-amber-900',
+    en: 'Quota limited',
+    zhHant: '配額受限',
+  },
+  unreachable: {
+    className: 'bg-amber-100 text-amber-900',
+    en: 'Check unavailable',
+    zhHant: '目前無法檢查',
+  },
+};
+
 export default async function AdminAiProvidersPage({
   searchParams,
 }: Readonly<{
@@ -42,14 +80,20 @@ export default async function AdminAiProvidersPage({
   const environment = getEnvironment();
   const status = (await searchParams).status;
   const mappings = await listAiModelMappings();
+  const providerHealth = await listAiProviderHealth();
   const providers = (Object.keys(providerCopy) as readonly (keyof typeof providerCopy)[]).map(
-    (provider) => ({
-      configured: environment.providers[provider],
-      environmentVariable: providerCopy[provider].environmentVariable,
-      label: providerCopy[provider].label,
-      mappings: mappings.filter((mapping) => mapping.provider === provider),
-      provider,
-    }),
+    (provider) => {
+      const health = providerHealth.find((item) => item.provider === provider);
+      const healthStatus =
+        health?.status ?? (environment.providers[provider] ? 'unreachable' : 'not_configured');
+      return {
+        environmentVariable: providerCopy[provider].environmentVariable,
+        healthStatus,
+        label: providerCopy[provider].label,
+        mappings: mappings.filter((mapping) => mapping.provider === provider),
+        provider,
+      };
+    },
   );
 
   return (
@@ -116,17 +160,14 @@ export default async function AdminAiProvidersPage({
                 </div>
                 <span
                   className={`inline-flex items-center gap-1.5 self-start rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] ${
-                    provider.configured
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-slate-100 text-slate-500'
+                    healthCopy[provider.healthStatus].className
                   }`}
                 >
-                  {provider.configured && <CheckIcon className="size-3.5" />}
-                  {provider.configured ? (
-                    <LocalizedText en="Configured" zhHant="已設定" />
-                  ) : (
-                    <LocalizedText en="Not configured" zhHant="尚未設定" />
-                  )}
+                  {provider.healthStatus === 'available' && <CheckIcon className="size-3.5" />}
+                  <LocalizedText
+                    en={healthCopy[provider.healthStatus].en}
+                    zhHant={healthCopy[provider.healthStatus].zhHant}
+                  />
                 </span>
               </div>
               <div className="mt-5 grid gap-3 lg:grid-cols-2">

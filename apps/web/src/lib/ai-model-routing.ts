@@ -20,6 +20,7 @@ import {
   type OpenAiReasoningEffort,
   type ProductionAiProvider,
 } from '@/lib/ai-model-catalog';
+import { getAiProviderHealth, type AiProviderHealthStatus } from '@/lib/ai-provider-health';
 import type { AiProviderSelection } from '@/lib/ai-model-selection';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
@@ -131,6 +132,33 @@ function providerPriority(
   return ['openai', 'anthropic', 'gemini'];
 }
 
+function providerHealthError(status: AiProviderHealthStatus): AiGatewayError {
+  if (status === 'authentication_failed') {
+    return new AiGatewayError(
+      'AI_PROVIDER_AUTHENTICATION_FAILED',
+      'The selected AI provider credential could not be authenticated.',
+    );
+  }
+  if (status === 'rate_limited') {
+    return new AiGatewayError(
+      'AI_PROVIDER_RATE_LIMITED',
+      'The selected AI provider has reached its current quota or rate limit.',
+      { retryable: true },
+    );
+  }
+  if (status === 'not_configured') {
+    return new AiGatewayError(
+      'AI_PROVIDER_NOT_CONFIGURED',
+      'The selected AI provider is not configured.',
+    );
+  }
+  return new AiGatewayError(
+    'AI_PROVIDER_REQUEST_FAILED',
+    'The selected AI provider could not be reached for a readiness check.',
+    { retryable: true },
+  );
+}
+
 export async function resolveAiModelRoute(
   context: WorkspaceContext,
   input: {
@@ -174,19 +202,35 @@ export async function resolveAiModelRoute(
       : input.provider === 'mock'
         ? []
         : [input.provider];
+  let explicitProviderError: AiGatewayError | undefined;
   for (const provider of requestedProviders) {
     if (!environment.providers[provider]) continue;
     const mapping = mappings.find(
       (candidate) =>
         candidate.provider === provider && candidate.tier === requestedTier && candidate.enabled,
     );
-    if (mapping !== undefined) {
-      return { ...mapping, plan };
+    if (mapping === undefined) continue;
+
+    const health = await getAiProviderHealth(provider);
+    if (health.status !== 'available') {
+      if (input.provider !== 'auto') explicitProviderError = providerHealthError(health.status);
+      continue;
     }
+    if (!health.models.includes(mapping.model)) {
+      if (input.provider !== 'auto') {
+        explicitProviderError = new AiGatewayError(
+          'AI_PROVIDER_NOT_CONFIGURED',
+          'The selected model is not available to this provider account.',
+        );
+      }
+      continue;
+    }
+    return { ...mapping, plan };
   }
 
+  if (explicitProviderError !== undefined) throw explicitProviderError;
   throw new AiGatewayError(
     'AI_PROVIDER_NOT_CONFIGURED',
-    'No configured provider is available for the selected model level.',
+    'No verified provider and model are available for the selected model level.',
   );
 }

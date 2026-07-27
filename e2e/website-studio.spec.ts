@@ -14,7 +14,7 @@ test('collects every guided decision before creating a locked website draft', as
   await page.getByRole('button', { name: '建立專案', exact: true }).click();
   await expect(page.getByRole('heading', { name: projectName })).toBeVisible();
   await expect(page.getByRole('button', { name: '建立已驗證網站草稿' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '發布功能將於 Phase 27 開放' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '發布功能將於 Phase 28 開放' })).toBeDisabled();
 
   await page
     .getByLabel('這個網站最重要的目的為何？')
@@ -53,10 +53,13 @@ test('collects every guided decision before creating a locked website draft', as
   await expect(page.getByRole('heading', { name: '將需求轉成安全的網站結構' })).toBeVisible();
   await expect(page.getByText('Mock Studio')).toBeVisible();
   await expect(page.getByText('開發測試')).toBeVisible();
+  await expect(page.getByText('gpt-5.6-luna')).toBeVisible();
+  await expect(page.getByText('claude-haiku-4-5-20251001')).toBeVisible();
+  await expect(page.getByText('gemini-3.5-flash-lite')).toBeVisible();
   await expect(page.locator('body')).not.toContainText('mock-website-spec-v1');
   await page.getByRole('button', { name: '產生已驗證網站規格' }).click();
   await expect(page.getByText('網站規格已通過驗證')).toBeVisible();
-  await expect(page.getByText('響應式預覽畫布將於 Phase 25 開放')).toBeVisible();
+  await expect(page.getByText('響應式 Canvas 預覽畫布將於 Phase 26 開放')).toBeVisible();
 
   const projectId = new URL(page.url()).pathname.split('/').at(-1);
   expect(projectId).toBeDefined();

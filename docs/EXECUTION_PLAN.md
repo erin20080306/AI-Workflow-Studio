@@ -174,9 +174,10 @@ natural-language automation request, choose Auto, OpenAI, Claude, Gemini, or the
 development-only Mock provider, and receive a validated Workflow v1 plan in a
 conversation layout. The model picker must reflect server-side configuration
 without exposing API keys. Live keys remain exclusively in Vercel server-only
-environment variables. Only the platform-administration area may display
-provider readiness and model names; ordinary workspace settings must not expose
-provider configuration. Only Plan mode is active in this phase; Ask, Run,
+environment variables. Ordinary workspaces may display public provider labels
+and allowlisted model names needed to make a selection. Provider readiness,
+credential state, environment names, and mapping controls remain restricted to
+platform administration. Only Plan mode is active in this phase; Ask, Run,
 attachments, and durable history must be visibly labeled as later phases.
 
 ## Phase 18 — Durable multi-model chat
@@ -235,7 +236,9 @@ unbounded URLs.
 ## Phase 25 — Tier-aware AI model routing
 
 Add Economy, Standard, Advanced, and Flagship model tiers across OpenAI, Claude,
-and Gemini without exposing actual model identifiers to ordinary members.
+and Gemini. Ordinary members may see the allowlisted public model names behind
+each tier, but never credential state, environment names, provider responses, or
+administrative mapping controls.
 Microsoft Store-backed plan entitlements must decide the highest selectable
 tier. Auto routing must consider operation complexity, remaining monthly budget,
 provider readiness, and a provider-specific cost multiplier. Enforce both

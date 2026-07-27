@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { z } from 'zod';
 
 import { CheckIcon, ShieldIcon, SparkIcon } from '@/components/icons';
+import { AiModelTierSelector } from '@/components/ai-model-tier-selector';
 import { useLanguage } from '@/components/language-provider';
 import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
@@ -27,9 +28,10 @@ const copy = {
     generate: 'Generate validated website spec',
     generated: 'Website specification validated',
     generating: 'Generating safely…',
-    next: 'Responsive preview opens in Phase 25',
+    next: 'Responsive Canvas preview opens in Phase 26',
     level: 'Generation level',
     levelAuto: 'Auto',
+    levelLocked: 'Locked',
     pages: 'Pages',
     phase: 'AI specification · Phase 24',
     provider: 'Provider',
@@ -47,9 +49,10 @@ const copy = {
     generate: '產生已驗證網站規格',
     generated: '網站規格已通過驗證',
     generating: '安全產生中…',
-    next: '響應式預覽畫布將於 Phase 25 開放',
+    next: '響應式 Canvas 預覽畫布將於 Phase 26 開放',
     level: '產生等級',
     levelAuto: '自動',
+    levelLocked: '未解鎖',
     pages: '頁面',
     phase: 'AI 網站規格 · Phase 24',
     provider: 'Provider',
@@ -166,33 +169,15 @@ export function WebsiteSpecGenerator({
               <legend className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                 {text.level}
               </legend>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                    selectedTier === 'auto'
-                      ? 'bg-slate-950 text-white'
-                      : 'border border-slate-200 text-slate-600'
-                  }`}
-                  onClick={() => setSelectedTier('auto')}
-                  type="button"
-                >
-                  {text.levelAuto}
-                </button>
-                {tierOptions.map((tier) => (
-                  <button
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                      selectedTier === tier.id
-                        ? 'bg-indigo-600 text-white'
-                        : 'border border-slate-200 text-slate-600'
-                    } disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-300`}
-                    disabled={!tier.enabled}
-                    key={tier.id}
-                    onClick={() => setSelectedTier(tier.id)}
-                    type="button"
-                  >
-                    {locale === 'en' ? tier.label.en : tier.label.zhHant}
-                  </button>
-                ))}
+              <div className="mt-3">
+                <AiModelTierSelector
+                  autoLabel={text.levelAuto}
+                  locale={locale}
+                  lockedLabel={text.levelLocked}
+                  onChange={setSelectedTier}
+                  selected={selectedTier}
+                  tiers={tierOptions}
+                />
               </div>
             </fieldset>
             <button

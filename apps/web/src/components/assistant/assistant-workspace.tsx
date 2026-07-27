@@ -17,6 +17,7 @@ import {
   ShieldIcon,
   SparkIcon,
 } from '@/components/icons';
+import { AiModelTierSelector } from '@/components/ai-model-tier-selector';
 import { useLanguage } from '@/components/language-provider';
 import {
   AssistantChatStreamEventSchema,
@@ -68,6 +69,46 @@ const AttachmentUploadResponseSchema = z
 const ArtifactCreateResponseSchema = z
   .object({ artifact: AssistantArtifactSummarySchema })
   .strict();
+const AssistantErrorResponseSchema = z
+  .object({
+    error: z
+      .object({
+        code: z.string().min(1).max(80),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+type PromptError = 'authentication' | 'model' | 'rate' | 'short' | 'temporary' | 'unavailable';
+
+class AssistantRequestError extends Error {
+  readonly code: string;
+
+  constructor(code: string) {
+    super('Assistant request failed');
+    this.name = 'AssistantRequestError';
+    this.code = code;
+  }
+}
+
+function promptErrorForCode(code: string): Exclude<PromptError, 'short'> {
+  if (code === 'AI_PROVIDER_AUTHENTICATION_FAILED') return 'authentication';
+  if (code === 'AI_PROVIDER_RATE_LIMITED') return 'rate';
+  if (code === 'AI_PROVIDER_NOT_CONFIGURED') return 'model';
+  if (code === 'AI_PROVIDER_REQUEST_FAILED' || code === 'AI_PROVIDER_TIMEOUT') return 'temporary';
+  return 'unavailable';
+}
+
+async function readAssistantRequestError(response: Response): Promise<AssistantRequestError> {
+  try {
+    const parsed = AssistantErrorResponseSchema.safeParse(await response.json());
+    return new AssistantRequestError(
+      parsed.success ? parsed.data.error.code : 'AI_PROVIDER_REQUEST_FAILED',
+    );
+  } catch {
+    return new AssistantRequestError('AI_PROVIDER_REQUEST_FAILED');
+  }
+}
 
 const copy = {
   en: {
@@ -90,6 +131,12 @@ const copy = {
       'Describe the source, transformation rules, output, and timing. The model can only propose validated Workflow JSON.',
     emptyTitle: 'What would you like to work on?',
     error: 'The assistant response could not be completed. Nothing was executed.',
+    errorAuthentication:
+      'The selected AI provider could not be verified. Choose Auto or contact the administrator.',
+    errorModel:
+      'This model is not available to the provider account. Choose Auto or another model.',
+    errorRate: 'The provider quota is currently limited. Choose Auto or try again later.',
+    errorTemporary: 'The provider could not be reached. Choose Auto or try again shortly.',
     executionApproval: 'Approval required before Desktop dispatch',
     executionDraft: 'Create reviewed draft',
     executionDraftReady: 'Reviewed Workflow v1 draft',
@@ -101,6 +148,7 @@ const copy = {
     model: 'Model',
     level: 'Level',
     levelAuto: 'Auto',
+    levelLocked: 'Locked',
     newConversation: 'New conversation',
     noProvider: 'AI is unavailable. Please contact the platform administrator.',
     noSaved: 'No saved conversations yet',
@@ -152,6 +200,10 @@ const copy = {
     emptyPlan: '描述資料來源、處理規則、輸出與時間；模型只能提出經驗證的 Workflow JSON。',
     emptyTitle: '今天想一起處理什麼？',
     error: '助理回應未能完成；沒有執行任何動作。',
+    errorAuthentication: '所選 AI Provider 無法通過驗證，請改用「自動」或聯絡管理者。',
+    errorModel: 'Provider 帳戶目前沒有此模型，請改用「自動」或其他模型。',
+    errorRate: 'Provider 配額目前受限，請改用「自動」或稍後重試。',
+    errorTemporary: 'Provider 目前無法連線，請改用「自動」或稍後重試。',
     executionApproval: '等待核准後才會派送至 Desktop Agent',
     executionDraft: '建立審閱草稿',
     executionDraftReady: '已審閱的 Workflow v1 草稿',
@@ -163,6 +215,7 @@ const copy = {
     model: '模型',
     level: '等級',
     levelAuto: '自動',
+    levelLocked: '未解鎖',
     newConversation: '新增對話',
     noProvider: 'AI 目前尚未開放，請聯絡平台管理者。',
     noSaved: '目前沒有已保存的對話',
@@ -241,7 +294,7 @@ export function AssistantWorkspace({
   const [selectedTier, setSelectedTier] = useState<AiModelTierSelection>('auto');
   const [mode, setMode] = useState<AssistantConversationMode>('ask');
   const [prompt, setPrompt] = useState('');
-  const [promptError, setPromptError] = useState<'short' | 'unavailable'>();
+  const [promptError, setPromptError] = useState<PromptError>();
   const [pending, setPending] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [streamingBody, setStreamingBody] = useState('');
@@ -550,8 +603,11 @@ export function AssistantWorkspace({
       method: 'POST',
       signal: controller.signal,
     });
-    if (!response.ok || response.body === null) {
-      throw new Error('Chat request failed');
+    if (!response.ok) {
+      throw await readAssistantRequestError(response);
+    }
+    if (response.body === null) {
+      throw new AssistantRequestError('AI_PROVIDER_RESPONSE_INVALID');
     }
 
     const reader = response.body.getReader();
@@ -595,7 +651,7 @@ export function AssistantWorkspace({
           if (partialMessage !== undefined) {
             setMessages((current) => [...current, partialMessage]);
           }
-          setPromptError('unavailable');
+          setPromptError(promptErrorForCode(event.data.code));
         }
       }
       if (chunk.done) {
@@ -634,9 +690,13 @@ export function AssistantWorkspace({
       method: 'POST',
       signal: controller.signal,
     });
-    const parsed = PlannerResponseSchema.safeParse(await response.json());
+    const payload: unknown = await response.json();
+    const parsed = PlannerResponseSchema.safeParse(payload);
     if (!response.ok || !parsed.success) {
-      throw new Error('Invalid planning response');
+      const apiError = AssistantErrorResponseSchema.safeParse(payload);
+      throw new AssistantRequestError(
+        apiError.success ? apiError.data.error.code : 'AI_PROVIDER_RESPONSE_INVALID',
+      );
     }
     setConversationId(parsed.data.conversationId);
     replaceOptimisticUser(optimisticUser.id, parsed.data.userMessage);
@@ -696,6 +756,8 @@ export function AssistantWorkspace({
             },
           ]);
         }
+      } else if (error instanceof AssistantRequestError) {
+        setPromptError(promptErrorForCode(error.code));
       } else {
         setPromptError('unavailable');
       }
@@ -812,39 +874,22 @@ export function AssistantWorkspace({
                 </select>
               </label>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div>
               <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
                 {text.level}
               </span>
-              <button
-                aria-pressed={selectedTier === 'auto'}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  selectedTier === 'auto'
-                    ? 'bg-slate-950 text-white'
-                    : 'border border-slate-200 bg-white text-slate-600 hover:border-indigo-300'
-                }`}
+              <AiModelTierSelector
+                autoLabel={text.levelAuto}
                 disabled={pending}
-                onClick={() => setSelectedTier('auto')}
-                type="button"
-              >
-                {text.levelAuto}
-              </button>
-              {tiers.map((tier) => (
-                <button
-                  aria-pressed={selectedTier === tier.id}
-                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                    selectedTier === tier.id
-                      ? 'bg-indigo-600 text-white'
-                      : 'border border-slate-200 bg-white text-slate-600 hover:border-indigo-300'
-                  } disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-300`}
-                  disabled={pending || !tier.enabled}
-                  key={tier.id}
-                  onClick={() => setSelectedTier(tier.id)}
-                  type="button"
-                >
-                  {locale === 'en' ? tier.label.en : tier.label.zhHant}
-                </button>
-              ))}
+                locale={locale}
+                lockedLabel={text.levelLocked}
+                onChange={(tier) => {
+                  setSelectedTier(tier);
+                  setPromptError(undefined);
+                }}
+                selected={selectedTier}
+                tiers={tiers}
+              />
             </div>
           </div>
 
@@ -1019,9 +1064,17 @@ export function AssistantWorkspace({
                       : text.promptShortPlan
                     : promptError === 'unavailable'
                       ? text.error
-                      : mode === 'ask'
-                        ? text.promptHelpAsk
-                        : text.promptHelpPlan}
+                      : promptError === 'authentication'
+                        ? text.errorAuthentication
+                        : promptError === 'rate'
+                          ? text.errorRate
+                          : promptError === 'model'
+                            ? text.errorModel
+                            : promptError === 'temporary'
+                              ? text.errorTemporary
+                              : mode === 'ask'
+                                ? text.promptHelpAsk
+                                : text.promptHelpPlan}
               </p>
               {resourceStatus !== undefined && (
                 <p className="text-[10px] font-semibold text-indigo-700" role="status">
