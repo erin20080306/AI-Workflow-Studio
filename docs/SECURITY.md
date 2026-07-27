@@ -137,6 +137,29 @@ server-derived tenant context and the service role; authenticated browser roles
 receive read-only tenant-scoped RLS access. Usage metadata records provider,
 model, units, duration, outcome, and conversation identifier only.
 
+## Usage and Microsoft Store boundary
+
+Paid access is derived only from a server-verified Microsoft Store entitlement.
+The browser cannot select a paid plan or call the database synchronization
+function directly. The authenticated Store synchronization route validates the
+caller's Tenant role, validates the short-lived Store ID key, exchanges
+server-only Microsoft Entra credentials, requires an exact product/SKU mapping,
+and fails closed on invalid, oversized, or paginated responses.
+
+Store ID keys, Microsoft access tokens, client secrets, and raw Store responses
+are not persisted. PostgreSQL stores only the external subscription identifier,
+mapped plan, normalized state, timestamps, and a reconciliation hash. Ordinary
+users see allowance and entitlement state, while platform administration
+exposes configuration presence only.
+
+AI calls reserve a conservative maximum cost before provider access. The
+database atomically enforces Tenant, monthly budget, reservation expiry,
+per-minute request limits, text-source bytes, and tool-call allowances. Actual
+usage releases the reservation in the same transaction. The 100% ceiling fails
+closed; 80% and 95% thresholds produce warnings. A Super Admin manual override
+is audit logged, clears stale external entitlement metadata, and does not count
+as Store revenue.
+
 Until the authenticated production session/repository boundary is connected,
 the public development control plane permits only the deterministic Mock
 planner. Supplying a real provider key does not make an external provider

@@ -21,6 +21,7 @@ import { getAssistantConversation } from '@/lib/assistant-conversation-server';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
+import { consumeMeteredAllowance } from '@/lib/usage-control-server';
 
 const AttachmentRowSchema = z.object({
   byte_size: z.number().int().min(1).max(MAX_ATTACHMENT_BYTES),
@@ -292,6 +293,12 @@ export async function uploadAssistantAttachment(
       'A conversation can contain at most 20 sources.',
     );
   }
+  const contentSha256 = await sha256(input.content);
+  await consumeMeteredAllowance(context, 'source_upload', byteSize, {
+    conversationId: input.conversationId,
+    mimeType,
+    sha256: contentSha256,
+  });
   const now = new Date().toISOString();
   const row = AttachmentRowSchema.parse({
     byte_size: byteSize,
@@ -301,7 +308,7 @@ export async function uploadAssistantAttachment(
     filename,
     id: crypto.randomUUID(),
     mime_type: mimeType,
-    sha256: await sha256(input.content),
+    sha256: contentSha256,
     tenant_id: context.actor.tenantId,
     uploaded_by: context.actor.userId,
   });
@@ -463,6 +470,11 @@ export async function prepareAssistantSources(
       'The assistant source result is invalid.',
     );
   }
+  await consumeMeteredAllowance(context, 'tool_call', 1, {
+    conversationId: input.conversationId,
+    toolName: invocation.name,
+    toolVersion: invocation.version,
+  });
   if (getEnvironment().mockMode) {
     const state = memoryResources();
     state.messageSources.set(input.messageId, sources);
@@ -591,6 +603,11 @@ export async function createAssistantArtifact(
     },
     status: 'succeeded',
     version: 1,
+  });
+  await consumeMeteredAllowance(context, 'tool_call', 1, {
+    conversationId: input.conversationId,
+    toolName: invocation.name,
+    toolVersion: invocation.version,
   });
 
   if (getEnvironment().mockMode) {

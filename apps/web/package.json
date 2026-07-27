@@ -17,6 +17,7 @@
     "@ai-workflow-studio/scheduler": "workspace:*",
     "@ai-workflow-studio/shared": "workspace:*",
     "@ai-workflow-studio/tool-registry": "workspace:*",
+    "@ai-workflow-studio/usage-control": "workspace:*",
     "@ai-workflow-studio/workflow-engine": "workspace:*",
     "@ai-workflow-studio/workflow-schema": "workspace:*",
     "@supabase/ssr": "^0.12.3",

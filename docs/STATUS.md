@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 21 — Schedules and connectors (completed)
+Phase 23 — Website Studio foundation (pending)
 
 ## Repository baseline
 
@@ -1656,3 +1656,101 @@ Status: completed
 ### Commit
 
 - `feat(web): add safe recurring schedules` (this phase commit)
+
+## Phase 22 — Usage and operations
+
+Status: completed
+
+### Implemented
+
+- Added a strict shared usage-control package with a versioned conservative
+  internal rate card, bounded token estimates, maximum-cost reservations,
+  plan lookup, and deterministic 80% warning, 95% critical, and 100% blocked
+  budget levels.
+- Added monthly plan allowances for AI cost, per-minute AI requests, text-source
+  bytes, and audited tool calls. The Free, Pro, Team, and Business plans use
+  bounded cost budgets designed to protect subscription margin instead of
+  exposing a resold Token balance.
+- Added immutable Supabase usage-budget reservations and service-role functions
+  for atomic preflight reservation, actual AI usage recording, reservation
+  release, and source/tool allowance consumption. Reservations are
+  Tenant-scoped, idempotent, rate-limited, and expire after 15 minutes.
+- Connected Ask and Plan provider calls to conservative preflight reservations
+  and actual usage settlement. Provider calls fail closed before network access
+  when the monthly ceiling, request rate, or Production usage boundary cannot be
+  verified.
+- Connected text-source ingestion and audited tool execution to database-side
+  monthly allowance consumption without changing the existing 1 MiB per-source,
+  five-source-per-message, 16,000-character context, or approved-tool authority
+  boundaries.
+- Added a bilingual **用量 / Usage** workspace showing remaining AI allowance,
+  monthly text-source and tool-call usage, request-rate limit, warnings, and the
+  Microsoft Store single-commerce boundary. Ordinary users receive no provider
+  key, Store credential, product/SKU mapping, or administrator configuration
+  detail.
+- Added a server-only Microsoft Store entitlement adapter and authenticated
+  synchronization route. The server validates a short-lived Store ID key,
+  exchanges protected Microsoft Entra credentials, validates exact
+  product/SKU-to-plan mappings, rejects incomplete pagination, hashes safe
+  response metadata, and updates Tenant access without storing the Store ID
+  key, access token, client secret, or raw response.
+- Restricted paid billing state to Microsoft Store synchronization or an
+  audited Super Admin internal override. An internal override clears stale
+  external entitlement metadata and is excluded from Store revenue estimates.
+- Added an administrator operations summary for gross Store catalog revenue,
+  estimated net after an explicit 15% operational assumption, estimated AI
+  cost, margin, warning counts, and internal overrides. Provider and Store
+  settings disclose configured/not-configured status only.
+- Corrected bilingual rendering so `LocalizedText` renders only the active
+  locale. A clean browser origin now switches Chinese/English without duplicate
+  hidden text, hydration warnings, or CSS dependence.
+- Added complete Store/usage architecture, security, deployment, testing,
+  production-checklist, and user documentation. The documentation records that
+  Microsoft must provision the subscription recurrence API, actual Partner
+  Center statements remain authoritative, and this phase has not been deployed.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all code workspaces, including usage control
+- `pnpm test`: passed — 130 tests across 31 files
+- `pnpm db:test`: passed — fresh migrations, usage reservations, rate and
+  monthly ceilings, source/tool consumption, Store-only billing constraints,
+  service-only entitlement synchronization, Tenant isolation, audit, and
+  idempotent seed coverage
+- `pnpm build:web`: passed — 39 generated pages plus the Usage workspace and
+  Microsoft Store entitlement synchronization route
+- `pnpm security:scan-client`: passed — 30 built client files inspected
+- `pnpm test:e2e`: passed — seven Chromium paths, including bilingual usage,
+  Store single-commerce disclosure, hidden credential/configuration details,
+  AI conversations, sources/artifacts, schedules, workflows, and Agent APIs
+- Clean-origin desktop browser check: passed — Chinese-only initial rendering,
+  English switch, correct document language, and no console warnings or errors
+- Mobile browser check: passed at 390 × 844 — Usage workspace remained readable
+  with no horizontal overflow
+
+### Known limitations
+
+- Microsoft documents that its subscription recurrence-query API is available
+  only to provisioned developer accounts and not most accounts. Partner Center
+  or Microsoft must confirm access before Production entitlement verification
+  can be relied upon.
+- The Store-associated Windows client does not yet obtain a real Store ID key
+  or call the synchronization endpoint. Product/SKU add-ons, package
+  submission, certification, payout/tax reconciliation, refunds, and signed
+  desktop release remain external go-live work.
+- Revenue and margin values are operational estimates based on catalog prices,
+  an assumed 15% fee, and the internal conservative AI rate card. Partner Center
+  statements and provider invoices remain authoritative.
+- Durable Production Desktop Agent, Run, and Google repository adapters remain
+  incomplete and continue to fail closed where applicable.
+- Website Studio, guided website specification, sandboxed responsive preview,
+  reversible editing, and publishing remain scheduled for Phases 23–27.
+- This phase was not deployed to Production; a successful local build, commit,
+  or GitHub push must not be described as a Vercel or Microsoft Store release.
+
+### Commit
+
+- `feat(platform): add Store entitlements and usage guardrails` (this phase
+  commit)

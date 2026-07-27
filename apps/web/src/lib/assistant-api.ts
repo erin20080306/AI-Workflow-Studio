@@ -12,6 +12,7 @@ import {
   type AssistantResourceErrorCode,
 } from '@/lib/assistant-resource-server';
 import { AuthenticationError, type AuthenticationErrorCode } from '@/lib/auth/context';
+import { UsageControlError, type UsageControlErrorCode } from '@/lib/usage-control-server';
 
 const MAX_REQUEST_BYTES = 20_000;
 
@@ -45,6 +46,12 @@ const statusByResourceCode: Readonly<Record<AssistantResourceErrorCode, number>>
   ASSISTANT_RESOURCE_INVALID: 400,
   ASSISTANT_RESOURCE_LIMIT_EXCEEDED: 413,
   ASSISTANT_RESOURCE_NOT_FOUND: 404,
+};
+const statusByUsageCode: Readonly<Record<UsageControlErrorCode, number>> = {
+  USAGE_ALLOWANCE_EXCEEDED: 429,
+  USAGE_BUDGET_EXCEEDED: 402,
+  USAGE_DATA_INVALID: 503,
+  USAGE_RATE_LIMIT_EXCEEDED: 429,
 };
 
 export async function readAssistantJson(
@@ -99,6 +106,13 @@ export function assistantErrorDetails(error: unknown): {
       code: error.code,
       message: error.message,
       status: statusByResourceCode[error.code],
+    };
+  }
+  if (error instanceof UsageControlError) {
+    return {
+      code: error.code,
+      message: error.message,
+      status: statusByUsageCode[error.code],
     };
   }
   if (error instanceof z.ZodError) {

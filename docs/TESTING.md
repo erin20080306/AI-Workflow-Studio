@@ -72,6 +72,11 @@ invalid terminal transitions fail, and audit/notification rows are created in
 the same transaction.
 AI conversation assertions verify tenant-scoped reads, cross-tenant composite
 foreign keys, and service-role-only conversation, message, and usage writes.
+Usage-control assertions additionally verify atomic reservations, request-rate
+limits, 80%/95%/100% thresholds, actual-cost recording, reservation release,
+monthly source/tool allowance consumption, Store-only billing constraints,
+service-role-only entitlement synchronization, and audit-safe internal
+overrides.
 
 ### End to end
 
@@ -98,6 +103,14 @@ The AI Workspace browser E2E streams a deterministic Ask reply, reloads and
 reopens the saved conversation, then creates a Plan conversation and verifies
 that only a validated four-step Workflow plan is rendered from persisted
 metadata.
+
+The usage-operations E2E opens the bilingual allowance workspace, verifies plan
+limits and Microsoft Store single-commerce disclosure, confirms that ordinary
+users receive no API credential or Store configuration detail, and checks the
+platform operations summary and internal-override labeling. Microsoft Store
+service tests inject local transports and assert exact product/SKU selection,
+server-only RPC metadata, fail-closed malformed keys, and the absence of raw
+Store ID keys from persistence calls.
 
 The Agent API E2E starts a write-capable Run while its paired Agent is offline,
 asserts no Job exists before approval, approves it, reconnects, claims exactly

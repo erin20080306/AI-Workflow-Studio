@@ -329,7 +329,7 @@ begin
     from public.platform_admin_audit_logs
     where action = 'tenant.subscription.plan_changed'
       and resource_id = '20000000-0000-0000-0000-000000000001'
-      and metadata = '{"fromPlanCode":"free","toPlanCode":"pro"}'
+      and metadata @> '{"fromPlanCode":"free","toPlanCode":"pro"}'
   ) <> 1 then
     raise exception 'an administrator plan change must atomically create an audit event';
   end if;

@@ -24,6 +24,30 @@ const optionalModel = z.preprocess(
     .regex(/^[A-Za-z0-9._:-]{2,120}$/)
     .optional(),
 );
+const storePlanMappings = z.preprocess(
+  (value) => {
+    const normalized = emptyToUndefined(value);
+    if (typeof normalized !== 'string') return normalized;
+    try {
+      return JSON.parse(normalized) as unknown;
+    } catch {
+      return normalized;
+    }
+  },
+  z
+    .array(
+      z
+        .object({
+          plan: z.enum(['pro', 'team', 'business']),
+          productId: z.string().trim().min(1).max(200),
+          skuId: z.string().trim().min(1).max(200),
+        })
+        .strict(),
+    )
+    .min(1)
+    .max(12)
+    .optional(),
+);
 
 const environmentSchema = z.object({
   AGENT_TOKEN_PEPPER: optionalSecret,
@@ -36,6 +60,10 @@ const environmentSchema = z.object({
   GOOGLE_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   GOOGLE_CLIENT_SECRET: optionalSecret,
   GOOGLE_REDIRECT_URI: optionalUrl,
+  MICROSOFT_STORE_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().uuid().optional()),
+  MICROSOFT_STORE_CLIENT_SECRET: optionalSecret,
+  MICROSOFT_STORE_PLAN_MAPPINGS: storePlanMappings,
+  MICROSOFT_STORE_TENANT_ID: z.preprocess(emptyToUndefined, z.string().uuid().optional()),
   NEXT_PUBLIC_APP_URL: optionalUrl,
   NEXT_PUBLIC_MOCK_MODE: z.enum(['true', 'false']).default('true'),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
@@ -53,6 +81,14 @@ export interface AppEnvironment {
   readonly appUrl?: string;
   readonly googleConfigured: boolean;
   readonly mockMode: boolean;
+  readonly microsoftStore: {
+    readonly configured: boolean;
+    readonly planMappings: readonly {
+      readonly plan: 'pro' | 'team' | 'business';
+      readonly productId: string;
+      readonly skuId: string;
+    }[];
+  };
   readonly providers: {
     readonly anthropic: boolean;
     readonly gemini: boolean;
@@ -82,6 +118,12 @@ export function parseEnvironment(input: Record<string, string | undefined>): App
     parsed.data.NEXT_PUBLIC_SUPABASE_URL &&
     (parsed.data.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || parsed.data.NEXT_PUBLIC_SUPABASE_ANON_KEY),
   );
+  const microsoftStoreConfigured = Boolean(
+    parsed.data.MICROSOFT_STORE_TENANT_ID &&
+    parsed.data.MICROSOFT_STORE_CLIENT_ID &&
+    parsed.data.MICROSOFT_STORE_CLIENT_SECRET &&
+    parsed.data.MICROSOFT_STORE_PLAN_MAPPINGS?.length,
+  );
 
   return {
     ...(parsed.data.NEXT_PUBLIC_APP_URL ? { appUrl: parsed.data.NEXT_PUBLIC_APP_URL } : {}),
@@ -92,6 +134,10 @@ export function parseEnvironment(input: Record<string, string | undefined>): App
       parsed.data.APP_ENCRYPTION_KEY,
     ),
     mockMode: parsed.data.NEXT_PUBLIC_MOCK_MODE === 'true' || !supabaseConfigured,
+    microsoftStore: {
+      configured: microsoftStoreConfigured,
+      planMappings: parsed.data.MICROSOFT_STORE_PLAN_MAPPINGS ?? [],
+    },
     providers: {
       anthropic: Boolean(parsed.data.ANTHROPIC_API_KEY),
       gemini: Boolean(parsed.data.GEMINI_API_KEY),

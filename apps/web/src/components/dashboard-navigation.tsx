@@ -12,6 +12,7 @@ import {
   ScheduleIcon,
   SettingsIcon,
   ShieldIcon,
+  SparkIcon,
 } from './icons';
 import { useLanguage } from './language-provider';
 
@@ -21,6 +22,7 @@ const workspaceNavigation = [
   { en: 'Workflows', href: '/dashboard/workflows', icon: FlowIcon, zhHant: '工作流' },
   { en: 'Schedules', href: '/dashboard/schedules', icon: ScheduleIcon, zhHant: '排程' },
   { en: 'Runs', href: '/dashboard/runs', icon: RunsIcon, zhHant: '執行紀錄' },
+  { en: 'Usage', href: '/dashboard/usage', icon: SparkIcon, zhHant: '用量額度' },
   { en: 'Devices', href: '/dashboard/devices', icon: DeviceIcon, zhHant: '裝置' },
   { en: 'Settings', href: '/dashboard/settings', icon: SettingsIcon, zhHant: '設定' },
 ] as const;

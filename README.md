@@ -20,6 +20,7 @@ packages/ai-gateway       Validated provider adapters
 packages/google-sheets    OAuth and bounded Google Sheets operations
 packages/local-executor   Bounded Excel/CSV processing
 packages/run-orchestrator Run state, approval, dispatch, retry, and audit
+packages/usage-control    Cost estimates, quotas, reservations, and warnings
 packages/workflow-schema  Workflow v1 schemas and catalog
 packages/workflow-engine  Deterministic orchestration primitives
 supabase                  PostgreSQL migrations and RLS
@@ -81,9 +82,12 @@ notifications remain in the control plane. See
 
 Release controls, checksums, signing-aware metadata, native CI matrices, Vercel
 configuration, and a Microsoft Store AppX draft configuration are implemented
-locally. No production deployment or release has been published. Unsigned
-packages remain development/prerelease artifacts and must not be presented as
-stable production installers. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md),
+locally. The hosted Web/Auth boundary was established in Phase 14, while newer
+phase changes require an explicit deployment. No Microsoft Store submission,
+signed desktop release, or GitHub Release has been published. Unsigned packages
+remain development/prerelease artifacts and must not be presented as stable
+production installers. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md),
+[`docs/USAGE_AND_STORE.md`](docs/USAGE_AND_STORE.md),
 [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md), and
 [`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
 
@@ -95,3 +99,5 @@ stable production installers. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md),
   database, Web, Desktop, OAuth, and release diagnosis.
 - [`docs/PRODUCTION_CHECKLIST.md`](docs/PRODUCTION_CHECKLIST.md): external
   account, Auth, environment, and go-live requirements.
+- [`docs/USAGE_AND_STORE.md`](docs/USAGE_AND_STORE.md): Store-only paid access,
+  monthly allowances, cost guardrails, and operational setup.

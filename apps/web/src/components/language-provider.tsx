@@ -102,14 +102,11 @@ export function LocalizedText({
   en: ReactNode;
   zhHant: ReactNode;
 }>) {
+  const { locale } = useLanguage();
+
   return (
-    <span className={className}>
-      <span className="locale-zh-hant" lang="zh-Hant">
-        {zhHant}
-      </span>
-      <span className="locale-en" lang="en">
-        {en}
-      </span>
+    <span className={className} lang={locale}>
+      {locale === 'en' ? en : zhHant}
     </span>
   );
 }

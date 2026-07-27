@@ -6,8 +6,24 @@ The complete local acceptance experience uses synthetic Mock data and does not
 require an AI key, Google account, Supabase project, or customer files. The
 non-Mock Web includes Supabase registration, confirmation, login, recovery,
 logout, and Tenant onboarding, but those flows require a configured staging or
-production Supabase project. No hosted deployment, payment checkout, or Store
-publication is represented as complete.
+production Supabase project. A hosted Web/Auth boundary exists, but the newest
+phase changes are not automatically deployed. The Web intentionally provides no
+separate card checkout, and no Microsoft Store publication is represented as
+complete.
+
+## Review usage and plan allowance
+
+1. Open **用量 / Usage** in the authenticated workspace.
+2. Review the current plan, remaining internal AI cost allowance, monthly
+   text-source bytes, tool calls, and request-rate limit.
+3. Treat the 80% warning as an early signal and the 95% warning as a required
+   review point. New metered operations stop at the 100% ceiling.
+4. Paid plans are purchased through Microsoft Store only. The Web does not ask
+   for card details or AI provider keys.
+
+The cost values are conservative internal safety estimates, not provider
+invoices. An individual text source remains limited to 1 MiB even when the
+monthly plan allowance is larger.
 
 ## Create and review a workflow
 

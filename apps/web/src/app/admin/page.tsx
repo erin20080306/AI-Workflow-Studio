@@ -5,6 +5,7 @@ import { SparkIcon } from '@/components/icons';
 import { LocalizedText } from '@/components/language-provider';
 import {
   getPlatformAdminOverview,
+  getPlatformOperationsOverview,
   listPlatformTenants,
   requirePlatformAdmin,
 } from '@/lib/platform-admin';
@@ -35,9 +36,10 @@ export default async function AdminPage({
 }: Readonly<{
   searchParams: Promise<{ status?: string }>;
 }>) {
-  const [administrator, overview, tenants, params] = await Promise.all([
+  const [administrator, overview, operations, tenants, params] = await Promise.all([
     requirePlatformAdmin(),
     getPlatformAdminOverview(),
+    getPlatformOperationsOverview(),
     listPlatformTenants(),
     searchParams,
   ]);
@@ -101,6 +103,62 @@ export default async function AdminPage({
         ))}
       </section>
 
+      <section className="mt-7 rounded-2xl bg-slate-950 p-5 text-white shadow-sm sm:p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">
+              <LocalizedText en="Monthly operating estimate" zhHant="每月營運估算" />
+            </p>
+            <h2 className="mt-2 text-xl font-semibold">
+              <LocalizedText en="Store revenue and cost guard" zhHant="Store 收益與成本控管" />
+            </h2>
+          </div>
+          <p className="max-w-lg text-xs leading-5 text-slate-400">
+            <LocalizedText
+              en="Estimates use monthly catalog prices, a 15% Store service-fee assumption, and the internal conservative AI rate card. Tax, refunds, annual SKUs, and final provider invoices may differ."
+              zhHant="估算採每月目錄價格、15% Store 服務費假設與內部保守 AI 費率；稅款、退款、年繳 SKU 與最終 Provider 帳單可能不同。"
+            />
+          </p>
+        </div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {[
+            {
+              label: { en: 'Gross catalog', zhHant: '目錄總額' },
+              value: `NT$${operations.grossMicrosoftCatalogRevenueTwd.toFixed(2)}`,
+            },
+            {
+              label: { en: 'Net after 15%', zhHant: '扣 15% 後' },
+              value: `NT$${operations.estimatedMicrosoftNetRevenueTwd.toFixed(2)}`,
+            },
+            {
+              label: { en: 'AI cost estimate', zhHant: 'AI 成本估算' },
+              value: `NT$${operations.estimatedAiCostTwd.toFixed(2)}`,
+            },
+            {
+              label: { en: 'Estimated margin', zhHant: '估算毛利' },
+              value: `NT$${operations.estimatedMarginTwd.toFixed(2)}`,
+            },
+            {
+              label: { en: 'Usage warnings', zhHant: '用量警示' },
+              value: operations.tenantsAtWarning.toString(),
+            },
+          ].map((card) => (
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4" key={card.label.en}>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <LocalizedText en={card.label.en} zhHant={card.label.zhHant} />
+              </p>
+              <p className="mt-3 text-xl font-semibold">{card.value}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 text-xs text-slate-400">
+          <LocalizedText
+            en={`${operations.internalOverrideCount} paid-feature internal overrides are excluded from Store revenue.`}
+            zhHant={`${operations.internalOverrideCount} 個內部付費功能覆寫不計入 Store 收益。`}
+          />
+        </p>
+      </section>
+
       <section className="mt-7 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
           <h2 className="text-base font-semibold text-slate-950">
@@ -109,7 +167,7 @@ export default async function AdminPage({
           <p className="mt-1 text-xs text-slate-500">
             <LocalizedText
               en="Manual changes are limited to testing, compensation, or external billing synchronization. Every change is audited."
-              zhHant="人工調整只用於測試、補償或外部付款同步；每次變更都寫入管理稽核。"
+              zhHant="人工調整只用於內部管理者、測試或補償；一般付費方案只由 Microsoft Store 同步。每次變更都寫入管理稽核。"
             />
           </p>
         </div>
@@ -135,6 +193,13 @@ export default async function AdminPage({
                   <td className="px-6 py-4">
                     <p className="font-semibold text-slate-900">{tenant.name}</p>
                     <p className="mt-1 font-mono text-xs text-slate-400">{tenant.slug}</p>
+                    <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      {tenant.billingProvider === 'microsoft_store'
+                        ? 'Microsoft Store'
+                        : tenant.plan === 'free'
+                          ? 'Free'
+                          : 'Internal override'}
+                    </p>
                   </td>
                   <td className="px-6 py-4">
                     <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">

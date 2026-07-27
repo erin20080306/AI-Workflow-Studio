@@ -23,6 +23,10 @@ import {
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
+import {
+  type AssistantUsageReservation,
+  recordReservedAssistantUsage,
+} from '@/lib/usage-control-server';
 
 const ConversationRowSchema = z.object({
   created_at: z.string().datetime({ offset: true }),
@@ -398,6 +402,7 @@ export async function getAssistantConversation(
 export function createAssistantUsageSink(
   context: WorkspaceContext,
   conversationId: string,
+  reservation: AssistantUsageReservation,
 ): UsageSink {
   if (getEnvironment().mockMode) {
     return {
@@ -407,32 +412,19 @@ export function createAssistantUsageSink(
         if (usage.length > 1_000) {
           usage.splice(0, usage.length - 1_000);
         }
+        await recordReservedAssistantUsage(context, reservation, conversationId, record);
       },
     };
   }
   return {
     async record(record) {
-      const result = await createSupabaseAdminClient()
-        .from('usage_records')
-        .insert({
-          actor_user_id: context.actor.userId,
-          input_units: record.inputTokens,
-          metadata: {
-            attempt: record.attempt,
-            conversationId,
-            durationMs: record.durationMs,
-            model: record.model,
-            outcome: record.outcome,
-          },
-          operation: record.operation,
-          output_units: record.outputTokens,
-          provider: record.provider,
-          tenant_id: context.actor.tenantId,
-        });
-      if (result.error !== null) {
+      try {
+        await recordReservedAssistantUsage(context, reservation, conversationId, record);
+      } catch (error) {
         throw new AssistantPersistenceError(
           'ASSISTANT_PERSISTENCE_FAILED',
           'AI usage could not be recorded.',
+          { cause: error },
         );
       }
     },

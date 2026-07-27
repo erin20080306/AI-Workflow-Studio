@@ -21,6 +21,7 @@ import { requireWorkspaceContext, type WorkspaceContext } from '@/lib/auth/conte
 import { plannerAccessDecision } from '@/lib/control-plane-access';
 import { getEnvironment } from '@/lib/env';
 import { createServerAiChatGateway } from '@/lib/ai-gateway';
+import { reserveAssistantUsage, type AssistantUsageReservation } from '@/lib/usage-control-server';
 
 const ChatApiRequestSchema = z
   .object({
@@ -66,6 +67,7 @@ export async function POST(request: Request): Promise<Response> {
   let conversation: AssistantConversationSummary;
   let userMessage: AssistantConversationMessage;
   let sources: readonly PreparedSource[];
+  let usageReservation: AssistantUsageReservation | undefined;
   try {
     conversation = await ensureAssistantConversation(workspace, {
       ...(input.conversationId === undefined ? {} : { conversationId: input.conversationId }),
@@ -84,6 +86,12 @@ export async function POST(request: Request): Promise<Response> {
       conversationId: conversation.id,
       maxCharacters: 16_000,
       messageId: userMessage.id,
+    });
+    usageReservation = await reserveAssistantUsage(workspace, {
+      inputCharacters: 48_000,
+      maxOutputTokens: 2_048,
+      operation: 'chat',
+      provider: input.provider,
     });
   } catch (error) {
     const safe = assistantErrorDetails(error);
@@ -120,7 +128,7 @@ export async function POST(request: Request): Promise<Response> {
             .map((message) => ({ content: message.body, role: message.role }));
           const gateway = createServerAiChatGateway(
             input.provider,
-            createAssistantUsageSink(workspace, conversation.id),
+            createAssistantUsageSink(workspace, conversation.id, usageReservation),
           );
 
           for await (const event of gateway.stream(
@@ -184,6 +192,11 @@ export async function POST(request: Request): Promise<Response> {
             );
           }
         } finally {
+          try {
+            await usageReservation.release();
+          } catch {
+            // Reservations expire automatically; preserve the streamed response.
+          }
           request.signal.removeEventListener('abort', requestAbortListener);
           try {
             controller.close();

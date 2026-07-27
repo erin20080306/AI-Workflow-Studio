@@ -1,0 +1,19 @@
+{
+  "name": "@ai-workflow-studio/usage-control",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-workflow-studio/shared": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

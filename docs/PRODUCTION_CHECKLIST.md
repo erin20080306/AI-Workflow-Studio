@@ -89,10 +89,18 @@ must never be substituted for the service-role key.
 - [ ] OpenAI: `OPENAI_API_KEY` and `OPENAI_MODEL`
 - [ ] Anthropic: `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL`
 - [ ] Gemini: `GEMINI_API_KEY` and `GEMINI_MODEL`
+- [ ] Microsoft Store: `MICROSOFT_STORE_TENANT_ID`,
+      `MICROSOFT_STORE_CLIENT_ID`, `MICROSOFT_STORE_CLIENT_SECRET`, and exact
+      `MICROSOFT_STORE_PLAN_MAPPINGS`
 
 AI providers are optional. Configure only approved providers, set budgets and
 alerts in their consoles, and rotate a provider key immediately if it appears in
 a client bundle or log.
+
+Microsoft Store credentials are required only when paid plans are opened. Keep
+them server-only. A Store ID key comes from the signed Windows application for
+one authenticated synchronization request; do not store it in Vercel, Supabase,
+logs, screenshots, or support tickets.
 
 ## OAuth and external services
 
@@ -107,6 +115,13 @@ a client bundle or log.
       and Desktop Agent dispatcher passes recurring-to-approval integration.
 - [ ] After enabling it, verify concurrent schedule ticks create one fire and
       one Run idempotently.
+- [ ] Confirm Microsoft has provisioned the Partner Center developer account
+      for the subscription recurrence-query API.
+- [ ] Test Store entitlement synchronization from the Store-associated Windows
+      package for active, dunning/grace, canceled, expired-key, unknown-SKU,
+      replay, and cross-Tenant cases.
+- [ ] Confirm the website offers no separate checkout and that paid plan changes
+      originate only from Store synchronization or an audited internal override.
 
 ## Operations and go-live
 
@@ -118,6 +133,10 @@ a client bundle or log.
 - [ ] Test Agent pairing, lease renewal, cancellation, approval, retry, and
       revocation against staging.
 - [ ] Review structured logs for redaction and define retention.
+- [ ] Verify the usage dashboard, request-rate limit, monthly source/tool
+      allowance, 80% and 95% warnings, and fail-closed 100% cost ceiling.
+- [ ] Reconcile estimated gross revenue, assumed fee, AI cost, and margin with
+      actual Partner Center statements; document tax, refund, and payout owners.
 - [ ] Define on-call ownership, incident response, key rotation, rollback,
       backup recovery, status communication, and customer support.
 - [ ] Complete [the release checklist](./RELEASE_CHECKLIST.md).
@@ -126,8 +145,11 @@ a client bundle or log.
 
 - Durable production Agent, Run, and Google repository adapters are not
   connected; their affected non-Mock operations fail closed.
-- Entitlements are enforced in PostgreSQL, but checkout, invoices, tax, webhook
-  processing, and a payment provider are not connected.
+- Microsoft Store is intentionally the only paid-commerce source. The
+  entitlement endpoint and database enforcement are implemented, but Partner
+  Center API provisioning, real product/SKU mapping, Store-associated client
+  integration, payout/tax reconciliation, submission, and certification remain
+  incomplete.
 - No signed desktop installer, Microsoft Store submission/certification, or
   GitHub Release has been created. The Store identity, branded package assets,
   and bilingual listing copy remain drafts.

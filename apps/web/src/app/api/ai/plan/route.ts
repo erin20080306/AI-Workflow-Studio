@@ -25,6 +25,7 @@ import {
 import { createServerAiGateway } from '@/lib/ai-gateway';
 import { plannerAccessDecision } from '@/lib/control-plane-access';
 import { getEnvironment } from '@/lib/env';
+import { reserveAssistantUsage, type AssistantUsageReservation } from '@/lib/usage-control-server';
 
 const MAX_REQUEST_BYTES = 20_000;
 const ApiPlannerRequestSchema = PlannerRequestSchema.extend({
@@ -115,6 +116,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   let conversation: AssistantConversationSummary | undefined;
+  let usageReservation: AssistantUsageReservation | undefined;
   try {
     const model = environment.providerModels[provider];
     conversation = await ensureAssistantConversation(workspace, {
@@ -135,13 +137,21 @@ export async function POST(request: Request): Promise<Response> {
       maxCharacters: 4_000,
       messageId: userMessage.id,
     });
+    const boundedPrompt = renderPreparedSources(validatedPlannerRequest.prompt, sources, 8_000);
+    usageReservation = await reserveAssistantUsage(workspace, {
+      inputCharacters: boundedPrompt.length,
+      maxAttempts: validatedPlannerRequest.maxRepairAttempts + 1,
+      maxOutputTokens: 4_096,
+      operation: 'workflow_plan',
+      provider,
+    });
     const result = await createServerAiGateway(
       provider,
-      createAssistantUsageSink(workspace, conversation.id),
+      createAssistantUsageSink(workspace, conversation.id, usageReservation),
     ).plan(
       {
         ...validatedPlannerRequest,
-        prompt: renderPreparedSources(validatedPlannerRequest.prompt, sources, 8_000),
+        prompt: boundedPrompt,
       },
       request.signal,
     );
@@ -200,6 +210,12 @@ export async function POST(request: Request): Promise<Response> {
       },
       { headers: { 'cache-control': 'no-store' }, status: safe.status },
     );
+  } finally {
+    try {
+      await usageReservation?.release();
+    } catch {
+      // Reservations expire automatically; never replace the primary response.
+    }
   }
 }
 

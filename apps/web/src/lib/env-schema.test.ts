@@ -7,6 +7,10 @@ describe('parseEnvironment', () => {
     expect(parseEnvironment({})).toMatchObject({
       googleConfigured: false,
       mockMode: true,
+      microsoftStore: {
+        configured: false,
+        planMappings: [],
+      },
       providers: {
         anthropic: false,
         gemini: false,
@@ -70,5 +74,27 @@ describe('parseEnvironment', () => {
         APP_ENCRYPTION_KEY: 'not-a-valid-encryption-key',
       }),
     ).toThrowError('Invalid environment configuration: APP_ENCRYPTION_KEY');
+  });
+
+  it('enables Microsoft Store only with complete server credentials and plan mappings', () => {
+    expect(
+      parseEnvironment({
+        MICROSOFT_STORE_CLIENT_ID: '11111111-1111-4111-8111-111111111111',
+        MICROSOFT_STORE_CLIENT_SECRET: 'server-secret-with-safe-length',
+        MICROSOFT_STORE_PLAN_MAPPINGS: JSON.stringify([
+          { plan: 'pro', productId: '9PRODUCT', skuId: 'monthly' },
+        ]),
+        MICROSOFT_STORE_TENANT_ID: '22222222-2222-4222-8222-222222222222',
+      }).microsoftStore,
+    ).toEqual({
+      configured: true,
+      planMappings: [{ plan: 'pro', productId: '9PRODUCT', skuId: 'monthly' }],
+    });
+
+    expect(() =>
+      parseEnvironment({
+        MICROSOFT_STORE_PLAN_MAPPINGS: '[{"plan":"unlimited"}]',
+      }),
+    ).toThrowError('Invalid environment configuration: MICROSOFT_STORE_PLAN_MAPPINGS');
   });
 });

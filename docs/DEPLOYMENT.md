@@ -28,7 +28,8 @@ domain.
 
 - Public browser values use the `NEXT_PUBLIC_` prefix and contain no secrets.
 - Supabase service credentials, encryption keys, device-token pepper, Google
-  OAuth secrets, model provider keys, and cron secrets are server-only.
+  OAuth secrets, model provider keys, Microsoft Store service credentials, and
+  cron secrets are server-only.
 - A provider key may be omitted; that provider then reports unavailable while
   mock mode and other configured providers continue to work.
 
@@ -45,6 +46,14 @@ The internal schedule tick requires
 Cron job until the durable Production Run and Desktop Agent dispatcher is
 configured; the route intentionally fails closed before that boundary exists.
 See [safe recurring schedules](./SCHEDULES.md).
+
+Microsoft Store entitlement verification additionally requires the server-only
+`MICROSOFT_STORE_TENANT_ID`, `MICROSOFT_STORE_CLIENT_ID`,
+`MICROSOFT_STORE_CLIENT_SECRET`, and `MICROSOFT_STORE_PLAN_MAPPINGS` values.
+The short-lived Store ID key is sent by the signed-in Windows app to the
+authenticated synchronization route; it is not a Vercel environment variable
+and is never persisted. See
+[usage control and Store entitlements](./USAGE_AND_STORE.md).
 
 ## Desktop release channels
 
@@ -69,8 +78,12 @@ Certification Kit, listing, privacy, and support checks pass. See
 
 ## Current deployment status
 
-The web application and desktop development package build locally. Vercel
-configuration, CI, direct release, and Microsoft Store package workflow
-definitions are checked in, but nothing has been deployed, submitted to
-Microsoft Store, signed, or released. Production Supabase adapters, real
-registration, platform Super Admin, and billing remain required before go-live.
+The hosted Web/Supabase authentication boundary was established and verified in
+Phase 14. The Phase 22 usage-control and Microsoft Store entitlement changes
+have passed local Production-build and browser checks but have not been deployed
+to that hosted environment.
+
+No Microsoft Store package has been submitted, certified, or connected to the
+entitlement endpoint, and no signed desktop release or GitHub Release has been
+published. Microsoft Store remains the sole planned paid-commerce source; the
+Web intentionally has no separate card checkout.

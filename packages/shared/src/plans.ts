@@ -3,6 +3,7 @@ export const PLAN_CODES = ['free', 'pro', 'team', 'business'] as const;
 export type PlanCode = (typeof PLAN_CODES)[number];
 
 export interface ProductPlan {
+  readonly aiRequestsPerMinute: number;
   readonly annualPriceTwd: number;
   readonly auditRetentionDays: number;
   readonly code: PlanCode;
@@ -13,8 +14,11 @@ export interface ProductPlan {
   readonly deviceLimit: number;
   readonly featured: boolean;
   readonly memberLimit: number;
+  readonly monthlyAiCostBudgetMicrounits: number;
   readonly monthlyPriceTwd: number;
   readonly monthlyRunLimit: number;
+  readonly monthlySourceBytes: number;
+  readonly monthlyToolCallLimit: number;
   readonly name: {
     readonly en: string;
     readonly zhHant: string;
@@ -24,6 +28,7 @@ export interface ProductPlan {
 
 export const PRODUCT_PLANS: readonly ProductPlan[] = [
   {
+    aiRequestsPerMinute: 3,
     annualPriceTwd: 0,
     auditRetentionDays: 7,
     code: 'free',
@@ -34,12 +39,16 @@ export const PRODUCT_PLANS: readonly ProductPlan[] = [
     deviceLimit: 1,
     featured: false,
     memberLimit: 1,
+    monthlyAiCostBudgetMicrounits: 10_000_000,
     monthlyPriceTwd: 0,
     monthlyRunLimit: 100,
+    monthlySourceBytes: 20 * 1_048_576,
+    monthlyToolCallLimit: 100,
     name: { en: 'Free', zhHant: '免費版' },
     workflowLimit: 3,
   },
   {
+    aiRequestsPerMinute: 10,
     annualPriceTwd: 5_900,
     auditRetentionDays: 30,
     code: 'pro',
@@ -50,12 +59,16 @@ export const PRODUCT_PLANS: readonly ProductPlan[] = [
     deviceLimit: 2,
     featured: true,
     memberLimit: 3,
+    monthlyAiCostBudgetMicrounits: 150_000_000,
     monthlyPriceTwd: 590,
     monthlyRunLimit: 2_500,
+    monthlySourceBytes: 1_024 * 1_048_576,
+    monthlyToolCallLimit: 2_500,
     name: { en: 'Pro', zhHant: '專業版' },
     workflowLimit: 25,
   },
   {
+    aiRequestsPerMinute: 30,
     annualPriceTwd: 19_900,
     auditRetentionDays: 90,
     code: 'team',
@@ -66,12 +79,16 @@ export const PRODUCT_PLANS: readonly ProductPlan[] = [
     deviceLimit: 10,
     featured: false,
     memberLimit: 10,
+    monthlyAiCostBudgetMicrounits: 550_000_000,
     monthlyPriceTwd: 1_990,
     monthlyRunLimit: 10_000,
+    monthlySourceBytes: 10 * 1_024 * 1_048_576,
+    monthlyToolCallLimit: 10_000,
     name: { en: 'Team', zhHant: '團隊版' },
     workflowLimit: 100,
   },
   {
+    aiRequestsPerMinute: 60,
     annualPriceTwd: 59_900,
     auditRetentionDays: 365,
     code: 'business',
@@ -82,8 +99,11 @@ export const PRODUCT_PLANS: readonly ProductPlan[] = [
     deviceLimit: 50,
     featured: false,
     memberLimit: 50,
+    monthlyAiCostBudgetMicrounits: 1_700_000_000,
     monthlyPriceTwd: 5_990,
     monthlyRunLimit: 50_000,
+    monthlySourceBytes: 50 * 1_024 * 1_048_576,
+    monthlyToolCallLimit: 50_000,
     name: { en: 'Business', zhHant: '商務版' },
     workflowLimit: 1_000,
   },
