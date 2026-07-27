@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 25 — Responsive preview canvas (pending)
+Phase 26 — Responsive preview canvas (pending)
 
 ## Repository baseline
 
@@ -1899,3 +1899,61 @@ Status: completed
 ### Commit
 
 - `feat(web): add validated multi-model website specs` (this phase commit)
+
+## Phase 25 — Tier-aware AI model routing
+
+Status: completed
+
+### Implemented
+
+- Added Economy, Standard, Advanced, and Flagship model tiers for OpenAI,
+  Claude, and Gemini, with actual provider model identifiers kept in
+  server/admin-only modules.
+- Limited Free to Economy, Pro to Standard, Team to Advanced, and Business to
+  Flagship while leaving higher-cost Preview and Fable options available only
+  when the subscription and remaining allowance permit them.
+- Added task-aware Auto routing. Free chat starts with Gemini Flash-Lite and
+  falls back to OpenAI Luna and Claude Haiku. Planning and Website Studio may
+  select a stronger tier when the plan and budget allow it.
+- Added provider-specific cost multipliers, monthly 80% and 95% downgrade
+  behavior, a fail-closed 100% budget ceiling, and per-request cost ceilings
+  before any provider call.
+- Added model-level controls to the assistant and Website Studio while keeping
+  model identifiers out of ordinary-member UI payloads.
+- Added an audited Super Admin model-mapping control. Provider keys remain
+  server-only Vercel environment variables; the administration page shows only
+  readiness and allowlisted model mappings.
+- Added database mappings, plan limits, service-role-only access, a
+  Super-Admin-only update function, and integration coverage for denied support
+  access plus audit logging.
+
+### Validation
+
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 145 tests across 36 files
+- `pnpm db:test`: passed — fresh migrations, model mappings, subscription
+  limits, ordinary-user model-slug isolation, Super Admin authorization, and
+  audit logging
+- `pnpm test:e2e`: passed — eight Chromium paths covering assistant chat and
+  planning, source artifacts, schedules, usage visibility, workflow execution,
+  Website Studio, and Agent authorization
+- `pnpm build:web`: passed — 40 generated pages with tier-aware Assistant,
+  Website Studio, and Super Admin controls
+- `pnpm security:scan-client`: passed — 33 built client files inspected; the
+  explicit server-side model-identifier scan also found no protected model
+  mappings in the client bundle
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- The listed model identifiers must exist on the corresponding provider account;
+  disabled or unavailable mappings fail closed and Auto tries the next
+  configured provider.
+- Cost multipliers are conservative routing controls rather than provider
+  invoices. Actual usage remains recorded after each request.
+- Microsoft Store entitlement synchronization remains the sole paid-commerce
+  source; the platform does not collect payment-card data.
+
+### Commit
+
+- `feat(web): add subscription-aware AI model tiers` (this phase commit)

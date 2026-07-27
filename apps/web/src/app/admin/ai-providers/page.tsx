@@ -3,6 +3,9 @@ import Link from 'next/link';
 
 import { ArrowRightIcon, CheckIcon, ShieldIcon, SparkIcon } from '@/components/icons';
 import { LocalizedText } from '@/components/language-provider';
+import { updateAiModelMappingAction } from '@/app/admin/actions';
+import { ALLOWED_AI_MODELS_BY_TIER, type ProductionAiProvider } from '@/lib/ai-model-catalog';
+import { listAiModelMappings } from '@/lib/ai-model-routing';
 import { getEnvironment } from '@/lib/env';
 
 export const metadata: Metadata = {
@@ -24,14 +27,28 @@ const providerCopy = {
   },
 } as const;
 
-export default function AdminAiProvidersPage() {
+const tierCopy = {
+  advanced: { en: 'Advanced', zhHant: '進階' },
+  economy: { en: 'Economy', zhHant: '經濟' },
+  flagship: { en: 'Flagship', zhHant: '旗艦' },
+  standard: { en: 'Standard', zhHant: '標準' },
+} as const;
+
+export default async function AdminAiProvidersPage({
+  searchParams,
+}: Readonly<{
+  searchParams: Promise<{ readonly status?: string }>;
+}>) {
   const environment = getEnvironment();
+  const status = (await searchParams).status;
+  const mappings = await listAiModelMappings();
   const providers = (Object.keys(providerCopy) as readonly (keyof typeof providerCopy)[]).map(
     (provider) => ({
       configured: environment.providers[provider],
       environmentVariable: providerCopy[provider].environmentVariable,
       label: providerCopy[provider].label,
-      model: environment.providerModels[provider],
+      mappings: mappings.filter((mapping) => mapping.provider === provider),
+      provider,
     }),
   );
 
@@ -59,6 +76,25 @@ export default function AdminAiProvidersPage() {
         </p>
       </header>
 
+      {status !== undefined ? (
+        <p
+          className={`mt-5 rounded-xl border px-4 py-3 text-sm font-semibold ${
+            status === 'model-updated'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-rose-200 bg-rose-50 text-rose-900'
+          }`}
+        >
+          {status === 'model-updated' ? (
+            <LocalizedText en="Model mapping updated." zhHant="模型對應已更新。" />
+          ) : (
+            <LocalizedText
+              en="The model mapping could not be updated."
+              zhHant="模型對應無法更新。"
+            />
+          )}
+        </p>
+      ) : null}
+
       <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="space-y-4" aria-label="AI providers">
           {providers.map((provider) => (
@@ -73,7 +109,6 @@ export default function AdminAiProvidersPage() {
                   </span>
                   <div>
                     <h2 className="text-base font-semibold text-slate-950">{provider.label}</h2>
-                    <p className="mt-1 font-mono text-xs text-slate-500">{provider.model}</p>
                     <p className="mt-3 font-mono text-[10px] text-slate-400">
                       {provider.environmentVariable}
                     </p>
@@ -93,6 +128,57 @@ export default function AdminAiProvidersPage() {
                     <LocalizedText en="Not configured" zhHant="尚未設定" />
                   )}
                 </span>
+              </div>
+              <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                {provider.mappings.map((mapping) => (
+                  <form
+                    action={updateAiModelMappingAction}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    key={mapping.tier}
+                  >
+                    <input name="provider" type="hidden" value={provider.provider} />
+                    <input name="tier" type="hidden" value={mapping.tier} />
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
+                        <LocalizedText
+                          en={tierCopy[mapping.tier].en}
+                          zhHant={tierCopy[mapping.tier].zhHant}
+                        />
+                      </p>
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                        <input defaultChecked={mapping.enabled} name="enabled" type="checkbox" />
+                        <LocalizedText en="Enabled" zhHant="開放" />
+                      </label>
+                    </div>
+                    <select
+                      className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700"
+                      defaultValue={mapping.model}
+                      name="model"
+                    >
+                      {ALLOWED_AI_MODELS_BY_TIER[provider.provider as ProductionAiProvider][
+                        mapping.tier
+                      ].map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-slate-400">
+                        {mapping.costMultiplier.toFixed(1)}×
+                        {mapping.reasoningEffort === undefined
+                          ? ''
+                          : ` · ${mapping.reasoningEffort}`}
+                      </span>
+                      <button
+                        className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white"
+                        type="submit"
+                      >
+                        <LocalizedText en="Update" zhHant="更新" />
+                      </button>
+                    </div>
+                  </form>
+                ))}
               </div>
             </article>
           ))}

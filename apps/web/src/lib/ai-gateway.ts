@@ -17,6 +17,7 @@ import {
 } from '@ai-workflow-studio/ai-gateway';
 
 import { getEnvironment } from './env';
+import type { OpenAiReasoningEffort } from './ai-model-catalog';
 
 function requiredKey(provider: Exclude<AiProviderName, 'mock'>): string {
   const names = {
@@ -34,25 +35,36 @@ function requiredKey(provider: Exclude<AiProviderName, 'mock'>): string {
   return value;
 }
 
-function createAdapter(provider: AiProviderName): AiProviderAdapter & AiChatAdapter {
+interface ServerModelOverride {
+  readonly model: string;
+  readonly reasoningEffort?: OpenAiReasoningEffort;
+}
+
+function createAdapter(
+  provider: AiProviderName,
+  override?: ServerModelOverride,
+): AiProviderAdapter & AiChatAdapter {
   const environment = getEnvironment();
   switch (provider) {
     case 'anthropic':
       return new AnthropicAdapter({
         apiKey: requiredKey(provider),
-        model: environment.providerModels.anthropic,
+        model: override?.model ?? environment.providerModels.anthropic,
       });
     case 'gemini':
       return new GeminiAdapter({
         apiKey: requiredKey(provider),
-        model: environment.providerModels.gemini,
+        model: override?.model ?? environment.providerModels.gemini,
       });
     case 'mock':
       return new MockAiAdapter();
     case 'openai':
       return new OpenAiAdapter({
         apiKey: requiredKey(provider),
-        model: environment.providerModels.openai,
+        model: override?.model ?? environment.providerModels.openai,
+        ...(override?.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: override.reasoningEffort }),
       });
   }
 }
@@ -60,20 +72,23 @@ function createAdapter(provider: AiProviderName): AiProviderAdapter & AiChatAdap
 export function createServerStructuredOutputGateway(
   provider: AiProviderName,
   usageSink: UsageSink,
+  override?: ServerModelOverride,
 ): StructuredOutputGateway {
-  return new StructuredOutputGateway(createAdapter(provider), usageSink);
+  return new StructuredOutputGateway(createAdapter(provider, override), usageSink);
 }
 
 export function createServerAiGateway(
   provider: AiProviderName,
   usageSink: UsageSink = new RedactedConsoleUsageSink(),
+  override?: ServerModelOverride,
 ): AiGateway {
-  return new AiGateway(createAdapter(provider), usageSink);
+  return new AiGateway(createAdapter(provider, override), usageSink);
 }
 
 export function createServerAiChatGateway(
   provider: AiProviderName,
   usageSink: UsageSink,
+  override?: ServerModelOverride,
 ): AiChatGateway {
-  return new AiChatGateway(createAdapter(provider), usageSink);
+  return new AiChatGateway(createAdapter(provider, override), usageSink);
 }

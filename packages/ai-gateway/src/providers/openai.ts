@@ -66,6 +66,7 @@ export interface OpenAiAdapterOptions {
   readonly baseUrl?: string;
   readonly fetchTransport?: FetchTransport;
   readonly model?: string;
+  readonly reasoningEffort?: 'high' | 'low' | 'medium';
 }
 
 export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
@@ -74,6 +75,7 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly fetchTransport: FetchTransport | undefined;
+  private readonly reasoningEffort: 'high' | 'low' | 'medium';
 
   constructor(options: OpenAiAdapterOptions) {
     const config = validateProviderConfig(
@@ -88,6 +90,7 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
     this.baseUrl = config.baseUrl;
     this.model = config.model;
     this.fetchTransport = options.fetchTransport;
+    this.reasoningEffort = options.reasoningEffort ?? 'medium';
   }
 
   async *streamChat(request: ProviderChatRequest): AsyncIterable<ProviderChatEvent> {
@@ -101,6 +104,7 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
         instructions: request.systemPrompt,
         max_output_tokens: request.chatRequest.maxOutputTokens,
         model: this.model,
+        reasoning: { effort: this.reasoningEffort },
         store: false,
         stream: true,
       },
@@ -164,7 +168,7 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
         instructions: request.systemPrompt,
         max_output_tokens: request.maxOutputTokens,
         model: this.model,
-        reasoning: { effort: 'medium' },
+        reasoning: { effort: this.reasoningEffort },
         store: false,
         text: {
           format: {

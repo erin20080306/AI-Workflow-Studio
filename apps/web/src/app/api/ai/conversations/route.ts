@@ -5,6 +5,7 @@ import {
 } from '@/lib/assistant-conversation-server';
 import { AssistantConversationCreateRequestSchema } from '@/lib/assistant-resource-schema';
 import { requireWorkspaceContext } from '@/lib/auth/context';
+import { resolveAiModelRoute } from '@/lib/ai-model-routing';
 import { plannerAccessDecision } from '@/lib/control-plane-access';
 import { getEnvironment } from '@/lib/env';
 
@@ -25,7 +26,12 @@ export async function POST(request: Request): Promise<Response> {
     const input = AssistantConversationCreateRequestSchema.parse(await readAssistantJson(request));
     const context = await requireWorkspaceContext();
     const environment = getEnvironment();
-    const access = plannerAccessDecision(environment.mockMode, input.provider, true);
+    const route = await resolveAiModelRoute(context, {
+      operation: input.mode === 'ask' ? 'chat' : 'workflow_plan',
+      provider: input.provider,
+      tier: input.tier,
+    });
+    const access = plannerAccessDecision(environment.mockMode, route.provider, true);
     if (!access.allowed) {
       return Response.json(
         { error: { code: access.code, message: access.message } },
@@ -34,8 +40,8 @@ export async function POST(request: Request): Promise<Response> {
     }
     const conversation = await ensureAssistantConversation(context, {
       mode: input.mode,
-      model: environment.providerModels[input.provider],
-      provider: input.provider,
+      model: route.model,
+      provider: route.provider,
       title: input.title,
     });
     return Response.json(

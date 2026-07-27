@@ -1,6 +1,8 @@
 export const PLAN_CODES = ['free', 'pro', 'team', 'business'] as const;
 
 export type PlanCode = (typeof PLAN_CODES)[number];
+export const AI_MODEL_TIERS = ['economy', 'standard', 'advanced', 'flagship'] as const;
+export type AiModelTier = (typeof AI_MODEL_TIERS)[number];
 
 export interface ProductPlan {
   readonly aiRequestsPerMinute: number;
@@ -14,6 +16,8 @@ export interface ProductPlan {
   readonly deviceLimit: number;
   readonly featured: boolean;
   readonly memberLimit: number;
+  readonly maximumAiModelTier: AiModelTier;
+  readonly maximumAiRequestCostMicrounits: number;
   readonly monthlyAiCostBudgetMicrounits: number;
   readonly monthlyPriceTwd: number;
   readonly monthlyRunLimit: number;
@@ -39,6 +43,8 @@ export const PRODUCT_PLANS: readonly ProductPlan[] = [
     deviceLimit: 1,
     featured: false,
     memberLimit: 1,
+    maximumAiModelTier: 'economy',
+    maximumAiRequestCostMicrounits: 3_000_000,
     monthlyAiCostBudgetMicrounits: 10_000_000,
     monthlyPriceTwd: 0,
     monthlyRunLimit: 100,
@@ -59,6 +65,8 @@ export const PRODUCT_PLANS: readonly ProductPlan[] = [
     deviceLimit: 2,
     featured: true,
     memberLimit: 3,
+    maximumAiModelTier: 'standard',
+    maximumAiRequestCostMicrounits: 15_000_000,
     monthlyAiCostBudgetMicrounits: 150_000_000,
     monthlyPriceTwd: 590,
     monthlyRunLimit: 2_500,
@@ -79,6 +87,8 @@ export const PRODUCT_PLANS: readonly ProductPlan[] = [
     deviceLimit: 10,
     featured: false,
     memberLimit: 10,
+    maximumAiModelTier: 'advanced',
+    maximumAiRequestCostMicrounits: 40_000_000,
     monthlyAiCostBudgetMicrounits: 550_000_000,
     monthlyPriceTwd: 1_990,
     monthlyRunLimit: 10_000,
@@ -99,6 +109,8 @@ export const PRODUCT_PLANS: readonly ProductPlan[] = [
     deviceLimit: 50,
     featured: false,
     memberLimit: 50,
+    maximumAiModelTier: 'flagship',
+    maximumAiRequestCostMicrounits: 60_000_000,
     monthlyAiCostBudgetMicrounits: 1_700_000_000,
     monthlyPriceTwd: 5_990,
     monthlyRunLimit: 50_000,

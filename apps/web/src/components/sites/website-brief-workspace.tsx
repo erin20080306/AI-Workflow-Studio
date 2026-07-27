@@ -26,6 +26,7 @@ import {
 } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
 import { WebsiteSpecGenerator } from '@/components/sites/website-spec-generator';
+import type { AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
 
 const ProjectResponseSchema = z.object({ project: WebsiteProjectSchema });
@@ -164,10 +165,12 @@ export function WebsiteBriefWorkspace({
   initialGeneration,
   initialProject,
   modelOptions,
+  tierOptions,
 }: Readonly<{
   initialGeneration: WebsiteSpecClientGeneration | undefined;
   initialProject: WebsiteProject;
   modelOptions: readonly WebsiteGenerationModelOption[];
+  tierOptions: readonly AiTierOption[];
 }>) {
   const { locale } = useLanguage();
   const text = copy[locale];
@@ -565,6 +568,7 @@ export function WebsiteBriefWorkspace({
             initialGeneration={initialGeneration}
             modelOptions={modelOptions}
             projectId={project.id}
+            tierOptions={tierOptions}
           />
         </div>
       ) : null}

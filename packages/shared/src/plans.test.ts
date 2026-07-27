@@ -9,6 +9,7 @@ describe('product plans', () => {
       expect(plan.annualPriceTwd).toBeLessThanOrEqual(plan.monthlyPriceTwd * 12);
       expect(plan.aiRequestsPerMinute).toBeGreaterThan(0);
       expect(plan.monthlyAiCostBudgetMicrounits).toBeGreaterThan(0);
+      expect(plan.maximumAiRequestCostMicrounits).toBeGreaterThan(0);
       expect(plan.monthlySourceBytes).toBeGreaterThan(0);
       expect(plan.monthlyToolCallLimit).toBeGreaterThan(0);
     }

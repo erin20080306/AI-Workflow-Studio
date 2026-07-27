@@ -1,8 +1,4 @@
-import {
-  AiGatewayError,
-  AiProviderNameSchema,
-  PlannerRequestSchema,
-} from '@ai-workflow-studio/ai-gateway';
+import { AiGatewayError, PlannerRequestSchema } from '@ai-workflow-studio/ai-gateway';
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   renderPreparedSources,
@@ -10,6 +6,8 @@ import {
 import { z } from 'zod';
 
 import { assistantErrorDetails } from '@/lib/assistant-api';
+import { resolveAiModelRoute, type ResolvedAiModelRoute } from '@/lib/ai-model-routing';
+import { AiModelSelectionSchema } from '@/lib/ai-model-selection';
 import {
   appendAssistantMessage,
   createAssistantUsageSink,
@@ -31,7 +29,8 @@ const MAX_REQUEST_BYTES = 20_000;
 const ApiPlannerRequestSchema = PlannerRequestSchema.extend({
   attachmentIds: z.array(z.string().uuid()).max(MAX_ATTACHMENTS_PER_MESSAGE).default([]),
   conversationId: z.string().uuid().optional(),
-  provider: AiProviderNameSchema.default('mock'),
+  provider: AiModelSelectionSchema.shape.provider.default('auto'),
+  tier: AiModelSelectionSchema.shape.tier.default('auto'),
 }).strict();
 
 export async function POST(request: Request): Promise<Response> {
@@ -74,7 +73,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const { attachmentIds, provider, ...plannerRequest } = parsed.data;
+  const { attachmentIds, provider: providerSelection, tier, ...plannerRequest } = parsed.data;
   const { conversationId, ...validatedPlannerRequest } = plannerRequest;
   const environment = getEnvironment();
   let workspace: WorkspaceContext | null = environment.mockMode ? mockWorkspaceContext() : null;
@@ -85,7 +84,27 @@ export async function POST(request: Request): Promise<Response> {
       workspace = null;
     }
   }
-  const access = plannerAccessDecision(environment.mockMode, provider, workspace !== null);
+  let route: ResolvedAiModelRoute | undefined;
+  if (workspace !== null) {
+    try {
+      route = await resolveAiModelRoute(workspace, {
+        operation: 'workflow_plan',
+        provider: providerSelection,
+        tier,
+      });
+    } catch (error) {
+      const safe = assistantErrorDetails(error);
+      return Response.json(
+        { error: { code: safe.code, message: safe.message } },
+        { headers: { 'cache-control': 'no-store' }, status: safe.status },
+      );
+    }
+  }
+  const access = plannerAccessDecision(
+    environment.mockMode,
+    route?.provider ?? 'mock',
+    workspace !== null,
+  );
   if (!access.allowed) {
     return Response.json(
       {
@@ -103,7 +122,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  if (workspace === null) {
+  if (workspace === null || route === undefined) {
     return Response.json(
       {
         error: {
@@ -118,12 +137,12 @@ export async function POST(request: Request): Promise<Response> {
   let conversation: AssistantConversationSummary | undefined;
   let usageReservation: AssistantUsageReservation | undefined;
   try {
-    const model = environment.providerModels[provider];
+    const model = route.model;
     conversation = await ensureAssistantConversation(workspace, {
       ...(conversationId === undefined ? {} : { conversationId }),
       mode: 'plan',
       model,
-      provider,
+      provider: route.provider,
       title: validatedPlannerRequest.prompt,
     });
     const userMessage = await appendAssistantMessage(workspace, {
@@ -143,11 +162,16 @@ export async function POST(request: Request): Promise<Response> {
       maxAttempts: validatedPlannerRequest.maxRepairAttempts + 1,
       maxOutputTokens: 4_096,
       operation: 'workflow_plan',
-      provider,
+      provider: route.provider,
+      costMultiplier: route.costMultiplier,
     });
     const result = await createServerAiGateway(
-      provider,
+      route.provider,
       createAssistantUsageSink(workspace, conversation.id, usageReservation),
+      {
+        model: route.model,
+        ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
+      },
     ).plan(
       {
         ...validatedPlannerRequest,
@@ -188,8 +212,8 @@ export async function POST(request: Request): Promise<Response> {
         await appendAssistantMessage(workspace, {
           body: 'The validated planning response could not be completed.',
           conversationId: conversation.id,
-          model: environment.providerModels[provider],
-          provider,
+          model: route.model,
+          provider: route.provider,
           role: 'assistant',
           status:
             error instanceof AiGatewayError && error.code === 'AI_PROVIDER_CANCELLED'

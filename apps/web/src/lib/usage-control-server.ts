@@ -73,7 +73,8 @@ export type UsageControlErrorCode =
   | 'USAGE_ALLOWANCE_EXCEEDED'
   | 'USAGE_BUDGET_EXCEEDED'
   | 'USAGE_DATA_INVALID'
-  | 'USAGE_RATE_LIMIT_EXCEEDED';
+  | 'USAGE_RATE_LIMIT_EXCEEDED'
+  | 'USAGE_REQUEST_COST_EXCEEDED';
 
 export class UsageControlError extends Error {
   readonly code: UsageControlErrorCode;
@@ -112,6 +113,7 @@ export interface TenantUsageSnapshot {
 }
 
 export interface AssistantUsageReservation {
+  readonly costMultiplier: number;
   readonly id: string;
   readonly maximumCostMicrounits: number;
   release(): Promise<void>;
@@ -271,6 +273,7 @@ export async function reserveAssistantUsage(
   context: WorkspaceContext,
   input: {
     readonly inputCharacters: number;
+    readonly costMultiplier?: number;
     readonly maxAttempts?: number;
     readonly maxOutputTokens: number;
     readonly operation: Extract<UsageOperation, 'chat' | 'workflow_plan' | 'website_generation'>;
@@ -278,6 +281,14 @@ export async function reserveAssistantUsage(
   },
 ): Promise<AssistantUsageReservation> {
   const maximumCostMicrounits = estimateMaximumAiCostMicrounits(input);
+  const plan = getProductPlan(effectivePlanCode(context));
+  if (maximumCostMicrounits > plan.maximumAiRequestCostMicrounits) {
+    throw new UsageControlError(
+      'USAGE_REQUEST_COST_EXCEEDED',
+      'This request would exceed the plan single-request AI cost limit.',
+    );
+  }
+  const costMultiplier = input.costMultiplier ?? 1;
   if (getEnvironment().mockMode) {
     const snapshot = await getTenantUsageSnapshot(context);
     if (!canReserveUsage(snapshot.ai, maximumCostMicrounits)) {
@@ -300,7 +311,7 @@ export async function reserveAssistantUsage(
       (requestTime) =>
         requestTime.tenantId === context.actor.tenantId && requestTime.createdAt > now - 60_000,
     ).length;
-    if (recentRequests >= getProductPlan(effectivePlanCode(context)).aiRequestsPerMinute) {
+    if (recentRequests >= plan.aiRequestsPerMinute) {
       throw new UsageControlError(
         'USAGE_RATE_LIMIT_EXCEEDED',
         'The workspace request rate limit was reached. Please retry shortly.',
@@ -314,6 +325,7 @@ export async function reserveAssistantUsage(
       tenantId: context.actor.tenantId,
     });
     return {
+      costMultiplier,
       id,
       maximumCostMicrounits,
       async release() {
@@ -335,6 +347,7 @@ export async function reserveAssistantUsage(
   }
   const id = parsed.data;
   return {
+    costMultiplier,
     id,
     maximumCostMicrounits,
     async release() {
@@ -356,6 +369,7 @@ export async function recordReservedAssistantUsage(
     record.provider,
     record.inputTokens,
     record.outputTokens,
+    reservation.costMultiplier,
   );
   if (getEnvironment().mockMode) {
     memoryUsageState().records.push({

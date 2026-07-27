@@ -5,6 +5,8 @@ import {
 } from '@ai-workflow-studio/tool-registry';
 import { z } from 'zod';
 
+import { AiModelSelectionSchema } from '@/lib/ai-model-selection';
+
 export const AssistantAttachmentSummarySchema = z
   .object({
     byteSize: z.number().int().min(1).max(MAX_ATTACHMENT_BYTES),
@@ -67,7 +69,8 @@ export const AssistantArtifactCreateRequestSchema = z
 export const AssistantConversationCreateRequestSchema = z
   .object({
     mode: z.enum(['ask', 'plan']),
-    provider: z.enum(['anthropic', 'gemini', 'mock', 'openai']),
+    provider: AiModelSelectionSchema.shape.provider,
+    tier: AiModelSelectionSchema.shape.tier.default('auto'),
     title: z.string().trim().min(1).max(160),
   })
   .strict();

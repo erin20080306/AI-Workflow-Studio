@@ -38,6 +38,7 @@ import {
   type AssistantModelId,
   type AssistantModelOption,
 } from '@/lib/assistant-models';
+import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import {
   AssistantArtifactSummarySchema,
   AssistantAttachmentSummarySchema,
@@ -98,6 +99,8 @@ const copy = {
     historyReady: 'Messages are saved to this workspace and isolated by Tenant.',
     loadingHistory: 'Loading conversations…',
     model: 'Model',
+    level: 'Level',
+    levelAuto: 'Auto',
     newConversation: 'New conversation',
     noProvider: 'AI is unavailable. Please contact the platform administrator.',
     noSaved: 'No saved conversations yet',
@@ -158,6 +161,8 @@ const copy = {
     historyReady: '訊息會保存於此工作區，並依 Tenant 隔離。',
     loadingHistory: '載入對話中…',
     model: '模型',
+    level: '等級',
+    levelAuto: '自動',
     newConversation: '新增對話',
     noProvider: 'AI 目前尚未開放，請聯絡平台管理者。',
     noSaved: '目前沒有已保存的對話',
@@ -224,13 +229,16 @@ function parseSseBlocks(buffer: string): {
 export function AssistantWorkspace({
   mockMode,
   models,
+  tiers,
 }: Readonly<{
   mockMode: boolean;
   models: readonly AssistantModelOption[];
+  tiers: readonly AiTierOption[];
 }>) {
   const { locale } = useLanguage();
   const text = copy[locale];
   const [selectedModel, setSelectedModel] = useState<AssistantModelId>('auto');
+  const [selectedTier, setSelectedTier] = useState<AiModelTierSelection>('auto');
   const [mode, setMode] = useState<AssistantConversationMode>('ask');
   const [prompt, setPrompt] = useState('');
   const [promptError, setPromptError] = useState<'short' | 'unavailable'>();
@@ -259,8 +267,6 @@ export function AssistantWorkspace({
     () => resolveAssistantProvider(selectedModel, models),
     [models, selectedModel],
   );
-  const selectedOption = models.find((model) => model.id === selectedModel) ?? models[0];
-
   async function refreshConversations(): Promise<void> {
     try {
       const response = await fetch('/api/ai/conversations', { cache: 'no-store' });
@@ -365,7 +371,8 @@ export function AssistantWorkspace({
     const response = await fetch('/api/ai/conversations', {
       body: JSON.stringify({
         mode,
-        provider: resolvedProvider,
+        provider: selectedModel,
+        tier: selectedTier,
         title: locale === 'en' ? 'Source workspace' : '來源工作區',
       }),
       headers: { 'content-type': 'application/json' },
@@ -536,7 +543,8 @@ export function AssistantWorkspace({
         ...(conversationId === undefined ? {} : { conversationId }),
         locale,
         message: requestPrompt,
-        provider: resolvedProvider,
+        provider: selectedModel,
+        tier: selectedTier,
       }),
       headers: { 'content-type': 'application/json' },
       method: 'POST',
@@ -619,7 +627,8 @@ export function AssistantWorkspace({
         },
         maxRepairAttempts: 1,
         prompt: requestPrompt,
-        provider: resolvedProvider,
+        provider: selectedModel,
+        tier: selectedTier,
       }),
       headers: { 'content-type': 'application/json' },
       method: 'POST',
@@ -681,7 +690,6 @@ export function AssistantWorkspace({
               body: streamingBodyRef.current,
               createdAt: new Date().toISOString(),
               id: crypto.randomUUID(),
-              model: selectedOption?.model,
               provider: resolvedProvider,
               role: 'assistant',
               status: 'cancelled',
@@ -775,33 +783,69 @@ export function AssistantWorkspace({
         </aside>
 
         <section className="flex min-h-[620px] min-w-0 flex-col">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="size-2 rounded-full bg-emerald-500" />
-                <span className="text-xs font-semibold text-slate-700">{text.draftOnly}</span>
+          <div className="space-y-3 border-b border-slate-100 px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="size-2 rounded-full bg-emerald-500" />
+                  <span className="text-xs font-semibold text-slate-700">{text.draftOnly}</span>
+                </div>
+                <p className="mt-1 max-w-sm truncate text-[10px] text-slate-400">{currentTitle}</p>
               </div>
-              <p className="mt-1 max-w-sm truncate text-[10px] text-slate-400">{currentTitle}</p>
+              <label className="flex min-w-0 items-center gap-2 text-xs text-slate-500">
+                <span className="hidden sm:inline">{text.model}</span>
+                <select
+                  aria-label={text.model}
+                  className="max-w-[260px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800"
+                  disabled={pending}
+                  onChange={(event) => {
+                    setSelectedModel(event.target.value as AssistantModelId);
+                    setPromptError(undefined);
+                  }}
+                  value={selectedModel}
+                >
+                  {models.map((model) => (
+                    <option disabled={!model.configured} key={model.id} value={model.id}>
+                      {model.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-            <label className="flex min-w-0 items-center gap-2 text-xs text-slate-500">
-              <span className="hidden sm:inline">{text.model}</span>
-              <select
-                aria-label={text.model}
-                className="max-w-[260px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800"
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                {text.level}
+              </span>
+              <button
+                aria-pressed={selectedTier === 'auto'}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  selectedTier === 'auto'
+                    ? 'bg-slate-950 text-white'
+                    : 'border border-slate-200 bg-white text-slate-600 hover:border-indigo-300'
+                }`}
                 disabled={pending}
-                onChange={(event) => {
-                  setSelectedModel(event.target.value as AssistantModelId);
-                  setPromptError(undefined);
-                }}
-                value={selectedModel}
+                onClick={() => setSelectedTier('auto')}
+                type="button"
               >
-                {models.map((model) => (
-                  <option disabled={!model.configured} key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {text.levelAuto}
+              </button>
+              {tiers.map((tier) => (
+                <button
+                  aria-pressed={selectedTier === tier.id}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    selectedTier === tier.id
+                      ? 'bg-indigo-600 text-white'
+                      : 'border border-slate-200 bg-white text-slate-600 hover:border-indigo-300'
+                  } disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-300`}
+                  disabled={pending || !tier.enabled}
+                  key={tier.id}
+                  onClick={() => setSelectedTier(tier.id)}
+                  type="button"
+                >
+                  {locale === 'en' ? tier.label.en : tier.label.zhHant}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex-1 space-y-5 overflow-y-auto px-5 py-6 sm:px-8">

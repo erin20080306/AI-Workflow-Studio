@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import { CheckIcon, ShieldIcon, SparkIcon } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
+import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
 
 const GenerationResponseSchema = z.object({
@@ -27,6 +28,8 @@ const copy = {
     generated: 'Website specification validated',
     generating: 'Generating safely…',
     next: 'Responsive preview opens in Phase 25',
+    level: 'Generation level',
+    levelAuto: 'Auto',
     pages: 'Pages',
     phase: 'AI specification · Phase 24',
     provider: 'Provider',
@@ -45,6 +48,8 @@ const copy = {
     generated: '網站規格已通過驗證',
     generating: '安全產生中…',
     next: '響應式預覽畫布將於 Phase 25 開放',
+    level: '產生等級',
+    levelAuto: '自動',
     pages: '頁面',
     phase: 'AI 網站規格 · Phase 24',
     provider: 'Provider',
@@ -59,16 +64,19 @@ export function WebsiteSpecGenerator({
   initialGeneration,
   modelOptions,
   projectId,
+  tierOptions,
 }: Readonly<{
   initialGeneration: WebsiteSpecClientGeneration | undefined;
   modelOptions: readonly WebsiteGenerationModelOption[];
   projectId: string;
+  tierOptions: readonly AiTierOption[];
 }>) {
   const { locale } = useLanguage();
   const text = copy[locale];
   const [selected, setSelected] = useState<WebsiteGenerationSelection>(
     modelOptions[0]?.id ?? 'auto',
   );
+  const [selectedTier, setSelectedTier] = useState<AiModelTierSelection>('auto');
   const [generation, setGeneration] = useState(initialGeneration);
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -79,7 +87,7 @@ export function WebsiteSpecGenerator({
     setMessage(undefined);
     try {
       const response = await fetch(`/api/websites/${projectId}/spec`, {
-        body: JSON.stringify({ locale, model: selected }),
+        body: JSON.stringify({ locale, model: selected, tier: selectedTier }),
         headers: { 'content-type': 'application/json' },
         method: 'POST',
       });
@@ -152,6 +160,39 @@ export function WebsiteSpecGenerator({
                     </label>
                   );
                 })}
+              </div>
+            </fieldset>
+            <fieldset className="mt-5">
+              <legend className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                {text.level}
+              </legend>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                    selectedTier === 'auto'
+                      ? 'bg-slate-950 text-white'
+                      : 'border border-slate-200 text-slate-600'
+                  }`}
+                  onClick={() => setSelectedTier('auto')}
+                  type="button"
+                >
+                  {text.levelAuto}
+                </button>
+                {tierOptions.map((tier) => (
+                  <button
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                      selectedTier === tier.id
+                        ? 'bg-indigo-600 text-white'
+                        : 'border border-slate-200 text-slate-600'
+                    } disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-300`}
+                    disabled={!tier.enabled}
+                    key={tier.id}
+                    onClick={() => setSelectedTier(tier.id)}
+                    type="button"
+                  >
+                    {locale === 'en' ? tier.label.en : tier.label.zhHant}
+                  </button>
+                ))}
               </div>
             </fieldset>
             <button

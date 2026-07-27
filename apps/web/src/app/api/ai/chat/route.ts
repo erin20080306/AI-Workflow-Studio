@@ -1,4 +1,4 @@
-import { AiGatewayError, AiProviderNameSchema } from '@ai-workflow-studio/ai-gateway';
+import { AiGatewayError } from '@ai-workflow-studio/ai-gateway';
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   type PreparedSource,
@@ -6,6 +6,8 @@ import {
 import { z } from 'zod';
 
 import { assistantErrorDetails, readAssistantJson } from '@/lib/assistant-api';
+import { resolveAiModelRoute, type ResolvedAiModelRoute } from '@/lib/ai-model-routing';
+import { AiModelSelectionSchema } from '@/lib/ai-model-selection';
 import type {
   AssistantConversationMessage,
   AssistantConversationSummary,
@@ -29,7 +31,8 @@ const ChatApiRequestSchema = z
     conversationId: z.string().uuid().optional(),
     locale: z.enum(['en', 'zh-Hant']).default('zh-Hant'),
     message: z.string().trim().min(2).max(12_000),
-    provider: AiProviderNameSchema,
+    provider: AiModelSelectionSchema.shape.provider,
+    tier: AiModelSelectionSchema.shape.tier,
   })
   .strict();
 
@@ -40,12 +43,18 @@ function eventData(value: unknown): Uint8Array {
 export async function POST(request: Request): Promise<Response> {
   let input: z.infer<typeof ChatApiRequestSchema>;
   let workspace: WorkspaceContext;
+  let route: ResolvedAiModelRoute;
   try {
     input = ChatApiRequestSchema.parse(await readAssistantJson(request));
     workspace = await requireWorkspaceContext();
+    route = await resolveAiModelRoute(workspace, {
+      operation: 'chat',
+      provider: input.provider,
+      tier: input.tier,
+    });
     const access = plannerAccessDecision(
       getEnvironment().mockMode,
-      input.provider,
+      route.provider,
       workspace !== null,
     );
     if (!access.allowed) {
@@ -62,8 +71,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const environment = getEnvironment();
-  const model = environment.providerModels[input.provider];
+  const model = route.model;
   let conversation: AssistantConversationSummary;
   let userMessage: AssistantConversationMessage;
   let sources: readonly PreparedSource[];
@@ -73,7 +81,7 @@ export async function POST(request: Request): Promise<Response> {
       ...(input.conversationId === undefined ? {} : { conversationId: input.conversationId }),
       mode: 'ask',
       model,
-      provider: input.provider,
+      provider: route.provider,
       title: input.message,
     });
     userMessage = await appendAssistantMessage(workspace, {
@@ -91,7 +99,8 @@ export async function POST(request: Request): Promise<Response> {
       inputCharacters: 48_000,
       maxOutputTokens: 2_048,
       operation: 'chat',
-      provider: input.provider,
+      provider: route.provider,
+      costMultiplier: route.costMultiplier,
     });
   } catch (error) {
     const safe = assistantErrorDetails(error);
@@ -127,8 +136,14 @@ export async function POST(request: Request): Promise<Response> {
             .slice(-40)
             .map((message) => ({ content: message.body, role: message.role }));
           const gateway = createServerAiChatGateway(
-            input.provider,
+            route.provider,
             createAssistantUsageSink(workspace, conversation.id, usageReservation),
+            {
+              model: route.model,
+              ...(route.reasoningEffort === undefined
+                ? {}
+                : { reasoningEffort: route.reasoningEffort }),
+            },
           );
 
           for await (const event of gateway.stream(
@@ -174,7 +189,7 @@ export async function POST(request: Request): Promise<Response> {
                     : '助理回應未能完成。',
               conversationId: conversation.id,
               model,
-              provider: input.provider,
+              provider: route.provider,
               role: 'assistant',
               status,
             });

@@ -358,6 +358,7 @@ export const WebsiteSpecGenerationInputSchema = z
   .object({
     locale: z.enum(['en', 'zh-Hant']).default('zh-Hant'),
     model: WebsiteGenerationSelectionSchema.default('auto'),
+    tier: z.enum(['auto', 'economy', 'standard', 'advanced', 'flagship']).default('auto'),
   })
   .strict();
 

@@ -12,7 +12,6 @@ export interface AssistantModelOption {
   };
   readonly id: AssistantModelId;
   readonly label: string;
-  readonly model: string;
   readonly provider?: AiProviderName;
 }
 
@@ -30,7 +29,6 @@ export function buildAssistantModelOptions(
       },
       id: 'openai',
       label: 'OpenAI',
-      model: environment.providerModels.openai,
       provider: 'openai',
     },
     {
@@ -41,7 +39,6 @@ export function buildAssistantModelOptions(
       },
       id: 'anthropic',
       label: 'Claude',
-      model: environment.providerModels.anthropic,
       provider: 'anthropic',
     },
     {
@@ -52,7 +49,6 @@ export function buildAssistantModelOptions(
       },
       id: 'gemini',
       label: 'Gemini',
-      model: environment.providerModels.gemini,
       provider: 'gemini',
     },
     ...(environment.mockMode
@@ -65,7 +61,6 @@ export function buildAssistantModelOptions(
             },
             id: 'mock',
             label: 'Mock Studio',
-            model: environment.providerModels.mock,
             provider: 'mock',
           } satisfies AssistantModelOption,
         ]
@@ -82,7 +77,6 @@ export function buildAssistantModelOptions(
       },
       id: 'auto',
       label: 'Auto',
-      model: 'Safe model routing',
     },
     ...providerOptions,
   ];

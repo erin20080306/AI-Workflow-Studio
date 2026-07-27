@@ -52,6 +52,7 @@ const statusByUsageCode: Readonly<Record<UsageControlErrorCode, number>> = {
   USAGE_BUDGET_EXCEEDED: 402,
   USAGE_DATA_INVALID: 503,
   USAGE_RATE_LIMIT_EXCEEDED: 429,
+  USAGE_REQUEST_COST_EXCEEDED: 402,
 };
 
 export async function readAssistantJson(

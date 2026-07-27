@@ -2,18 +2,21 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canReserveUsage,
+  allowedAiModelTiers,
   estimateAiCostMicrounits,
   estimateMaximumAiCostMicrounits,
   evaluateUsageBudget,
   getProductPlan,
   INTERNAL_RATE_CARD_VERSION,
+  isAiModelTierAllowed,
 } from './index';
 
 describe('usage control', () => {
   it('uses a versioned conservative rate card without charging mock usage', () => {
     expect(INTERNAL_RATE_CARD_VERSION).toMatch(/^2026-07-/);
     expect(estimateAiCostMicrounits('mock', 100_000, 100_000)).toBe(0);
-    expect(estimateAiCostMicrounits('openai', 1_000_000, 1_000_000)).toBe(135_000_000);
+    expect(estimateAiCostMicrounits('openai', 1_000_000, 1_000_000)).toBe(260_000_000);
+    expect(estimateAiCostMicrounits('openai', 1_000_000, 1_000_000, 0.5)).toBe(130_000_000);
     expect(
       estimateMaximumAiCostMicrounits({
         inputCharacters: 12_000,
@@ -22,6 +25,20 @@ describe('usage control', () => {
         provider: 'anthropic',
       }),
     ).toBeGreaterThan(0);
+  });
+
+  it('opens model tiers only when the effective plan can fund them', () => {
+    expect(allowedAiModelTiers('free')).toEqual(['economy']);
+    expect(allowedAiModelTiers('pro')).toEqual(['economy', 'standard']);
+    expect(allowedAiModelTiers('team')).toEqual(['economy', 'standard', 'advanced']);
+    expect(allowedAiModelTiers('business')).toEqual([
+      'economy',
+      'standard',
+      'advanced',
+      'flagship',
+    ]);
+    expect(isAiModelTierAllowed('free', 'flagship')).toBe(false);
+    expect(isAiModelTierAllowed('business', 'flagship')).toBe(true);
   });
 
   it('warns at 80 and 95 percent and fails closed at 100 percent', () => {
@@ -51,6 +68,7 @@ describe('usage control', () => {
     for (const planCode of ['pro', 'team', 'business'] as const) {
       const plan = getProductPlan(planCode);
       expect(plan.monthlyAiCostBudgetMicrounits).toBeLessThan(plan.monthlyPriceTwd * 1_000_000);
+      expect(plan.maximumAiRequestCostMicrounits).toBeLessThan(plan.monthlyAiCostBudgetMicrounits);
       expect(plan.aiRequestsPerMinute).toBeGreaterThan(0);
       expect(plan.monthlySourceBytes).toBeGreaterThan(1_048_576);
     }

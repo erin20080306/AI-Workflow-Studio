@@ -17,6 +17,7 @@ import {
 import { z } from 'zod';
 
 import { createServerStructuredOutputGateway } from '@/lib/ai-gateway';
+import { resolveAiModelRoute } from '@/lib/ai-model-routing';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
@@ -25,7 +26,6 @@ import {
   reserveAssistantUsage,
   type AssistantUsageReservation,
 } from '@/lib/usage-control-server';
-import { resolveWebsiteGenerationProvider } from '@/lib/website-generation-models';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
 const WebsiteSpecRowSchema = z.object({
@@ -374,14 +374,12 @@ export async function generateWebsiteSpec(
   if (existing !== undefined) return existing;
 
   const brief = completeWebsiteBrief(project.brief);
-  const environment = getEnvironment();
-  const provider = resolveWebsiteGenerationProvider(input.model, environment);
-  if (provider === undefined) {
-    throw new WebsiteStudioError(
-      'WEBSITE_PROVIDER_UNAVAILABLE',
-      'No AI website-generation provider is configured for this server.',
-    );
-  }
+  const route = await resolveAiModelRoute(context, {
+    operation: 'website_generation',
+    provider: input.model,
+    tier: input.tier,
+  });
+  const provider = route.provider;
 
   const prompt = userPrompt(project, brief, input.locale);
   let reservation: AssistantUsageReservation | undefined;
@@ -392,10 +390,15 @@ export async function generateWebsiteSpec(
       maxOutputTokens: 8_192,
       operation: 'website_generation',
       provider,
+      costMultiplier: route.costMultiplier,
     });
     const result = await createServerStructuredOutputGateway(
       provider,
       createUsageSink(context, project.id, reservation),
+      {
+        model: route.model,
+        ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
+      },
     ).generate(
       {
         jsonSchema: WEBSITE_SPEC_PROVIDER_JSON_SCHEMA,

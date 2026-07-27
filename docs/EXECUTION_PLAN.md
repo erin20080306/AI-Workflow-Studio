@@ -232,14 +232,25 @@ asset-reference, and registered-component JSON. They must never produce or
 execute arbitrary JavaScript, Python, shell commands, build scripts, or
 unbounded URLs.
 
-## Phase 25 — Responsive preview canvas
+## Phase 25 — Tier-aware AI model routing
+
+Add Economy, Standard, Advanced, and Flagship model tiers across OpenAI, Claude,
+and Gemini without exposing actual model identifiers to ordinary members.
+Microsoft Store-backed plan entitlements must decide the highest selectable
+tier. Auto routing must consider operation complexity, remaining monthly budget,
+provider readiness, and a provider-specific cost multiplier. Enforce both
+monthly and per-request cost ceilings before provider calls, allow high-cost
+Preview and Fable models only within paid-plan quotas, and keep model mappings
+editable only by audited platform Super Admin actions.
+
+## Phase 26 — Responsive preview canvas
 
 Render validated Website Specs in a sandboxed preview canvas with desktop,
 tablet, and mobile viewports, zoom, page navigation, loading and error states,
 and strict preview-origin isolation. Add accessibility, overflow, responsive,
 asset, and deterministic-render tests before any publishing work begins.
 
-## Phase 26 — Visual editing and versions
+## Phase 27 — Visual editing and versions
 
 Add natural-language section edits, direct property controls, reorder and
 duplicate operations, undo/redo, named versions, comparison, and restoration.
@@ -247,7 +258,7 @@ Every model and user change must be validated, reversible, tenant-scoped, and
 recorded without prompts, secrets, or unpublished private content leaking into
 operational logs.
 
-## Phase 27 — Website publishing
+## Phase 28 — Website publishing
 
 Add explicit publish approval, production builds, SEO metadata, sitemap,
 robots, accessibility and link gates, domains, deployment history, rollback,

@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { requirePlatformAdmin } from '@/lib/platform-admin';
+import { ALLOWED_AI_MODELS_BY_TIER, type ProductionAiProvider } from '@/lib/ai-model-catalog';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
 const PlanChangeSchema = z
@@ -14,6 +15,23 @@ const PlanChangeSchema = z
     tenantId: z.string().uuid(),
   })
   .strict();
+
+const ModelMappingSchema = z
+  .object({
+    enabled: z.boolean(),
+    model: z.string().regex(/^[A-Za-z0-9._:-]{2,120}$/),
+    provider: z.enum(['anthropic', 'gemini', 'openai']),
+    tier: z.enum(['economy', 'standard', 'advanced', 'flagship']),
+  })
+  .superRefine((value, context) => {
+    if (!ALLOWED_AI_MODELS_BY_TIER[value.provider][value.tier].includes(value.model)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Model is not on the provider allowlist.',
+        path: ['model'],
+      });
+    }
+  });
 
 export async function changeTenantPlanAction(formData: FormData): Promise<never> {
   const actor = await requirePlatformAdmin();
@@ -41,4 +59,32 @@ export async function changeTenantPlanAction(formData: FormData): Promise<never>
 
   revalidatePath('/admin');
   redirect('/admin?status=plan-updated');
+}
+
+export async function updateAiModelMappingAction(formData: FormData): Promise<never> {
+  const actor = await requirePlatformAdmin();
+  if (actor.role !== 'super_admin') {
+    redirect('/admin/ai-providers?status=forbidden');
+  }
+  const parsed = ModelMappingSchema.safeParse({
+    enabled: formData.get('enabled') === 'on',
+    model: formData.get('model'),
+    provider: formData.get('provider'),
+    tier: formData.get('tier'),
+  });
+  if (!parsed.success) {
+    redirect('/admin/ai-providers?status=invalid-mapping');
+  }
+  const result = await createSupabaseAdminClient().rpc('platform_admin_update_ai_model_mapping', {
+    actor_id: actor.userId,
+    target_enabled: parsed.data.enabled,
+    target_model: parsed.data.model,
+    target_provider: parsed.data.provider satisfies ProductionAiProvider,
+    target_tier: parsed.data.tier,
+  });
+  if (result.error !== null) {
+    redirect('/admin/ai-providers?status=update-failed');
+  }
+  revalidatePath('/admin/ai-providers');
+  redirect('/admin/ai-providers?status=model-updated');
 }

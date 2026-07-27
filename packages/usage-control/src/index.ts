@@ -1,8 +1,18 @@
-import { PRODUCT_PLANS, type PlanCode, type ProductPlan } from '@ai-workflow-studio/shared/plans';
+import {
+  AI_MODEL_TIERS,
+  PRODUCT_PLANS,
+  type AiModelTier,
+  type PlanCode,
+  type ProductPlan,
+} from '@ai-workflow-studio/shared/plans';
 import { z } from 'zod';
 
 export const UsageProviderSchema = z.enum(['anthropic', 'gemini', 'mock', 'openai']);
 export type UsageProvider = z.infer<typeof UsageProviderSchema>;
+export const AiModelTierSchema = z.enum(AI_MODEL_TIERS);
+export type { AiModelTier };
+export const AiModelTierSelectionSchema = z.enum(['auto', ...AI_MODEL_TIERS]);
+export type AiModelTierSelection = z.infer<typeof AiModelTierSelectionSchema>;
 
 export const UsageBudgetLevelSchema = z.enum(['normal', 'warning', 'critical', 'blocked']);
 export type UsageBudgetLevel = z.infer<typeof UsageBudgetLevelSchema>;
@@ -33,13 +43,13 @@ export type UsageBudgetSnapshot = z.infer<typeof UsageBudgetSnapshotSchema>;
  * tokens. They are deliberately versioned budget estimates, not a provider
  * invoice or a claim about current public pricing.
  */
-export const INTERNAL_RATE_CARD_VERSION = '2026-07-conservative-v1';
+export const INTERNAL_RATE_CARD_VERSION = '2026-07-tiered-v2';
 
 const INTERNAL_RATE_CARD = {
-  anthropic: { input: 110_000_000, output: 550_000_000 },
-  gemini: { input: 10_000_000, output: 45_000_000 },
+  anthropic: { input: 40_000_000, output: 190_000_000 },
+  gemini: { input: 12_000_000, output: 90_000_000 },
   mock: { input: 0, output: 0 },
-  openai: { input: 15_000_000, output: 120_000_000 },
+  openai: { input: 40_000_000, output: 220_000_000 },
 } as const satisfies Readonly<
   Record<UsageProvider, { readonly input: number; readonly output: number }>
 >;
@@ -63,17 +73,20 @@ export function estimateAiCostMicrounits(
   provider: UsageProvider,
   inputTokens: number,
   outputTokens: number,
+  costMultiplier = 1,
 ): number {
   const input = z.number().int().nonnegative().parse(inputTokens);
   const output = z.number().int().nonnegative().parse(outputTokens);
+  const multiplier = z.number().min(0).max(100).parse(costMultiplier);
   const rate = INTERNAL_RATE_CARD[provider];
-  return Math.ceil((input * rate.input + output * rate.output) / 1_000_000);
+  return Math.ceil(((input * rate.input + output * rate.output) / 1_000_000) * multiplier);
 }
 
 export function estimateMaximumAiCostMicrounits(input: {
   readonly inputCharacters: number;
   readonly maxAttempts?: number;
   readonly maxOutputTokens: number;
+  readonly costMultiplier?: number;
   readonly provider: UsageProvider;
 }): number {
   const characters = z.number().int().nonnegative().parse(input.inputCharacters);
@@ -89,8 +102,18 @@ export function estimateMaximumAiCostMicrounits(input: {
       input.provider,
       estimateTextTokens('x'.repeat(Math.min(characters, 100_000))),
       maxOutputTokens,
+      input.costMultiplier,
     ) * attempts
   );
+}
+
+export function isAiModelTierAllowed(planCode: PlanCode, tier: AiModelTier): boolean {
+  const maximumIndex = AI_MODEL_TIERS.indexOf(getProductPlan(planCode).maximumAiModelTier);
+  return AI_MODEL_TIERS.indexOf(tier) <= maximumIndex;
+}
+
+export function allowedAiModelTiers(planCode: PlanCode): readonly AiModelTier[] {
+  return AI_MODEL_TIERS.filter((tier) => isAiModelTierAllowed(planCode, tier));
 }
 
 export function evaluateUsageBudget(input: {

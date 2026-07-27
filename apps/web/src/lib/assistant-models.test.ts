@@ -16,12 +16,11 @@ describe('assistant model catalog', () => {
     ]);
     expect(options.find((option) => option.id === 'anthropic')).toMatchObject({
       label: 'Claude',
-      model: 'claude-sonnet-4-6',
     });
     expect(options.find((option) => option.id === 'gemini')).toMatchObject({
       label: 'Gemini',
-      model: 'gemini-3.6-flash',
     });
+    expect(options.every((option) => !('model' in option))).toBe(true);
   });
 
   it('routes Auto to the first configured live provider', () => {

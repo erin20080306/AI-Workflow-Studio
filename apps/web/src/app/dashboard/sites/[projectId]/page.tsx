@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { z } from 'zod';
 
 import { WebsiteBriefWorkspace } from '@/components/sites/website-brief-workspace';
+import { buildAiTierOptions } from '@/lib/ai-model-selection';
 import { requireWorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { buildWebsiteGenerationModelOptions } from '@/lib/website-generation-models';
@@ -31,6 +32,7 @@ export default async function WebsiteBriefPage({
         initialGeneration={generation === undefined ? undefined : websiteSpecClientView(generation)}
         initialProject={project}
         modelOptions={buildWebsiteGenerationModelOptions(getEnvironment())}
+        tierOptions={buildAiTierOptions(context.subscription.plan)}
       />
     );
   } catch (error) {
