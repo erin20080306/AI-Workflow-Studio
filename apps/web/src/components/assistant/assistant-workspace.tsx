@@ -5,6 +5,7 @@ import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   MAX_ATTACHMENT_BYTES,
 } from '@ai-workflow-studio/tool-registry';
+import type { WorkflowRunView } from '@ai-workflow-studio/run-orchestrator';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { z } from 'zod';
 
@@ -27,6 +28,11 @@ import {
   type AssistantConversationMode,
   type AssistantConversationSummary,
 } from '@/lib/assistant-conversation-schema';
+import {
+  AssistantWorkflowDraftCreateResponseSchema,
+  AssistantWorkflowRunCreateResponseSchema,
+  type AssistantWorkflowDraftSummary,
+} from '@/lib/assistant-execution-schema';
 import {
   resolveAssistantProvider,
   type AssistantModelId,
@@ -84,6 +90,12 @@ const copy = {
       'Describe the source, transformation rules, output, and timing. The model can only propose validated Workflow JSON.',
     emptyTitle: 'What would you like to work on?',
     error: 'The assistant response could not be completed. Nothing was executed.',
+    executionApproval: 'Approval required before Desktop dispatch',
+    executionDraft: 'Create reviewed draft',
+    executionDraftReady: 'Reviewed Workflow v1 draft',
+    executionError: 'The execution request could not be prepared. No new Job was dispatched.',
+    executionReviewHelp:
+      'Step 1 creates an immutable draft only. Step 2 creates a run; write or destructive risk still requires a separate approval.',
     historyReady: 'Messages are saved to this workspace and isolated by Tenant.',
     loadingHistory: 'Loading conversations…',
     model: 'Model',
@@ -102,15 +114,18 @@ const copy = {
     promptHelpPlan: 'Use at least 12 characters. The plan remains a draft.',
     promptShortAsk: 'Please enter at least 2 characters.',
     promptShortPlan: 'Please describe the plan in at least 12 characters.',
+    requestRun: 'Create run request',
     run: 'Run',
-    runLater: 'Phase 20',
+    runOpen: 'Open run details',
+    runQueued: 'Desktop Job queued',
+    runReview: 'Review execution',
     safetyBody:
-      'Provider keys remain server-only. Only explicit source reads and user-triggered Markdown artifacts are available; both are bounded, Tenant-isolated, and audited.',
-    safetyTitle: 'Bounded, auditable tools',
+      'Ask and Plan stay read-only. Only an explicit run request can enter approval, and only validated nodes are dispatched after every required approval.',
+    safetyTitle: 'Review, request, approve',
     sendAsk: 'Send',
     sendPlan: 'Create plan',
     sources: 'Sources',
-    stage: 'Phase 19',
+    stage: 'Phase 20',
     steps: 'steps',
     stop: 'Stop generating',
     streaming: 'Generating…',
@@ -137,6 +152,12 @@ const copy = {
     emptyPlan: '描述資料來源、處理規則、輸出與時間；模型只能提出經驗證的 Workflow JSON。',
     emptyTitle: '今天想一起處理什麼？',
     error: '助理回應未能完成；沒有執行任何動作。',
+    executionApproval: '等待核准後才會派送至 Desktop Agent',
+    executionDraft: '建立審閱草稿',
+    executionDraftReady: '已審閱的 Workflow v1 草稿',
+    executionError: '無法準備執行要求；沒有派送新的 Job。',
+    executionReviewHelp:
+      '第 1 步只建立不可變更的草稿；第 2 步建立 Run。只要有寫入或破壞性風險，仍需另一次明確核准。',
     historyReady: '訊息會保存於此工作區，並依 Tenant 隔離。',
     loadingHistory: '載入對話中…',
     model: '模型',
@@ -153,15 +174,18 @@ const copy = {
     promptHelpPlan: '至少輸入 12 個字；產生的計畫仍是草稿。',
     promptShortAsk: '請至少輸入 2 個字。',
     promptShortPlan: '請至少用 12 個字完整描述規劃需求。',
+    requestRun: '建立執行要求',
     run: '執行',
-    runLater: 'Phase 20',
+    runOpen: '開啟執行詳情',
+    runQueued: '已排入 Desktop Job',
+    runReview: '檢視執行',
     safetyBody:
-      'Provider 金鑰只在伺服器。本階段只開放「明確來源讀取」與「使用者觸發的 Markdown 產出」，都有上限、Tenant 隔離與稽核紀錄。',
-    safetyTitle: '受限且可稽核的工具',
+      '詢問與規劃保持唯讀。只有你明確建立執行要求，並通過所有必要核准後，才會派送已驗證的節點。',
+    safetyTitle: '審閱、要求、核准三段式',
     sendAsk: '送出',
     sendPlan: '建立計畫',
     sources: '參考來源',
-    stage: 'Phase 19',
+    stage: 'Phase 20',
     steps: '個步驟',
     stop: '停止產生',
     streaming: '產生中⋯',
@@ -222,6 +246,11 @@ export function AssistantWorkspace({
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [streamingBody, setStreamingBody] = useState('');
   const [plan, setPlan] = useState<AIPlannerOutput>();
+  const [planMessageId, setPlanMessageId] = useState<string>();
+  const [executionDraft, setExecutionDraft] = useState<AssistantWorkflowDraftSummary>();
+  const [executionRun, setExecutionRun] = useState<WorkflowRunView>();
+  const [executionWorking, setExecutionWorking] = useState(false);
+  const [executionStatus, setExecutionStatus] = useState<'error' | 'ready'>();
   const [conversationId, setConversationId] = useState<string>();
   const [conversations, setConversations] = useState<readonly AssistantConversationSummary[]>([]);
   const [messages, setMessages] = useState<readonly AssistantConversationMessage[]>([]);
@@ -284,6 +313,10 @@ export function AssistantWorkspace({
     setSelectedAttachmentIds([]);
     setResourceStatus(undefined);
     setPlan(undefined);
+    setPlanMessageId(undefined);
+    setExecutionDraft(undefined);
+    setExecutionRun(undefined);
+    setExecutionStatus(undefined);
     setPrompt('');
     setPromptError(undefined);
     setStreamingBody('');
@@ -307,11 +340,14 @@ export function AssistantWorkspace({
       setMessages(parsed.data.conversation.messages);
       setMode(parsed.data.conversation.mode);
       setSelectedModel(parsed.data.conversation.provider);
-      setPlan(
-        [...parsed.data.conversation.messages]
-          .reverse()
-          .find((message) => message.plan !== undefined)?.plan,
-      );
+      const latestPlanMessage = [...parsed.data.conversation.messages]
+        .reverse()
+        .find((message) => message.plan !== undefined);
+      setPlan(latestPlanMessage?.plan);
+      setPlanMessageId(latestPlanMessage?.id);
+      setExecutionDraft(undefined);
+      setExecutionRun(undefined);
+      setExecutionStatus(undefined);
       setPromptError(undefined);
       setStreamingBody('');
       streamingBodyRef.current = '';
@@ -423,6 +459,60 @@ export function AssistantWorkspace({
       setResourceStatus(text.artifactCreated);
     } catch {
       setResourceStatus(text.error);
+    }
+  }
+
+  async function prepareExecutionReview(): Promise<void> {
+    if (conversationId === undefined || planMessageId === undefined || plan === undefined) {
+      return;
+    }
+    setExecutionWorking(true);
+    setExecutionStatus(undefined);
+    try {
+      const response = await fetch('/api/ai/workflow-drafts', {
+        body: JSON.stringify({
+          conversationId,
+          messageId: planMessageId,
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const parsed = AssistantWorkflowDraftCreateResponseSchema.safeParse(await response.json());
+      if (!response.ok || !parsed.success) {
+        throw new Error('Workflow draft creation failed');
+      }
+      setExecutionDraft(parsed.data.draft);
+      setExecutionRun(undefined);
+      setExecutionStatus('ready');
+    } catch {
+      setExecutionStatus('error');
+    } finally {
+      setExecutionWorking(false);
+    }
+  }
+
+  async function requestExecutionRun(): Promise<void> {
+    if (executionDraft === undefined) {
+      return;
+    }
+    setExecutionWorking(true);
+    setExecutionStatus(undefined);
+    try {
+      const response = await fetch(
+        `/api/ai/workflow-drafts/${encodeURIComponent(executionDraft.id)}/runs`,
+        { method: 'POST' },
+      );
+      const parsed = AssistantWorkflowRunCreateResponseSchema.safeParse(await response.json());
+      if (!response.ok || !parsed.success) {
+        throw new Error('Workflow run creation failed');
+      }
+      setExecutionDraft(parsed.data.draft);
+      setExecutionRun(parsed.data.run);
+      setExecutionStatus('ready');
+    } catch {
+      setExecutionStatus('error');
+    } finally {
+      setExecutionWorking(false);
     }
   }
 
@@ -547,6 +637,10 @@ export function AssistantWorkspace({
     replaceOptimisticUser(optimisticUser.id, parsed.data.userMessage);
     setMessages((current) => [...current, parsed.data.assistantMessage]);
     setPlan(parsed.data.output);
+    setPlanMessageId(parsed.data.assistantMessage.id);
+    setExecutionDraft(undefined);
+    setExecutionRun(undefined);
+    setExecutionStatus(undefined);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -958,11 +1052,18 @@ export function AssistantWorkspace({
                   {text.plan}
                 </button>
                 <button
-                  className="cursor-not-allowed rounded-lg px-2 py-1 text-[10px] font-semibold text-slate-400"
-                  disabled
+                  className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${
+                    plan === undefined
+                      ? 'cursor-not-allowed text-slate-400'
+                      : 'bg-slate-950 text-white hover:bg-slate-800'
+                  }`}
+                  disabled={
+                    pending || executionWorking || plan === undefined || planMessageId === undefined
+                  }
+                  onClick={() => void prepareExecutionReview()}
                   type="button"
                 >
-                  {text.run} · {text.runLater}
+                  {text.run} · {text.runReview}
                 </button>
               </div>
             </div>
@@ -1023,6 +1124,60 @@ export function AssistantWorkspace({
                   </div>
                 );
               })}
+              <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+                <div className="flex items-center gap-2 text-xs font-semibold text-indigo-950">
+                  <ShieldIcon className="size-4" />
+                  {executionDraft === undefined ? text.executionDraft : text.executionDraftReady}
+                </div>
+                <p className="mt-2 text-[10px] leading-5 text-indigo-800">
+                  {text.executionReviewHelp}
+                </p>
+                {executionDraft !== undefined && (
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-[9px] text-indigo-900">
+                    <span>Read · {executionDraft.risk.read}</span>
+                    <span>Write · {executionDraft.risk.write}</span>
+                    <span>External · {executionDraft.risk.external}</span>
+                    <span>Destructive · {executionDraft.risk.destructive}</span>
+                    <span className="col-span-2 truncate font-mono text-indigo-500">
+                      sha256:{executionDraft.definitionHash.slice(0, 16)}
+                    </span>
+                  </div>
+                )}
+                {executionRun === undefined ? (
+                  <button
+                    className="mt-4 w-full rounded-xl bg-indigo-600 px-3 py-2.5 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+                    disabled={executionWorking}
+                    onClick={() =>
+                      void (executionDraft === undefined
+                        ? prepareExecutionReview()
+                        : requestExecutionRun())
+                    }
+                    type="button"
+                  >
+                    {executionDraft === undefined ? text.executionDraft : text.requestRun}
+                  </button>
+                ) : (
+                  <div className="mt-4 rounded-xl bg-white p-3">
+                    <p className="text-[10px] font-semibold text-slate-900">
+                      {executionRun.status === 'awaiting_approval'
+                        ? text.executionApproval
+                        : text.runQueued}
+                    </p>
+                    <a
+                      className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-700"
+                      href={`/dashboard/runs/${encodeURIComponent(executionRun.id)}`}
+                    >
+                      {text.runOpen}
+                      <ArrowRightIcon className="size-3" />
+                    </a>
+                  </div>
+                )}
+                {executionStatus === 'error' && (
+                  <p className="mt-3 text-[10px] font-semibold text-rose-700" role="alert">
+                    {text.executionError}
+                  </p>
+                )}
+              </div>
               <div className="rounded-2xl bg-slate-950 p-4 text-white">
                 <div className="flex items-center gap-2">
                   <ShieldIcon className="size-4 text-emerald-300" />

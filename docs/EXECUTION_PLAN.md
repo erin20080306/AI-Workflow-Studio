@@ -35,7 +35,7 @@ test, and build checks and has been committed.
 | 17    | AI conversation workspace     | Bilingual planner chat, safe modes, and configured model selection pass          | completed |
 | 18    | Durable multi-model chat      | Authenticated streaming conversations persist with tenant isolation              | completed |
 | 19    | Tool and artifact workspace   | Files, sources, tool registry, and generated artifacts are bounded and audited   | completed |
-| 20    | Approval-aware execution      | Reviewed plans can dispatch idempotent jobs with explicit approval gates         | pending   |
+| 20    | Approval-aware execution      | Reviewed plans can dispatch idempotent jobs with explicit approval gates         | completed |
 | 21    | Schedules and connectors      | Recurring runs and selected business connectors pass integration tests           | pending   |
 | 22    | Usage and operations          | Provider usage, quotas, billing controls, and production observability pass      | pending   |
 | 23    | Website Studio foundation     | Guided briefs create validated, tenant-isolated website projects                 | pending   |

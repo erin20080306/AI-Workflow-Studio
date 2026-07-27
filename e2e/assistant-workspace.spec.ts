@@ -15,7 +15,7 @@ test('streams and restores a tenant-scoped Ask conversation', async ({ page }) =
   await expect(modelSelector).toContainText('Gemini');
   await expect(modelSelector).toContainText('Mock Studio');
   await expect(page.getByRole('button', { name: '詢問' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByText('執行 · Phase 20')).toBeVisible();
+  await expect(page.getByText('執行 · 檢視執行')).toBeVisible();
   await expect(page.locator('body')).not.toContainText('API 金鑰');
   await expect(page.locator('body')).not.toContainText('設定 AI Provider');
 
@@ -49,7 +49,21 @@ test('persists a validated Plan conversation', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '每日訂單彙整' })).toBeVisible();
   await expect(page.getByText('4 個步驟')).toBeVisible();
   await expect(page.getByText('mock · mock-planner-v1 · completed')).toBeVisible();
-  await expect(page.getByText('受限且可稽核的工具', { exact: true })).toBeVisible();
+  await expect(page.getByText('審閱、要求、核准三段式', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: '建立審閱草稿', exact: true }).click();
+  await expect(page.getByText('已審閱的 Workflow v1 草稿')).toBeVisible();
+  await expect(page.getByText(/sha256:[a-f0-9]{16}/)).toBeVisible();
+
+  await page.getByRole('button', { name: '建立執行要求', exact: true }).click();
+  await expect(page.getByText('等待核准後才會派送至 Desktop Agent')).toBeVisible();
+  await page.getByRole('link', { name: '開啟執行詳情' }).click();
+
+  await expect(page.getByRole('heading', { name: '執行詳情' })).toBeVisible();
+  await expect(page.getByText('等待核准', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '核准並派送' }).click();
+  await expect(page.getByText('approval.approved', { exact: true })).toBeVisible();
+  await expect(page.getByText('agent_job.queued', { exact: true })).toBeVisible();
 });
 
 test('uses an explicit source and creates an auditable Markdown artifact', async ({ page }) => {

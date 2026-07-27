@@ -96,6 +96,10 @@ docker exec --interactive "$container_id" \
 
 docker exec --interactive "$container_id" \
   psql --dbname "$DATABASE_NAME" --set ON_ERROR_STOP=1 --username "$DATABASE_USER" \
+  <"$REPOSITORY_ROOT/supabase/tests/ai-execution-drafts.sql"
+
+docker exec --interactive "$container_id" \
+  psql --dbname "$DATABASE_NAME" --set ON_ERROR_STOP=1 --username "$DATABASE_USER" \
   <"$REPOSITORY_ROOT/supabase/tests/seed-user.sql"
 
 docker exec --interactive "$container_id" \

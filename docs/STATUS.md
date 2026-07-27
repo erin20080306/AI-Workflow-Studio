@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 19 — Tool and artifact workspace (completed)
+Phase 20 — Approval-aware execution (completed)
 
 ## Repository baseline
 
@@ -1446,3 +1446,72 @@ Status: completed
 ### Commit
 
 - `feat(web): add bounded sources and artifacts` (this phase commit)
+
+## Phase 20
+
+Status: completed
+
+### Implemented
+
+- Added a tenant-isolated `ai_workflow_drafts` link between an exact completed
+  Plan message and an immutable Workflow v1 version. Draft records include the
+  validated definition SHA-256, creator, version, and creation time, with
+  composite tenant foreign keys, RLS, revoked browser privileges, and
+  service-role-only access.
+- Added authenticated draft and run-request APIs. A draft can be created only
+  from the exact persisted assistant Plan message, is revalidated with the
+  Workflow schema and policy validator, and is idempotent for the same message
+  and definition hash.
+- Connected reviewed drafts to the existing run orchestrator with a stable
+  `assistant:<draftId>` idempotency key. The orchestrator preserves existing
+  audit events, risk classification, separate write/destructive approval,
+  Desktop Agent queueing, lease, and duplicate-suppression behavior.
+- Added an explicit two-step execution panel to the AI Workspace:
+  `建立審閱草稿` creates no run, and `建立執行要求` creates a run without
+  bypassing approval. Ask and Plan remain read-only, and the Run details page
+  remains the separate place to approve and dispatch risky work.
+- Added bilingual risk counts, immutable draft identity and SHA-256 visibility,
+  approval status, and a direct link to the existing Run details and audit
+  trail. Provider credentials remain server-only and are not exposed by the
+  new routes or client bundle.
+- Kept production dispatch fail-closed when the durable Desktop Agent
+  production adapter is not configured. The application does not claim that a
+  production Job was dispatched in that state.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all code workspaces
+- `pnpm test`: passed — 120 tests across 28 files
+- `pnpm db:test`: passed — fresh migrations, cross-tenant draft rejection,
+  revoked authenticated access, RLS, service-role restrictions, and seed tests
+- `pnpm build:web`: passed — Production build includes workflow-draft and
+  draft-run routes plus the Phase 20 AI Workspace
+- `pnpm security:scan-client`: passed — 29 built client files inspected
+- `pnpm test:e2e`: passed — 5 Chromium paths, including Plan to immutable
+  draft, run request, separate approval, and post-approval Agent Job queueing
+- Codex in-app browser desktop check: passed — reviewed Workflow v1 card, risk
+  summary, hash, and waiting-for-approval state are visible without overflow
+- Codex in-app browser mobile check: passed at 390 × 844 — responsive stacked
+  layout with no horizontal overflow
+- Fresh Production preview console check: passed — no browser errors
+
+### Known limitations
+
+- Durable production Desktop Agent persistence and dispatch adapters remain
+  unconfigured. Production run requests fail closed instead of creating a false
+  success; local Mock mode covers the full reviewed approval and queue flow.
+- Live OpenAI, Claude, and Gemini choices remain unavailable until their
+  respective server-only Vercel variables are configured and a new deployment
+  is completed.
+- Recurring schedules and additional authorized business connectors begin in
+  Phase 21. Usage, quotas, billing controls, and operations are Phase 22.
+- Website Studio, guided website specification, sandboxed responsive preview,
+  reversible editing, and publishing remain scheduled for Phases 23–27.
+- This phase was not deployed to Production; successful local checks and a
+  GitHub push must not be described as a Vercel deployment.
+
+### Commit
+
+- `feat(web): add approval-aware assistant execution` (this phase commit)
