@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const MAX_ATTACHMENT_BYTES = 65_536;
+export const MAX_ATTACHMENT_BYTES = 1_048_576;
 export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 export const MAX_ARTIFACT_BYTES = 80_000;
 export const MAX_SOURCE_CONTEXT_CHARACTERS = 16_000;

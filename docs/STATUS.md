@@ -1515,3 +1515,62 @@ Status: completed
 ### Commit
 
 - `feat(web): add approval-aware assistant execution` (this phase commit)
+
+## Phase 20 follow-up — Simplified model disclosure and larger text sources
+
+Status: completed
+
+### Implemented
+
+- Removed ordinary-user provider readiness cards from the empty AI Workspace.
+  The top model selector now shows only generic provider labels; actual model
+  versions, configuration state, and provider/message metadata are not rendered
+  in the ordinary workspace. Detailed provider readiness remains restricted to
+  the platform-admin area.
+- Kept the existing `詢問 / Ask`, `規劃 / Plan`, and reviewed `執行 / Run`
+  controls as the user-facing capability levels beneath the composer.
+- Raised each accepted UTF-8 `.txt`, `.md`, `.csv`, or `.json` source from
+  64 KiB to 1 MiB across the client, authenticated API boundary, shared Zod
+  schemas, server validation, and a forward-only database migration.
+- Preserved the independent 16,000-character model-context ceiling and the
+  five-source-per-message limit. A larger stored file therefore does not grant
+  unbounded context, cost, instruction, tool, or filesystem authority.
+- Recorded the product decision that the first paid release uses Microsoft
+  Store subscription add-ons as its only commerce source. Phase 22 will sync
+  Store entitlements into Supabase and enforce cost-budget allowances without
+  collecting payment-card data in this application.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all code workspaces
+- `pnpm test`: passed — 120 tests across 28 files
+- `pnpm db:test`: passed — fresh migrations accept a 70,000-byte source,
+  reject a source over 1 MiB, and retain tenant/RLS/seed coverage
+- `pnpm build:web`: passed — Production build includes the updated attachment
+  boundary and simplified AI Workspace
+- `pnpm security:scan-client`: passed — 29 built client files inspected
+- `pnpm test:e2e`: passed — 5 Chromium paths, including a 70,000-byte source
+  upload, hidden provider/model metadata, conversations, execution approval,
+  and Desktop Agent queueing
+- Codex in-app browser desktop check: passed — generic model selector remains
+  visible while readiness cards and actual model versions are absent
+- Codex in-app browser mobile check: passed at 390 × 844 — no horizontal
+  overflow; model selector, 1 MiB source help, and mode controls remain present
+- Local preview console check: passed — no warnings or errors
+
+### Known limitations
+
+- The 1 MiB limit applies to bounded UTF-8 text sources. PDF, spreadsheet,
+  image/OCR, object storage, chunking, and retrieval indexing remain deferred
+  and must not be represented as supported.
+- Microsoft Store subscription purchase, entitlement synchronization, and
+  monthly cost-budget enforcement are planned for Phase 22 and are not yet
+  implemented.
+- This follow-up was not deployed to Production; successful local checks and a
+  GitHub push must not be described as a Vercel deployment.
+
+### Commit
+
+- `fix(web): simplify model disclosure and raise source limit` (follow-up commit)

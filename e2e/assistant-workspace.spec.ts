@@ -10,10 +10,13 @@ test('streams and restores a tenant-scoped Ask conversation', async ({ page }) =
   );
 
   const modelSelector = page.getByLabel('模型');
+  await expect(modelSelector).toContainText('Auto');
   await expect(modelSelector).toContainText('OpenAI');
   await expect(modelSelector).toContainText('Claude');
   await expect(modelSelector).toContainText('Gemini');
   await expect(modelSelector).toContainText('Mock Studio');
+  await expect(page.locator('body')).not.toContainText('mock-chat-v1');
+  await expect(page.locator('body')).not.toContainText('mock-planner-v1');
   await expect(page.getByRole('button', { name: '詢問' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText('執行 · 檢視執行')).toBeVisible();
   await expect(page.locator('body')).not.toContainText('API 金鑰');
@@ -24,7 +27,7 @@ test('streams and restores a tenant-scoped Ask conversation', async ({ page }) =
   await page.getByRole('button', { name: '送出' }).click();
 
   await expect(page.getByText(/我理解你的需求/)).toBeVisible();
-  await expect(page.getByText('mock · mock-chat-v1 · completed')).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('mock · mock-chat-v1 · completed');
   await expect(page.getByRole('button', { name: new RegExp(question) })).toBeVisible();
 
   await page.reload();
@@ -48,7 +51,7 @@ test('persists a validated Plan conversation', async ({ page }) => {
   await expect(page.getByText('已建立通過驗證的計畫')).toBeVisible();
   await expect(page.getByRole('heading', { name: '每日訂單彙整' })).toBeVisible();
   await expect(page.getByText('4 個步驟')).toBeVisible();
-  await expect(page.getByText('mock · mock-planner-v1 · completed')).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('mock · mock-planner-v1 · completed');
   await expect(page.getByText('審閱、要求、核准三段式', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: '建立審閱草稿', exact: true }).click();
@@ -71,7 +74,7 @@ test('uses an explicit source and creates an auditable Markdown artifact', async
   await page.getByRole('button', { name: '新增對話' }).click();
 
   await page.locator('input[type="file"]').setInputFiles({
-    buffer: Buffer.from('Order ID,Amount\nA-100,1200\nA-101,800', 'utf8'),
+    buffer: Buffer.from('Order ID,Amount\nA-100,1200\nA-101,800\n'.padEnd(70_000, 'x'), 'utf8'),
     mimeType: 'text/csv',
     name: 'orders.csv',
   });

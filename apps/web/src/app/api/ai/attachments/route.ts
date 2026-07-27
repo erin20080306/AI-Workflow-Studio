@@ -1,9 +1,11 @@
+import { MAX_ATTACHMENT_BYTES } from '@ai-workflow-studio/tool-registry';
+
 import { assistantApiError, readAssistantJson } from '@/lib/assistant-api';
 import { AssistantAttachmentUploadRequestSchema } from '@/lib/assistant-resource-schema';
 import { uploadAssistantAttachment } from '@/lib/assistant-resource-server';
 import { requireWorkspaceContext } from '@/lib/auth/context';
 
-const MAX_UPLOAD_REQUEST_BYTES = 90_000;
+const MAX_UPLOAD_REQUEST_BYTES = MAX_ATTACHMENT_BYTES * 2 + 65_536;
 
 export async function POST(request: Request): Promise<Response> {
   try {

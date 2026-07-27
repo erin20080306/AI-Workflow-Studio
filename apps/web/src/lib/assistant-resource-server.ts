@@ -270,7 +270,7 @@ export async function uploadAssistantAttachment(
   if (byteSize < 1 || byteSize > MAX_ATTACHMENT_BYTES) {
     throw new AssistantResourceError(
       'ASSISTANT_RESOURCE_LIMIT_EXCEEDED',
-      'Assistant sources must be 64 KB or smaller.',
+      'Assistant sources must be 1 MB or smaller.',
     );
   }
   if (mimeType === 'application/json') {

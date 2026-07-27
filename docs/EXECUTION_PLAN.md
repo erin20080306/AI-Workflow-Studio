@@ -208,7 +208,14 @@ bounded scopes, revocation, health checks, retries, and integration tests.
 
 Add provider usage and cost visibility, tenant quotas, subscription enforcement,
 rate limits, operational dashboards, alerting, and a final production acceptance
-pass for the expanded AI workspace.
+pass for the expanded AI workspace. Microsoft Store subscription add-ons are the
+only paid-commerce source for the first release: the application must verify and
+sync Store entitlements to Supabase Tenant access without collecting payment-card
+data or adding a separate Web payment processor. Plan allowances must convert
+provider, generation, file-processing, and tool costs into a bounded monthly cost
+budget with 80% and 95% warnings, a fail-closed 100% ceiling, auditable overrides,
+and administrator-visible revenue, estimated cost, remaining allowance, and
+margin reporting.
 
 ## Phase 23 — Website Studio foundation
 

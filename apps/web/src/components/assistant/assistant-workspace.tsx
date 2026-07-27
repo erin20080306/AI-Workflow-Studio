@@ -78,11 +78,10 @@ const copy = {
     artifactCreated: 'Markdown artifact created',
     artifacts: 'Artifacts',
     attachment: 'Add source',
-    attachmentHelp: '.txt, .md, .csv, or .json · up to 64 KB',
+    attachmentHelp: '.txt, .md, .csv, or .json · up to 1 MB',
     attachmentLimit: 'Select up to 5 sources for one message.',
-    attachmentTooLarge: 'The source must be 64 KB or smaller.',
+    attachmentTooLarge: 'The source must be 1 MB or smaller.',
     cancelled: 'Generation stopped. The partial response was kept for audit.',
-    configured: 'Ready',
     conversations: 'Conversations',
     draftOnly: 'Read-only AI',
     emptyAsk: 'Ask a question, refine an idea, or explore a safe automation approach.',
@@ -130,7 +129,6 @@ const copy = {
     stop: 'Stop generating',
     streaming: 'Generating…',
     title: 'Discuss, refine, and plan with AI',
-    unavailable: 'Not available',
     waiting: 'New conversation',
   },
   'zh-Hant': {
@@ -141,11 +139,10 @@ const copy = {
     artifacts: '產出檔案',
     assistant: 'AI 工作台',
     attachment: '加入來源',
-    attachmentHelp: '.txt、.md、.csv 或 .json，最多 64 KB',
+    attachmentHelp: '.txt、.md、.csv 或 .json，最多 1 MB',
     attachmentLimit: '每則訊息最多選取 5 個來源。',
-    attachmentTooLarge: '來源檔案必須小於或等於 64 KB。',
+    attachmentTooLarge: '來源檔案必須小於或等於 1 MB。',
     cancelled: '已停止產生；部分回應會保留以供稽核。',
-    configured: '已就緒',
     conversations: '對話紀錄',
     draftOnly: '唯讀 AI',
     emptyAsk: '提出問題、釐清想法，或一起探索安全的自動化做法。',
@@ -190,14 +187,9 @@ const copy = {
     stop: '停止產生',
     streaming: '產生中⋯',
     title: '與 AI 對話、釐清並規劃工作',
-    unavailable: '目前未開放',
     waiting: '新增對話',
   },
 } as const;
-
-function modelLabel(model: AssistantModelOption, unavailable: string): string {
-  return `${model.label} · ${model.configured ? model.model : unavailable}`;
-}
 
 function optimisticMessage(body: string): AssistantConversationMessage {
   return {
@@ -339,7 +331,11 @@ export function AssistantWorkspace({
       setConversationId(parsed.data.conversation.id);
       setMessages(parsed.data.conversation.messages);
       setMode(parsed.data.conversation.mode);
-      setSelectedModel(parsed.data.conversation.provider);
+      setSelectedModel(
+        models.some((model) => model.id === parsed.data.conversation.provider && model.configured)
+          ? parsed.data.conversation.provider
+          : 'auto',
+      );
       const latestPlanMessage = [...parsed.data.conversation.messages]
         .reverse()
         .find((message) => message.plan !== undefined);
@@ -765,8 +761,7 @@ export function AssistantWorkspace({
                         {conversation.title}
                       </span>
                       <span className="mt-1 block text-[10px] text-slate-500">
-                        {conversation.mode === 'ask' ? text.ask : text.plan} ·{' '}
-                        {conversation.provider}
+                        {conversation.mode === 'ask' ? text.ask : text.plan}
                       </span>
                     </span>
                   </button>
@@ -802,7 +797,7 @@ export function AssistantWorkspace({
               >
                 {models.map((model) => (
                   <option disabled={!model.configured} key={model.id} value={model.id}>
-                    {modelLabel(model, text.unavailable)}
+                    {model.label}
                   </option>
                 ))}
               </select>
@@ -819,32 +814,6 @@ export function AssistantWorkspace({
                 <p className="mt-2 text-sm leading-6 text-slate-500">
                   {mode === 'ask' ? text.emptyAsk : text.emptyPlan}
                 </p>
-                <div className="mt-6 grid gap-2 text-left sm:grid-cols-3">
-                  {models
-                    .filter((model) => model.id !== 'auto' && model.id !== 'mock')
-                    .map((model) => (
-                      <div
-                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"
-                        key={model.id}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-semibold text-slate-900">{model.label}</p>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${
-                              model.configured
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-slate-200 text-slate-500'
-                            }`}
-                          >
-                            {model.configured ? text.configured : text.unavailable}
-                          </span>
-                        </div>
-                        <p className="mt-1 truncate font-mono text-[10px] text-slate-500">
-                          {model.model}
-                        </p>
-                      </div>
-                    ))}
-                </div>
               </div>
             )}
 
@@ -867,13 +836,10 @@ export function AssistantWorkspace({
                 >
                   <p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p>
                   {message.role === 'assistant' && (
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-mono text-[10px] text-slate-400">
-                        {message.provider} · {message.model} · {message.status}
-                      </p>
+                    <>
                       {message.status === 'completed' && (
                         <button
-                          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-indigo-700 transition hover:border-indigo-300"
+                          className="mt-2 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-indigo-700 transition hover:border-indigo-300"
                           disabled={pending}
                           onClick={() => void createArtifact(message)}
                           type="button"
@@ -881,7 +847,7 @@ export function AssistantWorkspace({
                           {text.artifact}
                         </button>
                       )}
-                    </div>
+                    </>
                   )}
                 </div>
               </article>

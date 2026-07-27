@@ -227,6 +227,73 @@ select tests.assert_true(
   'service role must create the bounded resource graph'
 );
 
+insert into public.ai_attachments (
+  id,
+  tenant_id,
+  conversation_id,
+  uploaded_by,
+  filename,
+  mime_type,
+  byte_size,
+  sha256,
+  content
+)
+values (
+  'b5000000-0000-4000-8000-000000000003',
+  'b2000000-0000-4000-8000-000000000001',
+  'b3000000-0000-4000-8000-000000000001',
+  'b1000000-0000-4000-8000-000000000001',
+  'large-source.txt',
+  'text/plain',
+  70000,
+  repeat('d', 64),
+  repeat('x', 70000)
+);
+
+select tests.assert_true(
+  (
+    select byte_size
+    from public.ai_attachments
+    where id = 'b5000000-0000-4000-8000-000000000003'
+  ) = 70000,
+  'sources larger than the former 64 KiB limit must be accepted'
+);
+
+delete from public.ai_attachments
+where id = 'b5000000-0000-4000-8000-000000000003';
+
+do $$
+begin
+  begin
+    insert into public.ai_attachments (
+      id,
+      tenant_id,
+      conversation_id,
+      uploaded_by,
+      filename,
+      mime_type,
+      byte_size,
+      sha256,
+      content
+    )
+    values (
+      'b5000000-0000-4000-8000-000000000004',
+      'b2000000-0000-4000-8000-000000000001',
+      'b3000000-0000-4000-8000-000000000001',
+      'b1000000-0000-4000-8000-000000000001',
+      'too-large.txt',
+      'text/plain',
+      1048577,
+      repeat('e', 64),
+      repeat('x', 1048577)
+    );
+    raise exception 'source larger than 1 MiB unexpectedly succeeded';
+  exception
+    when check_violation then null;
+  end;
+end;
+$$;
+
 do $$
 begin
   begin
