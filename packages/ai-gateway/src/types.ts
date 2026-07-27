@@ -4,6 +4,25 @@ import { z } from 'zod';
 export const AiProviderNameSchema = z.enum(['anthropic', 'gemini', 'mock', 'openai']);
 export type AiProviderName = z.infer<typeof AiProviderNameSchema>;
 
+export const ChatMessageSchema = z
+  .object({
+    content: z.string().trim().min(1).max(12_000),
+    role: z.enum(['assistant', 'user']),
+  })
+  .strict();
+
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+
+export const ChatRequestSchema = z
+  .object({
+    locale: z.enum(['en', 'zh-Hant']).default('zh-Hant'),
+    maxOutputTokens: z.number().int().min(64).max(4_096).default(2_048),
+    messages: z.array(ChatMessageSchema).min(1).max(40),
+  })
+  .strict();
+
+export type ChatRequest = z.infer<typeof ChatRequestSchema>;
+
 export const PlannerRequestSchema = z
   .object({
     context: z
@@ -48,6 +67,44 @@ export interface AiProviderAdapter {
   complete(request: ProviderCompletionRequest): Promise<ProviderCompletion>;
 }
 
+export interface ProviderChatRequest {
+  readonly chatRequest: ChatRequest;
+  readonly messages: readonly ChatMessage[];
+  readonly signal?: AbortSignal;
+  readonly systemPrompt: string;
+}
+
+export type ProviderChatEvent =
+  | {
+      readonly text: string;
+      readonly type: 'delta';
+    }
+  | {
+      readonly model: string;
+      readonly requestId?: string;
+      readonly type: 'done';
+      readonly usage: ProviderTokenUsage;
+    };
+
+export interface AiChatAdapter {
+  readonly model: string;
+  readonly provider: AiProviderName;
+  streamChat(request: ProviderChatRequest): AsyncIterable<ProviderChatEvent>;
+}
+
+export type ChatGatewayEvent =
+  | {
+      readonly text: string;
+      readonly type: 'delta';
+    }
+  | {
+      readonly model: string;
+      readonly provider: AiProviderName;
+      readonly requestId?: string;
+      readonly type: 'done';
+      readonly usage: ProviderTokenUsage;
+    };
+
 export interface PlannerResult {
   readonly attempts: number;
   readonly model: string;
@@ -61,8 +118,8 @@ export interface UsageRecord {
   readonly durationMs: number;
   readonly inputTokens: number;
   readonly model: string;
-  readonly operation: 'workflow_plan';
-  readonly outcome: 'failed' | 'invalid' | 'succeeded';
+  readonly operation: 'chat' | 'workflow_plan';
+  readonly outcome: 'cancelled' | 'failed' | 'invalid' | 'succeeded';
   readonly outputTokens: number;
   readonly provider: AiProviderName;
   readonly validationCodes: readonly string[];

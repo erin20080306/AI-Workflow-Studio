@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 17 — AI conversation workspace (completed)
+Phase 18 — Durable multi-model chat (completed)
 
 ## Repository baseline
 
@@ -1313,3 +1313,65 @@ Status: completed
   workspace execution and operations phases pass their gates.
 - This phase was not deployed to Production; a successful local build must not
   be treated as a Vercel deployment.
+
+## Phase 18
+
+Status: completed
+
+### Implemented
+
+- Activated the bilingual Ask and Plan modes in the AI Workspace while keeping
+  execution visibly disabled for Phase 20.
+- Added authenticated, provider-neutral streaming chat for OpenAI Responses,
+  Anthropic Messages, Gemini `streamGenerateContent`, and deterministic Mock
+  adapters. Provider events are normalized into bounded delta and completion
+  events.
+- Added explicit browser cancellation, provider timeout handling, partial
+  response persistence, safe error envelopes, and output-size limits.
+- Added tenant-isolated `ai_conversations` and `ai_messages` tables with
+  cross-tenant composite foreign keys, read-only authenticated RLS, and
+  service-role-only writes.
+- Persisted Ask replies and validated Plan results, including provider/model
+  attribution and completed, cancelled, or failed message states.
+- Added durable conversation history, reload/open behavior, new-conversation
+  controls, streaming status, and a stop-generation control to the responsive
+  Codex-inspired interface.
+- Connected both chat and planning usage to `usage_records` without storing
+  prompts, generated content, credentials, or hidden reasoning in usage
+  metadata.
+- Kept all external-provider keys server-only. The customer interface contains
+  no API-key input or secret status details.
+
+### Validation
+
+- AI gateway focused unit tests: passed — 18 tests across 3 files
+- `pnpm db:test`: passed — fresh migrations, tenant isolation, role
+  restrictions, and idempotent seed
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all code workspaces
+- `pnpm test`: passed — 115 tests across 26 files
+- `pnpm build:web`: passed — Production build includes the new chat,
+  conversation-list, conversation-detail, and persistent Plan routes
+- `pnpm test:e2e`: passed — 4 Chromium paths, including streaming history
+  persistence and validated Plan persistence
+- `pnpm security:scan-client`: passed — 29 built client files inspected
+- Codex in-app browser desktop check: passed — streamed Mock reply, durable
+  history entry, no horizontal overflow, and no console warnings/errors
+- Codex in-app browser mobile check: passed at 390 px — stacked layout with no
+  horizontal overflow
+
+### Known limitations
+
+- External OpenAI, Claude, and Gemini choices remain unavailable until their
+  respective server-only Vercel variables are configured and a new deployment
+  is completed.
+- Ask mode is intentionally tool-free and cannot execute workflows, access
+  files, or publish websites.
+- Attachments, bounded sources, tool registry, and generated artifacts begin in
+  Phase 19.
+- Reviewed workflow dispatch and explicit approval gates begin in Phase 20.
+- Website Studio and its responsive preview canvas remain scheduled for Phases
+  23–27.
+- This phase was not deployed to Production; successful local checks and a
+  GitHub push must not be described as a Vercel deployment.

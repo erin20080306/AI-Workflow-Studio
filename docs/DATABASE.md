@@ -21,6 +21,14 @@ device pairing hashes, Agent event idempotency keys, and service-role-only
 atomic claim, lease, progress, and finish functions. Browser roles have neither
 table access to pairing hashes nor function execution rights.
 
+Migration `202607270006_ai_conversations.sql` adds tenant-owned
+`ai_conversations` and `ai_messages`. Authenticated members can read only their
+tenant's rows through RLS; all writes remain service-role-only and must pass the
+authenticated server boundary. A composite `(conversation_id, tenant_id)`
+foreign key prevents a message from being attached across tenants. Message
+bodies, model identifiers, metadata, status, and usage-unit fields are bounded
+by database constraints.
+
 ## Local migration verification
 
 Run:

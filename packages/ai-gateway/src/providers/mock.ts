@@ -1,12 +1,46 @@
-import type { AiProviderAdapter, ProviderCompletion, ProviderCompletionRequest } from '../types';
+import type {
+  AiChatAdapter,
+  AiProviderAdapter,
+  ProviderChatEvent,
+  ProviderChatRequest,
+  ProviderCompletion,
+  ProviderCompletionRequest,
+} from '../types';
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-export class MockAiAdapter implements AiProviderAdapter {
+export class MockAiAdapter implements AiProviderAdapter, AiChatAdapter {
   readonly model = 'mock-planner-v1';
   readonly provider = 'mock' as const;
+
+  async *streamChat(request: ProviderChatRequest): AsyncIterable<ProviderChatEvent> {
+    const latest = request.messages.at(-1)?.content ?? '';
+    const text =
+      request.chatRequest.locale === 'en'
+        ? `I understand your request: “${latest}”\n\nAsk mode can explain and refine the approach, but it cannot run tools. Switch to Plan when you want validated Workflow JSON for review.`
+        : `我理解你的需求：「${latest}」\n\n詢問模式可以協助釐清需求與說明做法，但不會執行工具。需要產生可審核的 Workflow JSON 時，請切換到「規劃」。`;
+    const chunks = text.match(/.{1,14}/gu) ?? [text];
+    for (const chunk of chunks) {
+      await Promise.resolve();
+      yield { text: chunk, type: 'delta' };
+    }
+    const inputTokens = estimateTokens(
+      request.systemPrompt + request.messages.map((message) => message.content).join(''),
+    );
+    const outputTokens = estimateTokens(text);
+    yield {
+      model: 'mock-chat-v1',
+      requestId: 'mock-chat',
+      type: 'done',
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+      },
+    };
+  }
 
   async complete(request: ProviderCompletionRequest): Promise<ProviderCompletion> {
     const { executionTarget } = request.plannerRequest.context;

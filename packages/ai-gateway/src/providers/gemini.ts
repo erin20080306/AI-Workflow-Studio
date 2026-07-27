@@ -3,13 +3,16 @@ import { z } from 'zod';
 import { AiGatewayError } from '../errors';
 import { PLANNER_PROVIDER_JSON_SCHEMA } from '../provider-schema';
 import type {
+  AiChatAdapter,
   AiProviderAdapter,
   FetchTransport,
+  ProviderChatEvent,
+  ProviderChatRequest,
   ProviderCompletion,
   ProviderCompletionRequest,
 } from '../types';
 import { validateProviderConfig } from './config';
-import { postJson } from './http';
+import { postJson, streamJsonEvents } from './http';
 
 const GeminiResponseSchema = z
   .object({
@@ -55,7 +58,7 @@ export interface GeminiAdapterOptions {
   readonly model?: string;
 }
 
-export class GeminiAdapter implements AiProviderAdapter {
+export class GeminiAdapter implements AiProviderAdapter, AiChatAdapter {
   readonly model: string;
   readonly provider = 'gemini' as const;
   private readonly apiKey: string;
@@ -75,6 +78,79 @@ export class GeminiAdapter implements AiProviderAdapter {
     this.baseUrl = config.baseUrl;
     this.model = config.model;
     this.fetchTransport = options.fetchTransport;
+  }
+
+  async *streamChat(request: ProviderChatRequest): AsyncIterable<ProviderChatEvent> {
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let totalTokens = 0;
+    let requestId: string | undefined;
+    let responseModel = this.model;
+    let receivedEvent = false;
+
+    for await (const raw of streamJsonEvents({
+      body: {
+        contents: request.messages.map((message) => ({
+          parts: [{ text: message.content }],
+          role: message.role === 'assistant' ? 'model' : 'user',
+        })),
+        generationConfig: {
+          maxOutputTokens: request.chatRequest.maxOutputTokens,
+        },
+        systemInstruction: {
+          parts: [{ text: request.systemPrompt }],
+        },
+      },
+      ...(this.fetchTransport === undefined ? {} : { fetchTransport: this.fetchTransport }),
+      headers: {
+        'x-goog-api-key': this.apiKey,
+      },
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
+      url: `${this.baseUrl}/v1beta/models/${encodeURIComponent(this.model)}:streamGenerateContent?alt=sse`,
+    })) {
+      const event = GeminiResponseSchema.safeParse(raw);
+      if (!event.success) {
+        throw new AiGatewayError(
+          'AI_PROVIDER_RESPONSE_INVALID',
+          'Gemini returned an unexpected streaming event.',
+        );
+      }
+      receivedEvent = true;
+      const candidate = event.data.candidates[0];
+      if (
+        candidate === undefined ||
+        (candidate.finishReason !== undefined && unusableFinishReasons.has(candidate.finishReason))
+      ) {
+        throw new AiGatewayError(
+          'AI_PROVIDER_RESPONSE_INVALID',
+          'Gemini did not return a usable chat response.',
+        );
+      }
+      const text = candidate.content.parts.map((part) => part.text).join('');
+      if (text.length > 0) {
+        yield { text, type: 'delta' };
+      }
+      const usage = event.data.usageMetadata;
+      inputTokens = usage?.promptTokenCount ?? inputTokens;
+      outputTokens = usage?.candidatesTokenCount ?? outputTokens;
+      totalTokens = usage?.totalTokenCount ?? totalTokens;
+      requestId = event.data.responseId ?? requestId;
+      responseModel = event.data.modelVersion ?? responseModel;
+    }
+
+    if (!receivedEvent) {
+      throw new AiGatewayError('AI_PROVIDER_RESPONSE_INVALID', 'Gemini returned an empty stream.');
+    }
+    yield {
+      model: responseModel,
+      ...(requestId === undefined ? {} : { requestId }),
+      type: 'done',
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: totalTokens || inputTokens + outputTokens,
+      },
+    };
   }
 
   async complete(request: ProviderCompletionRequest): Promise<ProviderCompletion> {

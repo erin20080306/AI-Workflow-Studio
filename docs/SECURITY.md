@@ -129,6 +129,14 @@ validation classifications and paths; the rejected raw response is not logged
 or echoed. Usage records exclude prompts and generated content. A usage-record
 failure withholds the output rather than creating an unaccounted plan.
 
+Ask mode uses a separate provider-neutral streaming boundary with no tools.
+Chat context and streamed output are bounded, client cancellation propagates to
+the provider request, and incomplete replies are stored with cancelled or
+failed status. Conversation and message writes require an authenticated,
+server-derived tenant context and the service role; authenticated browser roles
+receive read-only tenant-scoped RLS access. Usage metadata records provider,
+model, units, duration, outcome, and conversation identifier only.
+
 Until the authenticated production session/repository boundary is connected,
 the public development control plane permits only the deterministic Mock
 planner. Supplying a real provider key does not make an external provider

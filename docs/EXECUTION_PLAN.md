@@ -33,7 +33,7 @@ test, and build checks and has been committed.
 | 15    | Remote CI repair              | Linux quality checks and macOS/Windows package jobs pass remotely                | completed |
 | 16    | Platform Admin bootstrap      | A verified Auth user has an active server-granted Super Admin role               | completed |
 | 17    | AI conversation workspace     | Bilingual planner chat, safe modes, and configured model selection pass          | completed |
-| 18    | Durable multi-model chat      | Authenticated streaming conversations persist with tenant isolation              | pending   |
+| 18    | Durable multi-model chat      | Authenticated streaming conversations persist with tenant isolation              | completed |
 | 19    | Tool and artifact workspace   | Files, sources, tool registry, and generated artifacts are bounded and audited   | pending   |
 | 20    | Approval-aware execution      | Reviewed plans can dispatch idempotent jobs with explicit approval gates         | pending   |
 | 21    | Schedules and connectors      | Recurring runs and selected business connectors pass integration tests           | pending   |

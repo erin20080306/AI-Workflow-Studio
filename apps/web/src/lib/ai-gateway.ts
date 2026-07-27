@@ -1,6 +1,7 @@
 import 'server-only';
 
 import {
+  AiChatGateway,
   AiGateway,
   AiGatewayError,
   AnthropicAdapter,
@@ -8,8 +9,10 @@ import {
   MockAiAdapter,
   OpenAiAdapter,
   RedactedConsoleUsageSink,
+  type AiChatAdapter,
   type AiProviderAdapter,
   type AiProviderName,
+  type UsageSink,
 } from '@ai-workflow-studio/ai-gateway';
 
 import { getEnvironment } from './env';
@@ -30,7 +33,7 @@ function requiredKey(provider: Exclude<AiProviderName, 'mock'>): string {
   return value;
 }
 
-function createAdapter(provider: AiProviderName): AiProviderAdapter {
+function createAdapter(provider: AiProviderName): AiProviderAdapter & AiChatAdapter {
   const environment = getEnvironment();
   switch (provider) {
     case 'anthropic':
@@ -53,6 +56,16 @@ function createAdapter(provider: AiProviderName): AiProviderAdapter {
   }
 }
 
-export function createServerAiGateway(provider: AiProviderName): AiGateway {
-  return new AiGateway(createAdapter(provider), new RedactedConsoleUsageSink());
+export function createServerAiGateway(
+  provider: AiProviderName,
+  usageSink: UsageSink = new RedactedConsoleUsageSink(),
+): AiGateway {
+  return new AiGateway(createAdapter(provider), usageSink);
+}
+
+export function createServerAiChatGateway(
+  provider: AiProviderName,
+  usageSink: UsageSink,
+): AiChatGateway {
+  return new AiChatGateway(createAdapter(provider), usageSink);
 }

@@ -3,20 +3,33 @@ import {
   AiProviderNameSchema,
   PlannerRequestSchema,
 } from '@ai-workflow-studio/ai-gateway';
+import { z } from 'zod';
 
-import { getWorkspaceContext } from '@/lib/auth/context';
+import {
+  appendAssistantMessage,
+  createAssistantUsageSink,
+  ensureAssistantConversation,
+} from '@/lib/assistant-conversation-server';
+import type { AssistantConversationSummary } from '@/lib/assistant-conversation-schema';
+import {
+  getWorkspaceContext,
+  mockWorkspaceContext,
+  type WorkspaceContext,
+} from '@/lib/auth/context';
 import { createServerAiGateway } from '@/lib/ai-gateway';
 import { plannerAccessDecision } from '@/lib/control-plane-access';
 import { getEnvironment } from '@/lib/env';
 
 const MAX_REQUEST_BYTES = 20_000;
 const ApiPlannerRequestSchema = PlannerRequestSchema.extend({
+  conversationId: z.string().uuid().optional(),
   provider: AiProviderNameSchema.default('mock'),
 }).strict();
 
 const statusByCode = {
   AI_OUTPUT_INVALID: 422,
   AI_PROVIDER_AUTHENTICATION_FAILED: 502,
+  AI_PROVIDER_CANCELLED: 499,
   AI_PROVIDER_NOT_CONFIGURED: 503,
   AI_PROVIDER_RATE_LIMITED: 429,
   AI_PROVIDER_REQUEST_FAILED: 502,
@@ -67,16 +80,17 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { provider, ...plannerRequest } = parsed.data;
+  const { conversationId, ...validatedPlannerRequest } = plannerRequest;
   const environment = getEnvironment();
-  let workspaceAuthenticated = environment.mockMode;
+  let workspace: WorkspaceContext | null = environment.mockMode ? mockWorkspaceContext() : null;
   if (!environment.mockMode) {
     try {
-      workspaceAuthenticated = (await getWorkspaceContext()) !== null;
+      workspace = await getWorkspaceContext();
     } catch {
-      workspaceAuthenticated = false;
+      workspace = null;
     }
   }
-  const access = plannerAccessDecision(environment.mockMode, provider, workspaceAuthenticated);
+  const access = plannerAccessDecision(environment.mockMode, provider, workspace !== null);
   if (!access.allowed) {
     return Response.json(
       {
@@ -94,15 +108,57 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  try {
-    const result = await createServerAiGateway(provider).plan(plannerRequest, request.signal);
+  if (workspace === null) {
     return Response.json(
       {
+        error: {
+          code: 'AI_AUTH_REQUIRED',
+          message: 'An authenticated workspace is required.',
+        },
+      },
+      { headers: { 'cache-control': 'no-store' }, status: 401 },
+    );
+  }
+
+  let conversation: AssistantConversationSummary | undefined;
+  try {
+    const model = environment.providerModels[provider];
+    conversation = await ensureAssistantConversation(workspace, {
+      ...(conversationId === undefined ? {} : { conversationId }),
+      mode: 'plan',
+      model,
+      provider,
+      title: validatedPlannerRequest.prompt,
+    });
+    const userMessage = await appendAssistantMessage(workspace, {
+      body: validatedPlannerRequest.prompt,
+      conversationId: conversation.id,
+      role: 'user',
+    });
+    const result = await createServerAiGateway(
+      provider,
+      createAssistantUsageSink(workspace, conversation.id),
+    ).plan(validatedPlannerRequest, request.signal);
+    const assistantMessage = await appendAssistantMessage(workspace, {
+      body: result.output.explanation,
+      conversationId: conversation.id,
+      inputUnits: result.usage.inputTokens,
+      model: result.model,
+      outputUnits: result.usage.outputTokens,
+      plan: result.output,
+      provider: result.provider,
+      role: 'assistant',
+    });
+    return Response.json(
+      {
+        assistantMessage,
         attempts: result.attempts,
+        conversationId: conversation.id,
         model: result.model,
         output: result.output,
         provider: result.provider,
         usage: result.usage,
+        userMessage,
       },
       {
         headers: {
@@ -111,6 +167,23 @@ export async function POST(request: Request): Promise<Response> {
       },
     );
   } catch (error) {
+    if (conversation !== undefined) {
+      try {
+        await appendAssistantMessage(workspace, {
+          body: 'The validated planning response could not be completed.',
+          conversationId: conversation.id,
+          model: environment.providerModels[provider],
+          provider,
+          role: 'assistant',
+          status:
+            error instanceof AiGatewayError && error.code === 'AI_PROVIDER_CANCELLED'
+              ? 'cancelled'
+              : 'failed',
+        });
+      } catch {
+        // Preserve the original provider or persistence error.
+      }
+    }
     if (error instanceof AiGatewayError) {
       return Response.json(
         {

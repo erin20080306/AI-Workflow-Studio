@@ -46,6 +46,9 @@ AI provider tests use injected local transports. They assert endpoint and header
 construction, structured-output configuration, response and usage parsing,
 bounded repair, refusal/truncation handling, secret-safe errors, and the
 invariant that invalid or unaccounted output is never released.
+Streaming tests additionally normalize OpenAI, Anthropic, and Gemini SSE events,
+enforce bounded chat context/output, propagate cancellation, and require one
+terminal provider/usage event before a reply is considered complete.
 
 ### Integration
 
@@ -67,6 +70,8 @@ Run database assertions verify that authenticated roles cannot mutate Runs or
 call service transitions, expected-status compare-and-set transitions succeed,
 invalid terminal transitions fail, and audit/notification rows are created in
 the same transaction.
+AI conversation assertions verify tenant-scoped reads, cross-tenant composite
+foreign keys, and service-role-only conversation, message, and usage writes.
 
 ### End to end
 
@@ -88,6 +93,11 @@ performs a Mock health check, renders the spreadsheet metadata list, and asserts
 that token fixture values do not appear in the page. Connector integration tests
 inject OAuth and Sheets transports, so no Google credential or network call is
 required.
+
+The AI Workspace browser E2E streams a deterministic Ask reply, reloads and
+reopens the saved conversation, then creates a Plan conversation and verifies
+that only a validated four-step Workflow plan is rendered from persisted
+metadata.
 
 The Agent API E2E starts a write-capable Run while its paired Agent is offline,
 asserts no Job exists before approval, approves it, reconnects, claims exactly

@@ -32,6 +32,30 @@ function jsonResponse(value: unknown, status = 200): Response {
   });
 }
 
+function sseResponse(events: readonly unknown[]): Response {
+  return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''), {
+    headers: { 'content-type': 'text/event-stream' },
+  });
+}
+
+async function collectChat(
+  adapter: OpenAiAdapter | AnthropicAdapter | GeminiAdapter,
+): Promise<readonly unknown[]> {
+  const events: unknown[] = [];
+  for await (const event of adapter.streamChat({
+    chatRequest: {
+      locale: 'zh-Hant',
+      maxOutputTokens: 512,
+      messages: [{ content: '請說明安全自動化的做法。', role: 'user' }],
+    },
+    messages: [{ content: '請說明安全自動化的做法。', role: 'user' }],
+    systemPrompt: 'Do not execute tools.',
+  })) {
+    events.push(event);
+  }
+  return events;
+}
+
 describe('provider adapters', () => {
   it('uses the OpenAI Responses API with server authorization and JSON output mode', async () => {
     let capturedUrl = '';
@@ -182,5 +206,152 @@ describe('provider adapters', () => {
       message: 'AI provider authentication failed.',
     });
     expect(JSON.stringify(error)).not.toContain(API_KEY);
+  });
+
+  it('normalizes OpenAI typed SSE chat events', async () => {
+    const events = await collectChat(
+      new OpenAiAdapter({
+        apiKey: API_KEY,
+        fetchTransport: async () =>
+          sseResponse([
+            { type: 'response.created' },
+            { delta: '安全', type: 'response.output_text.delta' },
+            {
+              response: {
+                id: 'resp_stream',
+                model: 'gpt-5.6-sol',
+                usage: { input_tokens: 4, output_tokens: 2, total_tokens: 6 },
+              },
+              type: 'response.completed',
+            },
+          ]),
+      }),
+    );
+
+    expect(events).toEqual([
+      { text: '安全', type: 'delta' },
+      {
+        model: 'gpt-5.6-sol',
+        requestId: 'resp_stream',
+        type: 'done',
+        usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 },
+      },
+    ]);
+  });
+
+  it('normalizes Anthropic content deltas and cumulative usage', async () => {
+    const events = await collectChat(
+      new AnthropicAdapter({
+        apiKey: API_KEY,
+        fetchTransport: async () =>
+          sseResponse([
+            {
+              message: {
+                id: 'msg_stream',
+                model: 'claude-sonnet-4-6',
+                usage: { input_tokens: 5, output_tokens: 1 },
+              },
+              type: 'message_start',
+            },
+            {
+              delta: { text: '可審核', type: 'text_delta' },
+              type: 'content_block_delta',
+            },
+            {
+              delta: { stop_reason: 'end_turn' },
+              type: 'message_delta',
+              usage: { output_tokens: 3 },
+            },
+            { type: 'message_stop' },
+          ]),
+      }),
+    );
+
+    expect(events.at(-1)).toMatchObject({
+      requestId: 'msg_stream',
+      type: 'done',
+      usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
+    });
+  });
+
+  it('normalizes Gemini streamed content chunks', async () => {
+    const events = await collectChat(
+      new GeminiAdapter({
+        apiKey: API_KEY,
+        fetchTransport: async () =>
+          sseResponse([
+            {
+              candidates: [{ content: { parts: [{ text: '先驗證' }] }, index: 0 }],
+              modelVersion: 'gemini-3.6-flash',
+              responseId: 'gemini_stream',
+              usageMetadata: { promptTokenCount: 4 },
+            },
+            {
+              candidates: [
+                {
+                  content: { parts: [{ text: '再執行' }] },
+                  finishReason: 'STOP',
+                  index: 0,
+                },
+              ],
+              modelVersion: 'gemini-3.6-flash',
+              responseId: 'gemini_stream',
+              usageMetadata: {
+                candidatesTokenCount: 2,
+                promptTokenCount: 4,
+                totalTokenCount: 6,
+              },
+            },
+          ]),
+      }),
+    );
+
+    expect(events).toMatchObject([
+      { text: '先驗證', type: 'delta' },
+      { text: '再執行', type: 'delta' },
+      {
+        requestId: 'gemini_stream',
+        type: 'done',
+        usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 },
+      },
+    ]);
+  });
+
+  it('maps caller cancellation to a secret-safe provider error', async () => {
+    const controller = new AbortController();
+    let signalStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    const adapter = new OpenAiAdapter({
+      apiKey: API_KEY,
+      fetchTransport: async (_input, init): Promise<Response> => {
+        signalStarted?.();
+        return await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Cancelled', 'AbortError')),
+            { once: true },
+          );
+        });
+      },
+    });
+    const stream = adapter.streamChat({
+      chatRequest: {
+        locale: 'zh-Hant',
+        maxOutputTokens: 512,
+        messages: [{ content: '停止回應', role: 'user' }],
+      },
+      messages: [{ content: '停止回應', role: 'user' }],
+      signal: controller.signal,
+      systemPrompt: 'Do not execute tools.',
+    });
+    const iterator = stream[Symbol.asyncIterator]();
+    const pending = iterator.next();
+
+    await started;
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: 'AI_PROVIDER_CANCELLED' });
   });
 });

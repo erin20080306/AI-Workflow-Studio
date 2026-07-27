@@ -2,13 +2,16 @@ import { z } from 'zod';
 
 import { AiGatewayError } from '../errors';
 import type {
+  AiChatAdapter,
   AiProviderAdapter,
   FetchTransport,
+  ProviderChatEvent,
+  ProviderChatRequest,
   ProviderCompletion,
   ProviderCompletionRequest,
 } from '../types';
 import { validateProviderConfig } from './config';
-import { postJson } from './http';
+import { postJson, streamJsonEvents } from './http';
 
 const OpenAiResponseSchema = z
   .object({
@@ -37,6 +40,27 @@ const OpenAiResponseSchema = z
   })
   .passthrough();
 
+const OpenAiStreamEventSchema = z
+  .object({
+    delta: z.string().optional(),
+    response: z
+      .object({
+        id: z.string().min(1),
+        model: z.string().min(1),
+        usage: z
+          .object({
+            input_tokens: z.number().int().min(0),
+            output_tokens: z.number().int().min(0),
+            total_tokens: z.number().int().min(0),
+          })
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
+    type: z.string().min(1),
+  })
+  .passthrough();
+
 export interface OpenAiAdapterOptions {
   readonly apiKey: string;
   readonly baseUrl?: string;
@@ -44,7 +68,7 @@ export interface OpenAiAdapterOptions {
   readonly model?: string;
 }
 
-export class OpenAiAdapter implements AiProviderAdapter {
+export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
   readonly model: string;
   readonly provider = 'openai' as const;
   private readonly apiKey: string;
@@ -64,6 +88,73 @@ export class OpenAiAdapter implements AiProviderAdapter {
     this.baseUrl = config.baseUrl;
     this.model = config.model;
     this.fetchTransport = options.fetchTransport;
+  }
+
+  async *streamChat(request: ProviderChatRequest): AsyncIterable<ProviderChatEvent> {
+    let completed = false;
+    for await (const raw of streamJsonEvents({
+      body: {
+        input: request.messages.map((message) => ({
+          content: message.content,
+          role: message.role,
+        })),
+        instructions: request.systemPrompt,
+        max_output_tokens: request.chatRequest.maxOutputTokens,
+        model: this.model,
+        store: false,
+        stream: true,
+      },
+      ...(this.fetchTransport === undefined ? {} : { fetchTransport: this.fetchTransport }),
+      headers: {
+        authorization: `Bearer ${this.apiKey}`,
+      },
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
+      url: `${this.baseUrl}/v1/responses`,
+    })) {
+      const event = OpenAiStreamEventSchema.safeParse(raw);
+      if (!event.success) {
+        throw new AiGatewayError(
+          'AI_PROVIDER_RESPONSE_INVALID',
+          'OpenAI returned an unexpected streaming event.',
+        );
+      }
+      if (event.data.type === 'response.output_text.delta') {
+        if (event.data.delta !== undefined && event.data.delta.length > 0) {
+          yield { text: event.data.delta, type: 'delta' };
+        }
+        continue;
+      }
+      if (event.data.type === 'error' || event.data.type === 'response.failed') {
+        throw new AiGatewayError('AI_PROVIDER_REQUEST_FAILED', 'OpenAI streaming request failed.');
+      }
+      if (event.data.type === 'response.completed') {
+        const response = event.data.response;
+        if (response === undefined) {
+          throw new AiGatewayError(
+            'AI_PROVIDER_RESPONSE_INVALID',
+            'OpenAI completion event did not include a response.',
+          );
+        }
+        completed = true;
+        const usage = response.usage;
+        yield {
+          model: response.model,
+          requestId: response.id,
+          type: 'done',
+          usage: {
+            inputTokens: usage?.input_tokens ?? 0,
+            outputTokens: usage?.output_tokens ?? 0,
+            totalTokens: usage?.total_tokens ?? 0,
+          },
+        };
+      }
+    }
+    if (!completed) {
+      throw new AiGatewayError(
+        'AI_PROVIDER_RESPONSE_INVALID',
+        'OpenAI stream ended before completion.',
+      );
+    }
   }
 
   async complete(request: ProviderCompletionRequest): Promise<ProviderCompletion> {

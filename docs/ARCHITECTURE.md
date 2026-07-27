@@ -75,6 +75,14 @@ semantic validators remain authoritative. A bounded repair loop may request a
 complete replacement plan; it never patches, executes, or returns invalid
 content. See `docs/AI_GATEWAY.md`.
 
+The AI Workspace also exposes a provider-neutral streaming chat boundary.
+OpenAI, Anthropic, Gemini, and Mock streams are normalized into text deltas and
+one terminal usage event. Ask mode has no tool registry and cannot dispatch
+work. Conversations and messages are written by authenticated server routes,
+bound explicitly to the session tenant, and stored separately from redacted
+usage accounting. Plan messages may carry only a fully validated Workflow v1
+object as bounded metadata.
+
 Google authorization is modeled as an independent tenant-owned connection.
 OAuth state and PKCE verification remain server-side; AES-256-GCM token
 envelopes are bound to tenant, connection, and token kind. The connector exposes
@@ -130,6 +138,8 @@ revalidates the Workflow and runs only its locally registered subset. See
    never accepted.
 7. The Electron renderer is sandboxed and cannot name filesystem paths or IPC
    channels.
+8. Chat streams contain text only; tools, provider credentials, and arbitrary
+   executable payloads are outside the Phase 18 protocol.
 
 ## Initial architecture risks
 

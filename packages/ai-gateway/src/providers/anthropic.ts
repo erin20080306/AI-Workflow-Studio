@@ -3,13 +3,16 @@ import { z } from 'zod';
 import { AiGatewayError } from '../errors';
 import { PLANNER_PROVIDER_JSON_SCHEMA } from '../provider-schema';
 import type {
+  AiChatAdapter,
   AiProviderAdapter,
   FetchTransport,
+  ProviderChatEvent,
+  ProviderChatRequest,
   ProviderCompletion,
   ProviderCompletionRequest,
 } from '../types';
 import { validateProviderConfig } from './config';
-import { postJson } from './http';
+import { postJson, streamJsonEvents } from './http';
 
 const AnthropicResponseSchema = z
   .object({
@@ -31,6 +34,39 @@ const AnthropicResponseSchema = z
   })
   .passthrough();
 
+const AnthropicStreamEventSchema = z
+  .object({
+    delta: z
+      .object({
+        stop_reason: z.string().nullable().optional(),
+        text: z.string().optional(),
+        type: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    message: z
+      .object({
+        id: z.string().min(1),
+        model: z.string().min(1),
+        usage: z
+          .object({
+            input_tokens: z.number().int().min(0),
+            output_tokens: z.number().int().min(0).optional(),
+          })
+          .passthrough(),
+      })
+      .passthrough()
+      .optional(),
+    type: z.string().min(1),
+    usage: z
+      .object({
+        output_tokens: z.number().int().min(0).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
 export interface AnthropicAdapterOptions {
   readonly apiKey: string;
   readonly baseUrl?: string;
@@ -38,7 +74,7 @@ export interface AnthropicAdapterOptions {
   readonly model?: string;
 }
 
-export class AnthropicAdapter implements AiProviderAdapter {
+export class AnthropicAdapter implements AiProviderAdapter, AiChatAdapter {
   readonly model: string;
   readonly provider = 'anthropic' as const;
   private readonly apiKey: string;
@@ -58,6 +94,95 @@ export class AnthropicAdapter implements AiProviderAdapter {
     this.baseUrl = config.baseUrl;
     this.model = config.model;
     this.fetchTransport = options.fetchTransport;
+  }
+
+  async *streamChat(request: ProviderChatRequest): AsyncIterable<ProviderChatEvent> {
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let requestId: string | undefined;
+    let responseModel = this.model;
+    let stopReason: string | null | undefined;
+    let completed = false;
+
+    for await (const raw of streamJsonEvents({
+      body: {
+        max_tokens: request.chatRequest.maxOutputTokens,
+        messages: request.messages.map((message) => ({
+          content: message.content,
+          role: message.role,
+        })),
+        model: this.model,
+        stream: true,
+        system: request.systemPrompt,
+      },
+      ...(this.fetchTransport === undefined ? {} : { fetchTransport: this.fetchTransport }),
+      headers: {
+        'anthropic-version': '2023-06-01',
+        'x-api-key': this.apiKey,
+      },
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
+      url: `${this.baseUrl}/v1/messages`,
+    })) {
+      const event = AnthropicStreamEventSchema.safeParse(raw);
+      if (!event.success) {
+        throw new AiGatewayError(
+          'AI_PROVIDER_RESPONSE_INVALID',
+          'Anthropic returned an unexpected streaming event.',
+        );
+      }
+      if (event.data.type === 'message_start' && event.data.message !== undefined) {
+        requestId = event.data.message.id;
+        responseModel = event.data.message.model;
+        inputTokens = event.data.message.usage.input_tokens;
+        outputTokens = event.data.message.usage.output_tokens ?? 0;
+        continue;
+      }
+      if (
+        event.data.type === 'content_block_delta' &&
+        event.data.delta?.type === 'text_delta' &&
+        event.data.delta.text !== undefined
+      ) {
+        yield { text: event.data.delta.text, type: 'delta' };
+        continue;
+      }
+      if (event.data.type === 'message_delta') {
+        outputTokens = event.data.usage?.output_tokens ?? outputTokens;
+        stopReason = event.data.delta?.stop_reason;
+        continue;
+      }
+      if (event.data.type === 'error') {
+        throw new AiGatewayError(
+          'AI_PROVIDER_REQUEST_FAILED',
+          'Anthropic streaming request failed.',
+        );
+      }
+      if (event.data.type === 'message_stop') {
+        if (stopReason === 'refusal' || stopReason === 'max_tokens') {
+          throw new AiGatewayError(
+            'AI_PROVIDER_RESPONSE_INVALID',
+            `Anthropic chat response did not complete (${stopReason}).`,
+          );
+        }
+        completed = true;
+        yield {
+          model: responseModel,
+          ...(requestId === undefined ? {} : { requestId }),
+          type: 'done',
+          usage: {
+            inputTokens,
+            outputTokens,
+            totalTokens: inputTokens + outputTokens,
+          },
+        };
+      }
+    }
+
+    if (!completed) {
+      throw new AiGatewayError(
+        'AI_PROVIDER_RESPONSE_INVALID',
+        'Anthropic stream ended before completion.',
+      );
+    }
   }
 
   async complete(request: ProviderCompletionRequest): Promise<ProviderCompletion> {
