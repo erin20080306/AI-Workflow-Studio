@@ -1,0 +1,70 @@
+import { expect, test } from '@playwright/test';
+
+test('collects every guided decision before creating a locked website draft', async ({ page }) => {
+  await page.goto('/dashboard/sites');
+  await expect(page.getByRole('heading', { name: '先把網站想清楚，再開始生成。' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '網站工作室' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(page.locator('body')).not.toContainText('API 金鑰');
+
+  const projectName = `產品網站 ${Date.now()}`;
+  await page.getByLabel('專案名稱').fill(projectName);
+  await page.getByRole('button', { name: '建立專案', exact: true }).click();
+  await expect(page.getByRole('heading', { name: projectName })).toBeVisible();
+  await expect(page.getByRole('button', { name: '建立已驗證網站草稿' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '發布功能將於 Phase 27 開放' })).toBeDisabled();
+
+  await page
+    .getByLabel('這個網站最重要的目的為何？')
+    .fill('建立專業產品網站，清楚說明安全自動化價值並取得合格註冊名單。');
+  await page.getByRole('button', { name: '儲存並繼續' }).click();
+
+  await page
+    .getByLabel('這個網站最需要幫助誰？')
+    .fill('需要整理 Excel 與 Google Sheets 的營運團隊、中小企業負責人與流程管理者。');
+  await page.getByRole('button', { name: '儲存並繼續' }).click();
+
+  await page.getByRole('button', { name: '新增頁面' }).click();
+  await page.getByLabel('頁面名稱').fill('產品首頁');
+  await page.getByLabel('網址代稱').fill('home');
+  await page.getByLabel('頁面任務').fill('說明產品價值並引導訪客免費開始。');
+  await page.getByRole('button', { name: '儲存並繼續' }).click();
+
+  await page
+    .getByLabel('品牌應該讓人感覺如何？')
+    .fill('專業、清楚、可信任，以深藍與薄荷綠呈現安全且現代的科技感。');
+  await page.getByRole('button', { name: '儲存並繼續' }).click();
+
+  await page
+    .getByLabel('目前有哪些內容、還需要哪些內容？')
+    .fill('已有產品定位與方案費率，需要功能介紹、安全說明、客戶案例、常見問題與聯絡資訊。');
+  await page.getByRole('button', { name: '儲存並繼續' }).click();
+
+  await page.getByLabel('最重要的行動呼籲是什麼？').fill('免費開始\n預約產品導覽');
+  await page.getByRole('button', { name: '儲存此步驟' }).click();
+
+  await expect(page.getByText('六項必要決策已完整。')).toBeVisible();
+  await page.getByRole('button', { name: '建立已驗證網站草稿' }).click();
+  await expect(page.getByText('已建立通過驗證的網站草稿；發布功能仍維持鎖定。')).toBeVisible();
+  await expect(page.getByText('草稿已鎖定', { exact: true })).toBeVisible();
+  await expect(page.getByText('此草稿會保持鎖定，直到版本化編輯階段開放。')).toBeVisible();
+
+  const projectId = new URL(page.url()).pathname.split('/').at(-1);
+  expect(projectId).toBeDefined();
+  const response = await page.request.get(`/api/websites/${projectId!}`);
+  expect(response.ok()).toBe(true);
+  const payload = (await response.json()) as {
+    readonly project: {
+      readonly completedSteps: number;
+      readonly status: string;
+    };
+  };
+  expect(payload.project).toMatchObject({ completedSteps: 6, status: 'draft' });
+
+  const lockedUpdate = await page.request.patch(`/api/websites/${projectId!}`, {
+    data: { purpose: 'This update must remain locked after draft creation.' },
+  });
+  expect(lockedUpdate.status()).toBe(409);
+});

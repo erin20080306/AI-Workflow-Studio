@@ -29,6 +29,13 @@ foreign key prevents a message from being attached across tenants. Message
 bodies, model identifiers, metadata, status, and usage-unit fields are bounded
 by database constraints.
 
+Migration `202607280001_website_studio_foundation.sql` adds tenant-owned
+`website_projects`. Authenticated members receive RLS-filtered reads only.
+Creates, brief updates, and draft transitions remain service-role-only behind
+the verified workspace API. Status, brief JSON shape, six-step progress,
+completion timestamps, unique tenant slugs, and draft invariants are constrained
+in PostgreSQL.
+
 ## Local migration verification
 
 Run:

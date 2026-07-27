@@ -51,6 +51,7 @@ packages/
   google-sheets/        OAuth and bounded Sheets operations
   local-executor/       Bounded Excel/CSV I/O, transforms, watcher, and ledger
   run-orchestrator/     Run state, approval, dispatch, retry, audit, notification
+  website-schema/      Guided brief and future Website Spec validation contracts
   workflow-schema/      Versioned Zod DSL and semantic validation
   workflow-engine/      Registry and deterministic orchestration
   connector-sdk/        Connector contracts and safe helpers
@@ -125,6 +126,24 @@ Agent step/terminal events, applies bounded retry/cancel/timeout behavior, and
 returns output-free audit/notification views. The Desktop Agent independently
 revalidates the Workflow and runs only its locally registered subset. See
 `docs/RUN_ORCHESTRATION.md`.
+
+## Website Studio boundary
+
+Website Studio is a separate tenant-owned product area rather than an extension
+of executable Workflows. Phase 23 persists only bounded project briefs. The
+shared website schema requires purpose, audience, page goals/slugs, brand
+direction, content notes, and calls to action before the server may transition a
+project from `briefing` to `draft`.
+
+Authenticated browsers receive tenant-scoped RLS reads only. Mutations derive
+the actor and Tenant from `WorkspaceContext`, reject viewers, use the
+server-only Supabase administrator client, and write metadata-only audit events.
+The Phase 23 draft has no JavaScript, tool authority, preview origin,
+deployment credential, or publishing capability.
+
+AI Website Specs, registered components, sandboxed preview, reversible versions,
+and explicit publishing are separate acceptance gates in Phases 24–27. See
+[`WEBSITE_STUDIO.md`](./WEBSITE_STUDIO.md).
 
 ## Trust boundaries
 

@@ -127,6 +127,15 @@ export function ScheduleIcon(props: IconProps) {
   );
 }
 
+export function SiteIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <rect height="16" rx="2" width="18" x="3" y="4" />
+      <path d="M3 9h18M7 6.5h.01M10 6.5h.01M7 13h4M7 16h7" />
+    </IconFrame>
+  );
+}
+
 export function PlayIcon(props: IconProps) {
   return (
     <IconFrame {...props}>

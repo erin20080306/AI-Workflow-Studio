@@ -166,6 +166,20 @@ planner. Supplying a real provider key does not make an external provider
 callable by an anonymous browser. Non-Mock dashboard access and Google OAuth
 start also fail closed.
 
+## Website Studio boundary
+
+Website Project reads are RLS-filtered by Tenant. Creates and updates use only
+the authenticated server route after `WorkspaceContext` derives the Tenant and
+actor; a request cannot select its own Tenant, and viewers cannot mutate.
+Website briefs pass the shared strict schema before persistence, and all six
+bounded decisions must validate before draft creation.
+
+Phase 23 accepts no executable code, model response, arbitrary URL, deployment
+configuration, domain mutation, or API credential. Audit metadata contains only
+field names and progress, never brief content. Drafts remain locked and cannot
+publish until versioning and explicit publish approval pass their later phase
+gates. See [`WEBSITE_STUDIO.md`](./WEBSITE_STUDIO.md).
+
 ## Security review gates
 
 - Dependency and license audit.

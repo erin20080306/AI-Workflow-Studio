@@ -12,6 +12,7 @@ import {
   ScheduleIcon,
   SettingsIcon,
   ShieldIcon,
+  SiteIcon,
   SparkIcon,
 } from './icons';
 import { useLanguage } from './language-provider';
@@ -19,6 +20,7 @@ import { useLanguage } from './language-provider';
 const workspaceNavigation = [
   { en: 'Overview', href: '/dashboard', icon: DashboardIcon, zhHant: '總覽' },
   { en: 'AI Workspace', href: '/dashboard/assistant', icon: ChatIcon, zhHant: 'AI 工作台' },
+  { en: 'Website Studio', href: '/dashboard/sites', icon: SiteIcon, zhHant: '網站工作室' },
   { en: 'Workflows', href: '/dashboard/workflows', icon: FlowIcon, zhHant: '工作流' },
   { en: 'Schedules', href: '/dashboard/schedules', icon: ScheduleIcon, zhHant: '排程' },
   { en: 'Runs', href: '/dashboard/runs', icon: RunsIcon, zhHant: '執行紀錄' },

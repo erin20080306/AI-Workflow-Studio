@@ -25,6 +25,21 @@ The cost values are conservative internal safety estimates, not provider
 invoices. An individual text source remains limited to 1 MiB even when the
 monthly plan allowance is larger.
 
+## Create a Website Studio brief
+
+1. Open **網站工作室 / Website Studio** in the authenticated workspace.
+2. Enter a project name and create the Website Project.
+3. Complete purpose, audience, pages, brand direction, content, and calls to
+   action. Save each guided step.
+4. When all six decisions are complete, choose **建立已驗證網站草稿 / Create
+   validated site draft**.
+5. The Phase 23 draft is locked and cannot publish. Create another project when
+   the brief must change before versioned editing is available.
+
+OpenAI, Claude, Gemini, Auto generation, responsive preview, reversible editing,
+publishing, and custom domains are not part of the Phase 23 brief. Ordinary
+users never enter AI provider API keys.
+
 ## Create and review a workflow
 
 1. Open the Web application and choose **開始使用 / Get started**.

@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 23 — Website Studio foundation (pending)
+Phase 24 — AI website specification (pending)
 
 ## Repository baseline
 
@@ -1754,3 +1754,71 @@ Status: completed
 
 - `feat(platform): add Store entitlements and usage guardrails` (this phase
   commit)
+
+## Phase 23 — Website Studio foundation
+
+Status: completed
+
+### Implemented
+
+- Added a separate bilingual **網站工作室 / Website Studio** product area with
+  an authenticated project list, project creation, progress, status, and a
+  dedicated six-step guided brief.
+- Added a strict `website-schema` package. Purpose, audience, pages, brand
+  direction, content, and calls to action are bounded, reject unknown fields,
+  require unique page slugs and calls to action, and must all pass Zod
+  validation before a site draft can be created.
+- Added tenant-owned `website_projects` persistence with an immutable migration,
+  unique tenant slugs, validated progress/state invariants, an updated-at
+  trigger, index, RLS member reads, and service-role-only mutation.
+- Added authenticated Website Studio APIs for list, create, read, brief update,
+  and draft creation. Tenant and actor identity always come from the verified
+  workspace context; viewers cannot mutate projects and cross-tenant identifiers
+  return not found.
+- Added deterministic Mock persistence for complete local and browser testing
+  without Supabase credentials. Production writes use the existing server-only
+  Supabase administrator boundary.
+- Added metadata-only audit events for project creation, brief-field updates,
+  and draft creation. Brief copy, private content, credentials, and prompts do
+  not enter audit metadata.
+- Locked a project after its first validated draft because reversible,
+  versioned editing begins in Phase 26. The interface contains no executable
+  code field, model call, preview renderer, credential control, deployment
+  action, or enabled publish button.
+- Documented that OpenAI, Claude, Gemini, Auto, validated Website Specs,
+  responsive preview, visual editing, versions, publishing, and domains remain
+  gated to Phases 24–27.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all code workspaces, including website schema
+- `pnpm test`: passed — 133 tests across 32 files
+- `pnpm db:test`: passed — fresh migrations, Website Project RLS, cross-tenant
+  isolation, browser read-only privileges, validated draft invariants, and
+  existing idempotent seed coverage
+- `pnpm test:e2e`: passed — eight Chromium paths, including all six Website
+  Studio decisions, incomplete-draft blocking, validated draft creation,
+  post-draft mutation locking, disabled publishing, and hidden API-key detail
+- `pnpm build:web`: passed — 40 generated pages with Website Studio pages and
+  project APIs
+- `pnpm security:scan-client`: passed — 32 built client files inspected
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- Phase 23 produces a structured, validated project brief only. It does not call
+  OpenAI, Claude, Gemini, or any external AI provider and does not generate a
+  Website Spec.
+- Responsive preview, uploaded website assets, visual editing, undo/redo,
+  versions, publishing, deployment history, rollback, and custom-domain
+  management remain unavailable until their applicable Phases 25–27 pass.
+- Drafts are intentionally locked after creation to avoid unversioned changes.
+- This phase was not deployed to Production. A successful local build, commit,
+  or GitHub push must not be described as a Vercel deployment or a published
+  customer website.
+
+### Commit
+
+- `feat(web): add guided Website Studio foundation` (this phase commit)
