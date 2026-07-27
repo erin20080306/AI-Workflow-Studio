@@ -7,6 +7,8 @@ import {
   websiteBriefProgress,
 } from './website';
 import {
+  WebsiteGeneratedAssetSchema,
+  WebsiteImageGenerationInputSchema,
   WebsiteSpecEditInputSchema,
   WebsiteSpecGenerationSchema,
   WebsiteSpecSchema,
@@ -264,5 +266,58 @@ describe('Website Spec validation', () => {
     expect(comparison.changedThemeProperties).toEqual(['density']);
     expect(comparison.changedPages).toEqual([]);
     expect(comparison.changedSections).toBe(0);
+  });
+
+  it('accepts bounded image requests and machine-readable generated asset metadata', () => {
+    expect(
+      WebsiteImageGenerationInputSchema.parse({
+        alt: 'Professional automation workspace',
+        locale: 'en',
+        pageSlug: 'home',
+        prompt: 'A polished editorial automation workspace with navy and mint accents.',
+        provider: 'auto',
+        sectionId: 'home-hero',
+        tier: 'economy',
+        versionName: 'Hero image',
+      }),
+    ).toMatchObject({ provider: 'auto', tier: 'economy' });
+    expect(
+      WebsiteGeneratedAssetSchema.parse({
+        alt: 'Professional automation workspace',
+        byteSize: 1_024,
+        createdAt: '2026-07-28T00:00:00.000Z',
+        height: 1_024,
+        id: 'asset-10000000-0000-4000-8000-000000000001',
+        mimeType: 'image/png',
+        model: 'gpt-image-2',
+        provider: 'openai',
+        role: 'hero',
+        width: 1_536,
+      }).model,
+    ).toBe('gpt-image-2');
+  });
+
+  it('rejects image prompts containing external URLs, code, or unknown fields', () => {
+    expect(() =>
+      WebsiteImageGenerationInputSchema.parse({
+        alt: 'Unsafe visual',
+        pageSlug: 'home',
+        prompt: 'Copy this image exactly from https://example.com/unsafe.png',
+        provider: 'openai',
+        sectionId: 'home-hero',
+        tier: 'economy',
+        versionName: 'Unsafe image',
+      }),
+    ).toThrow();
+    expect(() =>
+      WebsiteImageGenerationInputSchema.parse({
+        alt: 'Unsafe visual',
+        pageSlug: 'home',
+        prompt: 'A safe-looking prompt with enough characters.',
+        providerApiKey: 'must-not-be-accepted',
+        sectionId: 'home-hero',
+        versionName: 'Unknown field',
+      }),
+    ).toThrow();
   });
 });

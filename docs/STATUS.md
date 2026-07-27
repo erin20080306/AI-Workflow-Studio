@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 28 — AI website image generation (pending)
+Phase 29 — Website publishing (pending)
 
 ## Repository baseline
 
@@ -2175,3 +2175,63 @@ Status: completed
   delivery begin in Phase 28.
 - Website publishing, domains, production builds, and rollback remain locked
   until Phase 29 and still require explicit authenticated approval.
+
+## Phase 28 — AI website image generation
+
+Status: completed
+
+### Implemented
+
+- Added a bilingual AI image panel to Website Studio with compact provider and
+  quality/cost dropdowns. Ordinary members can select Auto, OpenAI, or Gemini
+  and see the exact image model names included in each subscription tier.
+- Routed Free Auto image requests to the Economy tier, paid Auto requests to
+  Standard, and warning/critical workspaces back to Economy. Explicit tiers
+  remain bound by Microsoft Store plan entitlement, monthly allowance,
+  per-request ceiling, and per-minute request rate.
+- Added server-only OpenAI `gpt-image-2` and Gemini native-image adapters with
+  bounded 55-second requests, capped provider JSON, strict response schemas,
+  base64 validation, PNG signature/IHDR validation, 8 MB limits, and dimensions
+  constrained to 1–4096 pixels.
+- Kept Claude available for natural-language visual direction and prompt
+  refinement while truthfully routing pixel generation only to OpenAI or
+  Gemini.
+- Added a private `website-assets` Supabase Storage bucket and Tenant-scoped
+  `website_assets` metadata. Prompts are stored only as SHA-256 hashes; storage
+  paths, prompts, credentials, and provider bodies never enter member payloads
+  or operational audit metadata.
+- Attached generated assets only to validated Hero, Content, or Testimonial
+  sections. Each successful image creates a new immutable Website Spec version
+  so Undo, Redo, comparison, history, and restoration continue to work.
+- Added five-minute signed preview URLs and tightened the iframe CSP to permit
+  only private Supabase image delivery and deterministic Mock PNG data. Model
+  output cannot supply image URLs, HTML, CSS, script, or executable code.
+- Added provider, schema, preview, quota operation, storage bucket, asset audit,
+  RLS, cross-Tenant, and end-to-end Canvas image tests.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 168 tests across 39 files
+- `pnpm build:web`: passed — 40 generated pages plus the authenticated,
+  quota-controlled website image route
+- `pnpm db:test`: passed — fresh migrations, private PNG bucket metadata,
+  generated asset audit, service-role mutation boundary, and cross-Tenant RLS
+- `pnpm exec playwright test e2e/website-studio.spec.ts`: passed — guided
+  brief, specification, direct edit, Undo/Redo, image generation, private asset
+  version, and rendered Canvas image
+- `pnpm security:scan-client`: passed — 34 built client files inspected
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- Real provider requests require valid server-only Vercel credentials, provider
+  billing/quota, and access to the selected exact image model. Auto fails closed
+  when neither configured image provider is currently healthy.
+- Generated images are PNG-only and currently target one 16:9 website visual
+  per request. Image editing, masks, uploaded reference images, responsive
+  variants, and automatic focal-point crops are future work.
+- Website publishing remains locked until Phase 29. A generated image or
+  validated Canvas version is not itself a public website deployment.

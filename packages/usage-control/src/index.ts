@@ -23,6 +23,7 @@ export const UsageOperationSchema = z.enum([
   'source_upload',
   'tool_call',
   'website_generation',
+  'website_image_generation',
 ]);
 export type UsageOperation = z.infer<typeof UsageOperationSchema>;
 

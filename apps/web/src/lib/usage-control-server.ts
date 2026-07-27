@@ -359,6 +359,129 @@ export async function reserveAssistantUsage(
   };
 }
 
+export async function reserveWebsiteImageUsage(
+  context: WorkspaceContext,
+  input: {
+    readonly maximumCostMicrounits: number;
+    readonly provider: Extract<UsageProvider, 'gemini' | 'mock' | 'openai'>;
+  },
+): Promise<AssistantUsageReservation> {
+  const maximumCostMicrounits = z.number().int().nonnegative().parse(input.maximumCostMicrounits);
+  const plan = getProductPlan(effectivePlanCode(context));
+  if (maximumCostMicrounits > plan.maximumAiRequestCostMicrounits) {
+    throw new UsageControlError(
+      'USAGE_REQUEST_COST_EXCEEDED',
+      'This image would exceed the plan single-request AI cost limit.',
+    );
+  }
+
+  if (getEnvironment().mockMode) {
+    const snapshot = await getTenantUsageSnapshot(context);
+    if (!canReserveUsage(snapshot.ai, maximumCostMicrounits)) {
+      throw new UsageControlError(
+        'USAGE_BUDGET_EXCEEDED',
+        'The workspace monthly AI cost allowance was reached.',
+      );
+    }
+    const now = Date.now();
+    const state = memoryUsageState();
+    const recentRequests = state.requestTimes.filter(
+      (requestTime) =>
+        requestTime.tenantId === context.actor.tenantId && requestTime.createdAt > now - 60_000,
+    ).length;
+    if (recentRequests >= plan.aiRequestsPerMinute) {
+      throw new UsageControlError(
+        'USAGE_RATE_LIMIT_EXCEEDED',
+        'The workspace request rate limit was reached. Please retry shortly.',
+      );
+    }
+    const id = crypto.randomUUID();
+    state.requestTimes.push({ createdAt: now, tenantId: context.actor.tenantId });
+    state.reservations.set(id, {
+      costMicrounits: maximumCostMicrounits,
+      createdAt: now,
+      tenantId: context.actor.tenantId,
+    });
+    return {
+      costMultiplier: 1,
+      id,
+      maximumCostMicrounits,
+      async release() {
+        state.reservations.delete(id);
+      },
+    };
+  }
+
+  const result = await createSupabaseAdminClient().rpc('reserve_tenant_usage_budget', {
+    actor_id: context.actor.userId,
+    target_maximum_cost_microunits: maximumCostMicrounits,
+    target_operation: 'website_image_generation',
+    target_provider: input.provider,
+    target_tenant_id: context.actor.tenantId,
+  });
+  const parsed = z.string().uuid().safeParse(result.data);
+  if (result.error !== null || !parsed.success) {
+    throw usageErrorFromMessage(result.error?.message ?? 'USAGE_DATA_INVALID');
+  }
+  const id = parsed.data;
+  return {
+    costMultiplier: 1,
+    id,
+    maximumCostMicrounits,
+    async release() {
+      await createSupabaseAdminClient().rpc('release_tenant_usage_reservation', {
+        actor_id: context.actor.userId,
+        target_reservation_id: id,
+      });
+    },
+  };
+}
+
+export async function recordReservedWebsiteImageUsage(
+  context: WorkspaceContext,
+  reservation: AssistantUsageReservation,
+  record: {
+    readonly assetId: string;
+    readonly byteSize: number;
+    readonly height: number;
+    readonly model: string;
+    readonly provider: Extract<UsageProvider, 'gemini' | 'mock' | 'openai'>;
+    readonly width: number;
+  },
+): Promise<void> {
+  const actualCostMicrounits = reservation.maximumCostMicrounits;
+  if (getEnvironment().mockMode) {
+    memoryUsageState().records.push({
+      costMicrounits: actualCostMicrounits,
+      inputUnits: 1,
+      operation: 'website_image_generation',
+      provider: record.provider,
+      tenantId: context.actor.tenantId,
+    });
+    return;
+  }
+  const result = await createSupabaseAdminClient().rpc('record_tenant_ai_usage', {
+    actor_id: context.actor.userId,
+    target_actual_cost_microunits: actualCostMicrounits,
+    target_input_units: 1,
+    target_operation: 'website_image_generation',
+    target_output_units: record.byteSize,
+    target_provider: record.provider,
+    target_reservation_id: reservation.id,
+    usage_metadata: {
+      assetId: record.assetId,
+      height: record.height,
+      model: record.model,
+      outcome: 'success',
+      rateCardVersion: '2026-07-image-v1',
+      width: record.width,
+    },
+  });
+  if (result.error !== null) {
+    throw usageErrorFromMessage(result.error.message);
+  }
+}
+
 export async function recordReservedAssistantUsage(
   context: WorkspaceContext,
   reservation: AssistantUsageReservation,

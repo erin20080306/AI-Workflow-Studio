@@ -144,6 +144,87 @@ values (
   1
 );
 
+insert into public.website_assets (
+  tenant_id,
+  project_id,
+  spec_asset_id,
+  provider,
+  model,
+  role,
+  alt,
+  mime_type,
+  byte_size,
+  width,
+  height,
+  storage_path,
+  prompt_hash,
+  created_by
+)
+values
+  (
+    'e2000000-0000-4000-8000-000000000001',
+    'e3000000-0000-4000-8000-000000000001',
+    'asset-10000000-0000-4000-8000-000000000001',
+    'openai',
+    'gpt-image-2',
+    'hero',
+    'Tenant A private hero',
+    'image/png',
+    1024,
+    1536,
+    1024,
+    'e2000000-0000-4000-8000-000000000001/e3000000-0000-4000-8000-000000000001/asset-a.png',
+    repeat('a', 64),
+    'e1000000-0000-4000-8000-000000000001'
+  ),
+  (
+    'e2000000-0000-4000-8000-000000000002',
+    'e3000000-0000-4000-8000-000000000002',
+    'asset-20000000-0000-4000-8000-000000000002',
+    'gemini',
+    'gemini-3.1-flash-lite-image',
+    'illustration',
+    'Tenant B private illustration',
+    'image/png',
+    2048,
+    1024,
+    1024,
+    'e2000000-0000-4000-8000-000000000002/e3000000-0000-4000-8000-000000000002/asset-b.png',
+    repeat('b', 64),
+    'e1000000-0000-4000-8000-000000000002'
+  );
+
+insert into public.website_specs (
+  tenant_id,
+  project_id,
+  version_number,
+  schema_version,
+  provider,
+  model,
+  attempts,
+  spec,
+  created_by,
+  version_name,
+  change_summary,
+  source,
+  parent_version_number
+)
+values (
+  'e2000000-0000-4000-8000-000000000001',
+  'e3000000-0000-4000-8000-000000000001',
+  3,
+  1,
+  'openai',
+  'gpt-image-2',
+  1,
+  '{"schemaVersion":1,"name":"Tenant A spec with private image"}',
+  'e1000000-0000-4000-8000-000000000001',
+  'Generated hero image',
+  'Generated and attached a validated hero image.',
+  'asset-generation',
+  2
+);
+
 select tests.assert_true(
   (
     select
@@ -168,6 +249,31 @@ select tests.assert_true(
   'website spec version inserts must create an atomic metadata-only audit event'
 );
 
+select tests.assert_true(
+  exists (
+    select 1
+    from public.audit_logs
+    where action = 'website_asset.generated'
+      and resource_type = 'website_asset'
+      and metadata ->> 'model' = 'gpt-image-2'
+      and not metadata ? 'storagePath'
+      and not metadata ? 'prompt'
+  ),
+  'generated website assets must create a metadata-only audit event'
+);
+
+select tests.assert_true(
+  exists (
+    select 1
+    from storage.buckets
+    where id = 'website-assets'
+      and public is false
+      and file_size_limit = 8000000
+      and allowed_mime_types = array['image/png']::text[]
+  ),
+  'generated website images must use a private bounded PNG-only bucket'
+);
+
 reset role;
 set local role authenticated;
 select set_config(
@@ -182,8 +288,22 @@ select tests.assert_true(
 );
 
 select tests.assert_true(
-  (select count(*) from public.website_specs) = 2,
+  (select count(*) from public.website_specs) = 3,
   'a member must only see website specs from their tenant'
+);
+
+select tests.assert_true(
+  (select count(*) from public.website_assets) = 1,
+  'a member must only see generated website assets from their tenant'
+);
+
+select tests.assert_true(
+  not exists (
+    select 1
+    from public.website_assets
+    where project_id = 'e3000000-0000-4000-8000-000000000002'
+  ),
+  'a tenant member must not read another tenant generated website asset'
 );
 
 select tests.assert_true(
@@ -216,6 +336,13 @@ select tests.assert_true(
   and not has_table_privilege('authenticated', 'public.website_projects', 'update')
   and not has_table_privilege('authenticated', 'public.website_projects', 'delete'),
   'website mutations must remain behind authenticated server routes'
+);
+
+select tests.assert_true(
+  not has_table_privilege('authenticated', 'public.website_assets', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_assets', 'update')
+  and not has_table_privilege('authenticated', 'public.website_assets', 'delete'),
+  'website asset mutations must remain behind authenticated server routes'
 );
 
 reset role;

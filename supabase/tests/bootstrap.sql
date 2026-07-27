@@ -2,6 +2,7 @@
 
 create schema if not exists auth;
 create schema if not exists extensions;
+create schema if not exists storage;
 
 do $$
 begin
@@ -24,6 +25,16 @@ create table auth.users (
   created_at timestamp with time zone not null default now()
 );
 
+-- Minimal private Storage bucket metadata used by immutable migration tests.
+-- Hosted Supabase provides the complete storage schema and API implementation.
+create table storage.buckets (
+  id text primary key,
+  name text not null unique,
+  public boolean not null default false,
+  file_size_limit bigint,
+  allowed_mime_types text[]
+);
+
 create function auth.uid()
 returns uuid
 language sql
@@ -33,4 +44,6 @@ as $$
 $$;
 
 grant usage on schema auth to anon, authenticated, service_role;
+grant usage on schema storage to service_role;
+grant select on storage.buckets to service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;

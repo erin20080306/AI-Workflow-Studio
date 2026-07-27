@@ -14,7 +14,7 @@ test('collects every guided decision before creating a locked website draft', as
   await page.getByRole('button', { name: '建立專案', exact: true }).click();
   await expect(page.getByRole('heading', { name: projectName })).toBeVisible();
   await expect(page.getByRole('button', { name: '建立已驗證網站草稿' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '發布功能將於 Phase 28 開放' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '發布功能將於 Phase 29 開放' })).toBeDisabled();
 
   await page
     .getByLabel('這個網站最重要的目的為何？')
@@ -95,6 +95,19 @@ test('collects every guided decision before creating a locked website draft', as
   await expect(page.getByText('v4 · Redo v2').first()).toBeVisible();
   await expect(preview.getByRole('heading', { name: '更清楚的安全網站工作流程' })).toBeVisible();
 
+  await expect(page.getByRole('heading', { name: 'AI 網站圖片' })).toBeVisible();
+  await expect(page.getByLabel('圖片模型供應商')).toContainText('gpt-image-2');
+  await expect(page.getByLabel('圖片品質與成本等級')).toContainText('gemini-3.1-flash-lite-image');
+  await page.getByLabel('版本名稱').fill('首頁 AI 主視覺');
+  await page
+    .getByLabel('圖片描述')
+    .fill('專業的自動化工作空間，深海軍藍與薄荷綠點綴，柔和自然光，不含文字與浮水印。');
+  await page.getByLabel('無障礙替代文字').fill('專業安全自動化工作空間');
+  await page.getByRole('button', { name: '產生並套用圖片' }).click();
+  await expect(page.getByText('v5 · 首頁 AI 主視覺').first()).toBeVisible();
+  await expect(preview.getByRole('img', { name: '專業安全自動化工作空間' })).toBeVisible();
+  await expect(page.getByText(/mock · mock-image-v1/)).toBeVisible();
+
   const projectId = new URL(page.url()).pathname.split('/').at(-1);
   expect(projectId).toBeDefined();
   const response = await page.request.get(`/api/websites/${projectId!}`);
@@ -124,7 +137,7 @@ test('collects every guided decision before creating a locked website draft', as
     };
   };
   expect(generatedPayload.generation.model).toBeUndefined();
-  expect(generatedPayload.generation.version).toBe(4);
+  expect(generatedPayload.generation.version).toBe(5);
   expect(generatedPayload.generation.spec.schemaVersion).toBe(1);
   expect(
     generatedPayload.generation.spec.pages.flatMap((generatedPage) =>

@@ -9,6 +9,7 @@ import {
   getProductPlan,
   INTERNAL_RATE_CARD_VERSION,
   isAiModelTierAllowed,
+  UsageOperationSchema,
 } from './index';
 
 describe('usage control', () => {
@@ -72,5 +73,9 @@ describe('usage control', () => {
       expect(plan.aiRequestsPerMinute).toBeGreaterThan(0);
       expect(plan.monthlySourceBytes).toBeGreaterThan(1_048_576);
     }
+  });
+
+  it('registers website image generation as a quota-controlled AI operation', () => {
+    expect(UsageOperationSchema.parse('website_image_generation')).toBe('website_image_generation');
   });
 });

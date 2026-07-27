@@ -102,10 +102,54 @@ describe('website preview', () => {
     expect(first).not.toContain('hero-art');
   });
 
+  it('renders only server-approved private generated asset URLs', () => {
+    const generatedSpec = WebsiteSpecSchema.parse({
+      ...spec,
+      assets: [
+        {
+          alt: 'Generated private hero',
+          id: 'asset-private-hero',
+          kind: 'project-asset',
+          role: 'hero',
+        },
+      ],
+      pages: [
+        {
+          ...spec.pages[0],
+          sections: spec.pages[0]?.sections.map((section) =>
+            section.type === 'hero'
+              ? { ...section, assetId: 'asset-private-hero', layout: 'split' }
+              : section,
+          ),
+        },
+      ],
+    });
+    const approvedUrl =
+      'https://example-project.supabase.co/storage/v1/object/sign/website-assets/private.png?token=short';
+    const html = renderWebsitePreviewDocument(
+      generatedSpec,
+      'home',
+      new Map([['asset-private-hero', approvedUrl]]),
+    );
+    expect(html).toContain(`<img alt="Generated private hero"`);
+    expect(html).toContain(approvedUrl.replaceAll('&', '&amp;'));
+
+    const blocked = renderWebsitePreviewDocument(
+      generatedSpec,
+      'home',
+      new Map([['asset-private-hero', 'https://attacker.example/private.png']]),
+    );
+    expect(blocked).not.toContain('attacker.example');
+    expect(blocked).not.toContain('<img alt="Generated private hero"');
+  });
+
   it('locks the preview response to a no-script, no-network CSP', () => {
     expect(WEBSITE_PREVIEW_HEADERS['content-security-policy']).toContain("script-src 'none'");
     expect(WEBSITE_PREVIEW_HEADERS['content-security-policy']).toContain("connect-src 'none'");
     expect(WEBSITE_PREVIEW_HEADERS['content-security-policy']).toContain("form-action 'none'");
+    expect(WEBSITE_PREVIEW_HEADERS['content-security-policy']).toContain(
+      'img-src data: https://*.supabase.co',
+    );
   });
 
   it('rejects a page outside the validated specification', () => {

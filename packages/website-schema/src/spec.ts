@@ -38,6 +38,8 @@ export const WebsiteGenerationSelectionSchema = z.enum([
 
 export const WebsiteGenerationProviderSchema = z.enum(['openai', 'anthropic', 'gemini', 'mock']);
 
+export const WebsiteImageProviderSelectionSchema = z.enum(['auto', 'openai', 'gemini']);
+
 export const WebsiteThemeSchema = z
   .object({
     appearance: z.enum(['light', 'dark', 'system']),
@@ -363,6 +365,7 @@ export const WebsiteSpecGenerationInputSchema = z
   .strict();
 
 export const WebsiteSpecVersionSourceSchema = z.enum([
+  'asset-generation',
   'direct',
   'generated',
   'natural-language',
@@ -467,6 +470,34 @@ export const WebsiteSpecRestoreInputSchema = z
   })
   .strict();
 
+export const WebsiteImageGenerationInputSchema = z
+  .object({
+    alt: safeText(1, 180),
+    locale: z.enum(['en', 'zh-Hant']).default('zh-Hant'),
+    pageSlug: PageSlugSchema,
+    prompt: safeText(10, 1_200),
+    provider: WebsiteImageProviderSelectionSchema.default('auto'),
+    sectionId: IdentifierSchema,
+    tier: z.enum(['auto', 'economy', 'standard', 'advanced', 'flagship']).default('auto'),
+    versionName: WebsiteVersionNameSchema,
+  })
+  .strict();
+
+export const WebsiteGeneratedAssetSchema = z
+  .object({
+    alt: safeText(1, 180),
+    byteSize: z.number().int().positive().max(8_000_000),
+    createdAt: z.string().datetime({ offset: true }),
+    height: z.number().int().positive().max(4_096),
+    id: IdentifierSchema,
+    mimeType: z.literal('image/png'),
+    model: z.string().regex(/^[A-Za-z0-9._:-]{2,120}$/),
+    provider: z.enum(['gemini', 'mock', 'openai']),
+    role: z.enum(['hero', 'illustration', 'portrait']),
+    width: z.number().int().positive().max(4_096),
+  })
+  .strict();
+
 export interface WebsiteSpecComparison {
   readonly addedPages: readonly string[];
   readonly addedSections: number;
@@ -565,6 +596,9 @@ export function createWebsiteSpecForBriefSchema(brief: WebsiteBrief) {
 export type WebsiteAction = z.infer<typeof WebsiteActionSchema>;
 export type WebsiteGenerationProvider = z.infer<typeof WebsiteGenerationProviderSchema>;
 export type WebsiteGenerationSelection = z.infer<typeof WebsiteGenerationSelectionSchema>;
+export type WebsiteGeneratedAsset = z.infer<typeof WebsiteGeneratedAssetSchema>;
+export type WebsiteImageGenerationInput = z.infer<typeof WebsiteImageGenerationInputSchema>;
+export type WebsiteImageProviderSelection = z.infer<typeof WebsiteImageProviderSelectionSchema>;
 export type WebsiteDirectEdit = z.infer<typeof WebsiteDirectEditSchema>;
 export type WebsiteSection = z.infer<typeof WebsiteSectionSchema>;
 export type WebsiteSpec = z.infer<typeof WebsiteSpecSchema>;

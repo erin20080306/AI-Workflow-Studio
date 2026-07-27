@@ -36,7 +36,7 @@ export const WEBSITE_PREVIEW_HEADERS = {
   'content-security-policy': [
     "default-src 'none'",
     "style-src 'unsafe-inline'",
-    'img-src data:',
+    'img-src data: https://*.supabase.co',
     "font-src 'none'",
     "script-src 'none'",
     "connect-src 'none'",

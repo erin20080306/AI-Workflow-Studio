@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { requireWorkspaceContext } from '@/lib/auth/context';
+import { getWebsiteAssetPreviewUrls } from '@/lib/website-asset-server';
 import { WEBSITE_PREVIEW_HEADERS } from '@/lib/website-preview-contract';
 import { renderWebsitePreviewDocument } from '@/lib/website-preview-renderer';
 import { getWebsiteSpecGeneration, getWebsiteSpecVersion } from '@/lib/website-spec-server';
@@ -52,8 +53,19 @@ async function previewResponse(
         status: 404,
       });
     }
+    const assetUrls = includeBody
+      ? await getWebsiteAssetPreviewUrls(
+          context,
+          params.projectId,
+          generation.spec.assets
+            .filter((asset) => asset.kind === 'project-asset')
+            .map((asset) => asset.id),
+        )
+      : new Map<string, string>();
     return new Response(
-      includeBody ? renderWebsitePreviewDocument(generation.spec, params.pageSlug) : null,
+      includeBody
+        ? renderWebsitePreviewDocument(generation.spec, params.pageSlug, assetUrls)
+        : null,
       {
         headers: WEBSITE_PREVIEW_HEADERS,
         status: 200,

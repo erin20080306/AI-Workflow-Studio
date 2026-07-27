@@ -43,7 +43,7 @@ test, and build checks and has been committed.
 | 25    | Tier-aware AI model routing   | Store plan, task complexity, readiness, and budget bound exact model access      | completed |
 | 26    | Responsive preview canvas     | Sandboxed desktop, tablet, and mobile previews remain isolated and deterministic | completed |
 | 27    | Visual editing and versions   | Natural-language and direct edits are reversible, versioned, and auditable       | completed |
-| 28    | AI website image generation   | Bounded provider images become private, validated, quota-controlled assets       | pending   |
+| 28    | AI website image generation   | Bounded provider images become private, validated, quota-controlled assets       | completed |
 | 29    | Website publishing            | Approved builds pass quality gates and deploy without exposing credentials       | pending   |
 
 ## Phase 0 — Repository audit

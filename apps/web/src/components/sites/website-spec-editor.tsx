@@ -1,10 +1,13 @@
 'use client';
 
 import {
+  WebsiteGeneratedAssetSchema,
   WebsiteSpecClientGenerationSchema,
   WebsiteThemeSchema,
   compareWebsiteSpecs,
   type WebsiteGenerationSelection,
+  type WebsiteGeneratedAsset,
+  type WebsiteImageProviderSelection,
   type WebsiteSection,
   type WebsiteSpecClientGeneration,
 } from '@ai-workflow-studio/website-schema';
@@ -17,11 +20,16 @@ import { WebsiteModelDropdowns } from '@/components/sites/website-model-dropdown
 import { WebsitePreviewCanvas } from '@/components/sites/website-preview-canvas';
 import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
+import { websiteImageModelLabel } from '@/lib/website-image-models';
 
 type WebsiteTheme = z.infer<typeof WebsiteThemeSchema>;
 type EditableField = 'attribution' | 'body' | 'copyright' | 'eyebrow' | 'quote' | 'title';
 
 const GenerationResponseSchema = z.object({
+  generation: WebsiteSpecClientGenerationSchema,
+});
+const ImageGenerationResponseSchema = z.object({
+  asset: WebsiteGeneratedAssetSchema,
   generation: WebsiteSpecClientGenerationSchema,
 });
 const VersionsResponseSchema = z.object({
@@ -40,6 +48,7 @@ const editableLabels: Readonly<
 };
 
 const sourceLabels = {
+  'asset-generation': { en: 'AI image', zhHant: 'AI 圖片' },
   direct: { en: 'Direct edit', zhHant: '直接編輯' },
   generated: { en: 'Generated', zhHant: 'AI 產生' },
   'natural-language': { en: 'AI edit', zhHant: 'AI 修改' },
@@ -69,6 +78,21 @@ const copy = {
     editing: 'Saving a validated version…',
     failed: 'The edit could not be validated or saved.',
     history: 'Version history',
+    imageAlt: 'Accessible alternative text',
+    imageClaude:
+      'Claude can refine the visual direction in the natural-language editor; actual pixels are rendered by OpenAI or Gemini.',
+    imageGenerate: 'Generate and attach image',
+    imageGenerating: 'Generating, validating, and storing a private image…',
+    imageHelp:
+      'Choose a hero, content, or testimonial section. The server generates one PNG, validates it, stores it privately, and creates a reversible version.',
+    imageIncompatible: 'Select a hero, content, or testimonial section to attach an image.',
+    imageLast: 'Latest image',
+    imageModel: 'Image provider',
+    imagePrompt: 'Visual description',
+    imagePromptPlaceholder:
+      'A polished editorial workspace with soft natural light, deep navy and mint accents, no text or watermark.',
+    imageTitle: 'AI website image',
+    imageTier: 'Image quality and cost level',
     moveDown: 'Move down',
     moveUp: 'Move up',
     page: 'Page',
@@ -108,6 +132,20 @@ const copy = {
     editing: '正在儲存已驗證版本…',
     failed: '修改未通過驗證，或目前無法儲存。',
     history: '版本紀錄',
+    imageAlt: '無障礙替代文字',
+    imageClaude: 'Claude 可在自然語言編輯器協助優化視覺方向；真正圖片由 OpenAI 或 Gemini 產生。',
+    imageGenerate: '產生並套用圖片',
+    imageGenerating: '正在產生、驗證並私密儲存圖片…',
+    imageHelp:
+      '選擇 Hero、內容或推薦語區塊；伺服器會產生一張 PNG、驗證格式、私密儲存，並建立可還原版本。',
+    imageIncompatible: '請選擇 Hero、內容或推薦語區塊，才能套用圖片。',
+    imageLast: '最新圖片',
+    imageModel: '圖片模型供應商',
+    imagePrompt: '圖片描述',
+    imagePromptPlaceholder:
+      '具專業編輯風格的工作空間，柔和自然光、深海軍藍與薄荷綠點綴，不含文字與浮水印。',
+    imageTitle: 'AI 網站圖片',
+    imageTier: '圖片品質與成本等級',
     moveDown: '向下移動',
     moveUp: '向上移動',
     page: '頁面',
@@ -179,11 +217,17 @@ export function WebsiteSpecEditor({
     modelOptions[0]?.id ?? 'auto',
   );
   const [selectedTier, setSelectedTier] = useState<AiModelTierSelection>('auto');
+  const [imageProvider, setImageProvider] = useState<WebsiteImageProviderSelection>('auto');
+  const [imageTier, setImageTier] = useState<AiModelTierSelection>('auto');
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [imageAlt, setImageAlt] = useState('');
+  const [lastAsset, setLastAsset] = useState<WebsiteGeneratedAsset>();
   const [versionName, setVersionName] = useState(`Version ${generation.version + 1}`);
   const [compareVersion, setCompareVersion] = useState<number>();
   const [undoStack, setUndoStack] = useState<number[]>([]);
   const [redoStack, setRedoStack] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
+  const [imageBusy, setImageBusy] = useState(false);
   const [message, setMessage] = useState<string>();
 
   useEffect(() => {
@@ -249,6 +293,47 @@ export function WebsiteSpecEditor({
     }
   }
 
+  async function generateImage(): Promise<void> {
+    if (
+      busy ||
+      versionName.trim().length === 0 ||
+      imagePrompt.trim().length < 10 ||
+      imageAlt.trim().length === 0
+    ) {
+      return;
+    }
+    setBusy(true);
+    setImageBusy(true);
+    setMessage(undefined);
+    try {
+      const response = await fetch(`/api/websites/${projectId}/images`, {
+        body: JSON.stringify({
+          alt: imageAlt,
+          locale,
+          pageSlug,
+          prompt: imagePrompt,
+          provider: imageProvider,
+          sectionId,
+          tier: imageTier,
+          versionName,
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const body: unknown = await response.json();
+      if (!response.ok) throw new Error('image generation failed');
+      const parsed = ImageGenerationResponseSchema.parse(body);
+      setLastAsset(parsed.asset);
+      acceptGeneration(parsed.generation, generation.version);
+      setImagePrompt('');
+    } catch {
+      setMessage(text.failed);
+    } finally {
+      setImageBusy(false);
+      setBusy(false);
+    }
+  }
+
   async function restoreVersion(
     targetVersion: number,
     mode: 'history' | 'redo' | 'undo',
@@ -294,6 +379,9 @@ export function WebsiteSpecEditor({
   }
 
   const sectionIndex = currentPage?.sections.findIndex((item) => item.id === sectionId) ?? -1;
+  const imageCompatible =
+    section?.type === 'hero' || section?.type === 'content' || section?.type === 'testimonial';
+  const selectedImageTier = imageTier === 'auto' ? undefined : imageTier;
 
   return (
     <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
@@ -575,6 +663,128 @@ export function WebsiteSpecEditor({
         </button>
       </article>
 
+      <article className="mt-5 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-4 sm:p-5">
+        <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-600">
+              Phase 28
+            </p>
+            <h4 className="mt-1 text-sm font-semibold text-slate-950">{text.imageTitle}</h4>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">{text.imageHelp}</p>
+          </div>
+          <span
+            className={`rounded-full px-3 py-1 text-[10px] font-semibold ${
+              imageCompatible ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
+            }`}
+          >
+            {section?.type ?? text.section}
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <label className="text-xs font-semibold text-slate-600">
+            <span className="mb-1.5 block">{text.imageModel}</span>
+            <select
+              aria-label={text.imageModel}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-900"
+              disabled={busy}
+              onChange={(event) =>
+                setImageProvider(event.target.value as WebsiteImageProviderSelection)
+              }
+              value={imageProvider}
+            >
+              <option value="auto">Auto · Gemini → OpenAI</option>
+              <option value="openai">OpenAI · gpt-image-2</option>
+              <option value="gemini">Gemini · native image models</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-600">
+            <span className="mb-1.5 block">{text.imageTier}</span>
+            <select
+              aria-label={text.imageTier}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-semibold text-slate-900"
+              disabled={busy}
+              onChange={(event) => setImageTier(event.target.value as AiModelTierSelection)}
+              value={imageTier}
+            >
+              <option value="auto">
+                {locale === 'en' ? 'Auto · budget aware' : '自動 · 依額度與成本選擇'}
+              </option>
+              {tierOptions.map((option) => (
+                <option disabled={!option.enabled} key={option.id} value={option.id}>
+                  {locale === 'en' ? option.label.en : option.label.zhHant}
+                  {' · '}
+                  {websiteImageModelLabel(option.id)}
+                  {option.enabled
+                    ? ''
+                    : locale === 'en'
+                      ? ' · locked by Store plan'
+                      : ' · 需更高 Microsoft Store 方案'}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-3 rounded-xl border border-violet-100 bg-white/80 px-3 py-2.5 text-[11px] leading-5 text-slate-600">
+          {selectedImageTier === undefined
+            ? locale === 'en'
+              ? 'Auto selects an allowed image model from remaining allowance and estimated cost.'
+              : '自動模式會依剩餘額度、預估成本與方案權限選擇圖片模型。'
+            : websiteImageModelLabel(selectedImageTier)}
+        </div>
+
+        <label className="mt-3 block text-xs font-semibold text-slate-600">
+          <span className="mb-1.5 block">{text.imagePrompt}</span>
+          <textarea
+            aria-label={text.imagePrompt}
+            className="min-h-24 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm leading-6 outline-none focus:border-violet-500"
+            disabled={busy}
+            maxLength={1_200}
+            onChange={(event) => setImagePrompt(event.target.value)}
+            placeholder={text.imagePromptPlaceholder}
+            value={imagePrompt}
+          />
+        </label>
+        <label className="mt-3 block text-xs font-semibold text-slate-600">
+          <span className="mb-1.5 block">{text.imageAlt}</span>
+          <input
+            aria-label={text.imageAlt}
+            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none focus:border-violet-500"
+            disabled={busy}
+            maxLength={180}
+            onChange={(event) => setImageAlt(event.target.value)}
+            value={imageAlt}
+          />
+        </label>
+        {!imageCompatible ? (
+          <p className="mt-3 text-xs font-semibold text-amber-800">{text.imageIncompatible}</p>
+        ) : null}
+        <p className="mt-3 text-[11px] leading-5 text-slate-500">{text.imageClaude}</p>
+        <button
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
+          disabled={
+            busy ||
+            !imageCompatible ||
+            imagePrompt.trim().length < 10 ||
+            imageAlt.trim().length === 0
+          }
+          onClick={() => void generateImage()}
+          type="button"
+        >
+          <SparkIcon className="size-4" /> {imageBusy ? text.imageGenerating : text.imageGenerate}
+        </button>
+        {lastAsset !== undefined ? (
+          <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+            <p className="font-semibold">{text.imageLast}</p>
+            <p className="mt-1 break-all font-mono text-[10px]">
+              {lastAsset.provider} · {lastAsset.model} · {lastAsset.width}×{lastAsset.height} ·{' '}
+              {Math.ceil(lastAsset.byteSize / 1_024)} KB
+            </p>
+          </div>
+        ) : null}
+      </article>
+
       {busy || message !== undefined ? (
         <p
           aria-live="polite"
@@ -582,7 +792,7 @@ export function WebsiteSpecEditor({
             message === text.success ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-800'
           }`}
         >
-          {busy ? text.editing : message}
+          {busy ? (imageBusy ? text.imageGenerating : text.editing) : message}
         </p>
       ) : null}
 

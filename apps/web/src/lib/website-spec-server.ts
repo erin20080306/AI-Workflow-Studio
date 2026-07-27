@@ -4,6 +4,7 @@ import type { UsageSink } from '@ai-workflow-studio/ai-gateway';
 import {
   WEBSITE_SPEC_PROVIDER_JSON_SCHEMA,
   WebsiteDirectEditSchema,
+  WebsiteImageGenerationInputSchema,
   WebsiteSpecEditInputSchema,
   WebsiteSpecGenerationInputSchema,
   WebsiteSpecGenerationSchema,
@@ -14,6 +15,8 @@ import {
   createWebsiteSpecForBriefSchema,
   type WebsiteBrief,
   type WebsiteDirectEdit,
+  type WebsiteGeneratedAsset,
+  type WebsiteImageGenerationInput,
   type WebsiteProject,
   type WebsiteSpec,
   type WebsiteSpecClientGeneration,
@@ -31,9 +34,22 @@ import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import {
   recordReservedAssistantUsage,
+  recordReservedWebsiteImageUsage,
   reserveAssistantUsage,
+  reserveWebsiteImageUsage,
   type AssistantUsageReservation,
+  UsageControlError,
 } from '@/lib/usage-control-server';
+import {
+  hashWebsiteImagePrompt,
+  removeWebsiteAsset,
+  storeWebsiteAsset,
+} from '@/lib/website-asset-server';
+import { generateWebsiteImage, WebsiteImageProviderError } from '@/lib/website-image-provider';
+import {
+  assertWebsiteImageRequestCost,
+  resolveWebsiteImageRoute,
+} from '@/lib/website-image-routing';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
 const WebsiteSpecRowSchema = z.object({
@@ -44,7 +60,7 @@ const WebsiteSpecRowSchema = z.object({
   parent_version_number: z.number().int().min(1).nullable(),
   provider: z.enum(['openai', 'anthropic', 'gemini', 'mock']),
   restored_from_version: z.number().int().min(1).nullable(),
-  source: z.enum(['direct', 'generated', 'natural-language', 'restore']),
+  source: z.enum(['asset-generation', 'direct', 'generated', 'natural-language', 'restore']),
   spec: z.unknown(),
   version_number: z.number().int().min(1),
   version_name: z.string().min(1).max(80),
@@ -379,7 +395,7 @@ async function persistSpec(
     readonly parentVersion?: number;
     readonly provider: 'openai' | 'anthropic' | 'gemini' | 'mock';
     readonly restoredFromVersion?: number;
-    readonly source: 'direct' | 'generated' | 'natural-language' | 'restore';
+    readonly source: 'asset-generation' | 'direct' | 'generated' | 'natural-language' | 'restore';
     readonly versionName: string;
   },
 ): Promise<WebsiteSpecGeneration> {
@@ -731,6 +747,160 @@ ${JSON.stringify(current.spec)}`;
       await reservation?.release();
     } catch {
       // Reservations expire automatically; never mask the editing outcome.
+    }
+  }
+}
+
+export interface WebsiteAssetGenerationResult {
+  readonly asset: WebsiteGeneratedAsset;
+  readonly generation: WebsiteSpecGeneration;
+}
+
+function imageSectionRole(
+  section: WebsiteSpec['pages'][number]['sections'][number],
+): 'hero' | 'illustration' | 'portrait' {
+  if (section.type === 'hero') return 'hero';
+  if (section.type === 'testimonial') return 'portrait';
+  if (section.type === 'content') return 'illustration';
+  throw new WebsiteStudioError(
+    'WEBSITE_INVALID',
+    'Images can currently be attached to hero, content, or testimonial sections.',
+  );
+}
+
+function imageGenerationError(error: unknown): never {
+  if (error instanceof WebsiteStudioError) throw error;
+  if (error instanceof UsageControlError) {
+    throw new WebsiteStudioError('WEBSITE_FORBIDDEN', error.message, { cause: error });
+  }
+  if (error instanceof WebsiteImageProviderError) {
+    throw new WebsiteStudioError('WEBSITE_PROVIDER_UNAVAILABLE', error.message, { cause: error });
+  }
+  throw error;
+}
+
+export async function generateWebsiteAsset(
+  context: WorkspaceContext,
+  projectId: string,
+  inputValue: WebsiteImageGenerationInput,
+  signal?: AbortSignal,
+): Promise<WebsiteAssetGenerationResult> {
+  const input = WebsiteImageGenerationInputSchema.parse(inputValue);
+  const project = await getWebsiteProject(context, projectId);
+  assertCanGenerate(context, project);
+  const current = await getWebsiteSpecGeneration(context, project.id);
+  if (current === undefined) {
+    throw new WebsiteStudioError(
+      'WEBSITE_STATE_CONFLICT',
+      'Generate the initial website specification before creating an image.',
+    );
+  }
+  if (current.spec.assets.length >= 30) {
+    throw new WebsiteStudioError(
+      'WEBSITE_STATE_CONFLICT',
+      'This website has reached the maximum number of image assets.',
+    );
+  }
+  const page = current.spec.pages.find((candidate) => candidate.slug === input.pageSlug);
+  const section = page?.sections.find((candidate) => candidate.id === input.sectionId);
+  if (page === undefined || section === undefined) {
+    throw new WebsiteStudioError('WEBSITE_INVALID', 'The selected website section was not found.');
+  }
+  const role = imageSectionRole(section);
+  const route = await resolveWebsiteImageRoute(context, {
+    provider: input.provider,
+    tier: input.tier,
+  });
+  assertWebsiteImageRequestCost(route);
+
+  const assetId = `asset-${crypto.randomUUID()}`;
+  const providerPrompt = [
+    input.prompt,
+    `Website: ${current.spec.name}.`,
+    `Page: ${page.title}. Section: ${section.type}.`,
+    `Visual theme: ${current.spec.theme.palette}, ${current.spec.theme.typography}, ${current.spec.theme.appearance}.`,
+    `Alternative text intent: ${input.alt}.`,
+  ].join(' ');
+  let reservation: AssistantUsageReservation | undefined;
+  let storedAsset: WebsiteGeneratedAsset | undefined;
+  try {
+    reservation = await reserveWebsiteImageUsage(context, {
+      maximumCostMicrounits: route.maximumCostMicrounits,
+      provider: route.provider,
+    });
+    const image = await generateWebsiteImage(route, providerPrompt, {
+      ...(signal === undefined ? {} : { signal }),
+    });
+    await recordReservedWebsiteImageUsage(context, reservation, {
+      assetId,
+      byteSize: image.bytes.byteLength,
+      height: image.height,
+      model: image.model,
+      provider: image.provider,
+      width: image.width,
+    });
+    storedAsset = await storeWebsiteAsset(context, project, {
+      alt: input.alt,
+      image,
+      promptHash: hashWebsiteImagePrompt(input.prompt),
+      role,
+      specAssetId: assetId,
+    });
+
+    const output = WebsiteSpecSchema.parse(structuredClone(current.spec));
+    const outputPage = output.pages.find((candidate) => candidate.slug === input.pageSlug);
+    const outputSection = outputPage?.sections.find(
+      (candidate) => candidate.id === input.sectionId,
+    );
+    if (
+      outputSection === undefined ||
+      (outputSection.type !== 'content' &&
+        outputSection.type !== 'hero' &&
+        outputSection.type !== 'testimonial')
+    ) {
+      throw new WebsiteStudioError(
+        'WEBSITE_STATE_CONFLICT',
+        'The selected section changed before the image could be attached.',
+      );
+    }
+    output.assets.push({
+      alt: storedAsset.alt,
+      id: storedAsset.id,
+      kind: 'project-asset',
+      role: storedAsset.role,
+    });
+    outputSection.assetId = storedAsset.id;
+    if (outputSection.type === 'hero' && outputSection.layout !== 'split') {
+      outputSection.layout = 'split';
+    }
+    if (outputSection.type === 'content' && outputSection.layout === 'text') {
+      outputSection.layout = 'image-right';
+    }
+
+    const generation = await persistSpec(context, project, {
+      attempts: 1,
+      changeSummary:
+        input.locale === 'en'
+          ? `Generated and attached a validated ${role} image.`
+          : `產生並套用已驗證的${role === 'hero' ? '主視覺' : role === 'portrait' ? '人物' : '內容'}圖片。`,
+      model: image.model,
+      output: WebsiteSpecSchema.parse(output),
+      parentVersion: current.version,
+      provider: image.provider,
+      source: 'asset-generation',
+      versionName: input.versionName,
+    });
+    return { asset: storedAsset, generation };
+  } catch (error) {
+    if (storedAsset !== undefined) {
+      await removeWebsiteAsset(context, project.id, storedAsset.id);
+    }
+    return imageGenerationError(error);
+  } finally {
+    try {
+      await reservation?.release();
+    } catch {
+      // Reservations expire automatically; never mask the generation outcome.
     }
   }
 }
