@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 26 — Responsive preview canvas (pending)
+Phase 27 — Visual editing and versions (pending)
 
 ## Repository baseline
 
@@ -2059,3 +2059,69 @@ Status: completed
 - `pnpm security:scan-client`: passed — 33 built client files inspected; no
   credentials, server-only environment names, or local paths were present
 - `pnpm build:desktop`: not applicable — no Desktop code changed
+
+## Phase 26 — Responsive preview canvas
+
+Status: completed
+
+### Implemented
+
+- Replaced the Website Studio preview placeholder with a bilingual Canvas that
+  renders the latest validated Website Spec immediately after generation.
+- Added desktop (1440 × 900), tablet (768 × 1024), and mobile (390 × 844)
+  viewport controls, bounded 50–100% zoom, page selection, refresh, loading, and
+  explicit failure states.
+- Added an authenticated, Tenant-scoped preview endpoint. It loads only a
+  project specification available to the current workspace and returns 404 for
+  absent projects, absent generations, invalid slugs, or pages outside the
+  validated specification.
+- Added a deterministic renderer for all registered Hero, Feature Grid, Stats,
+  Testimonial, Pricing, FAQ, CTA, Content, and Footer sections. Theme,
+  typography, density, palette, radius, asset, navigation, and page data come
+  only from the revalidated Website Spec.
+- Escaped every model-provided text value before inserting it into static HTML.
+  The renderer emits no script, form, arbitrary URL, model-generated CSS, or
+  executable code.
+- Isolated the preview in an iframe with an empty sandbox permission set. Its
+  response CSP denies scripts, network connections, forms, media, plugins,
+  base-URL changes, and non-self framing; permissions policy also denies camera,
+  microphone, geolocation, payment, and USB.
+- Added an authenticated HEAD preflight so missing or rejected preview responses
+  reach the visible Canvas error state rather than appearing as a successful
+  blank frame.
+- Added deterministic-render, asset-reference, viewport, route, HTML escaping,
+  missing-page, and CSP tests plus a browser flow that renders the generated
+  site and exercises desktop, tablet, mobile, and zoom controls.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 158 tests across 38 files
+- `pnpm build:web`: passed — 40 generated pages plus authenticated GET/HEAD
+  website preview
+- `pnpm security:scan-client`: passed — 33 built client files inspected
+- `pnpm exec playwright test e2e/website-studio.spec.ts`: passed — validated
+  Website Spec generation, isolated Canvas content, all three viewports, and
+  bounded zoom
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- The Canvas renders the validated specification but does not yet change it.
+  Natural-language edits, direct property controls, reorder, duplicate,
+  undo/redo, named versions, comparison, and restore begin in Phase 27.
+- Preview actions are intentionally non-interactive labels. Form submission,
+  external navigation, custom code, and publishing remain unavailable until
+  their validated and explicitly approved phases.
+- Assets remain ID-based project references and safe placeholders; upload,
+  transformation, responsive image generation, and publishing storage are
+  future work.
+- This phase was not deployed to Vercel. A successful local build, Git commit,
+  or GitHub push must not be described as a Production deployment or a
+  published customer website.
+
+### Commit
+
+- `feat(web): add sandboxed responsive website canvas` (this phase commit)

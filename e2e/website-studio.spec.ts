@@ -59,7 +59,26 @@ test('collects every guided decision before creating a locked website draft', as
   await expect(page.locator('body')).not.toContainText('mock-website-spec-v1');
   await page.getByRole('button', { name: '產生已驗證網站規格' }).click();
   await expect(page.getByText('網站規格已通過驗證')).toBeVisible();
-  await expect(page.getByText('響應式 Canvas 預覽畫布將於 Phase 26 開放')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '網站預覽 Canvas' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /桌機 1440 × 900/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  const preview = page.frameLocator('[data-testid="website-preview-frame"]');
+  await expect(preview.getByText(projectName, { exact: true }).first()).toBeVisible();
+  await expect(preview.getByRole('heading', { name: '產品首頁' })).toBeVisible();
+  await page.getByRole('button', { name: /平板 768 × 1024/ }).click();
+  await expect(page.getByRole('button', { name: /平板 768 × 1024/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.getByRole('button', { name: /手機 390 × 844/ }).click();
+  await expect(page.getByRole('button', { name: /手機 390 × 844/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.getByLabel('縮放').fill('50');
+  await expect(page.getByText('50%')).toBeVisible();
 
   const projectId = new URL(page.url()).pathname.split('/').at(-1);
   expect(projectId).toBeDefined();

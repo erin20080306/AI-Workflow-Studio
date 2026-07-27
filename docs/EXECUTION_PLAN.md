@@ -41,7 +41,7 @@ test, and build checks and has been committed.
 | 23    | Website Studio foundation     | Guided briefs create validated, tenant-isolated website projects                 | completed |
 | 24    | AI website specification      | Multi-model guidance produces only validated component and content specs         | completed |
 | 25    | Tier-aware AI model routing   | Store plan, task complexity, readiness, and budget bound exact model access      | completed |
-| 26    | Responsive preview canvas     | Sandboxed desktop, tablet, and mobile previews remain isolated and deterministic | pending   |
+| 26    | Responsive preview canvas     | Sandboxed desktop, tablet, and mobile previews remain isolated and deterministic | completed |
 | 27    | Visual editing and versions   | Natural-language and direct edits are reversible, versioned, and auditable       | pending   |
 | 28    | Website publishing            | Approved builds pass quality gates and deploy without exposing credentials       | pending   |
 

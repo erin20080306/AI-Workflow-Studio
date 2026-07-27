@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { CheckIcon, ShieldIcon, SparkIcon } from '@/components/icons';
 import { AiModelTierSelector } from '@/components/ai-model-tier-selector';
 import { useLanguage } from '@/components/language-provider';
+import { WebsitePreviewCanvas } from '@/components/sites/website-preview-canvas';
 import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
 
@@ -28,7 +29,6 @@ const copy = {
     generate: 'Generate validated website spec',
     generated: 'Website specification validated',
     generating: 'Generating safely…',
-    next: 'Responsive Canvas preview opens in Phase 26',
     level: 'Generation level',
     levelAuto: 'Auto',
     levelLocked: 'Locked',
@@ -49,7 +49,6 @@ const copy = {
     generate: '產生已驗證網站規格',
     generated: '網站規格已通過驗證',
     generating: '安全產生中…',
-    next: '響應式 Canvas 預覽畫布將於 Phase 26 開放',
     level: '產生等級',
     levelAuto: '自動',
     levelLocked: '未解鎖',
@@ -217,9 +216,7 @@ export function WebsiteSpecGenerator({
               </div>
             ))}
           </dl>
-          <p className="mt-4 rounded-2xl border border-dashed border-slate-300 p-4 text-center text-xs font-semibold text-slate-500">
-            {text.next}
-          </p>
+          <WebsitePreviewCanvas generation={generation} projectId={projectId} />
         </div>
       )}
 
