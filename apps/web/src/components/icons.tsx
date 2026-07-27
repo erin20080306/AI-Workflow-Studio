@@ -118,6 +118,15 @@ export function RunsIcon(props: IconProps) {
   );
 }
 
+export function ScheduleIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <rect height="16" rx="2" width="18" x="3" y="5" />
+      <path d="M7 3v4M17 3v4M3 10h18M8 14h3M8 17h6" />
+    </IconFrame>
+  );
+}
+
 export function PlayIcon(props: IconProps) {
   return (
     <IconFrame {...props}>

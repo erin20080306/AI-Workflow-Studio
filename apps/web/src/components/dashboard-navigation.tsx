@@ -9,6 +9,7 @@ import {
   DeviceIcon,
   FlowIcon,
   RunsIcon,
+  ScheduleIcon,
   SettingsIcon,
   ShieldIcon,
 } from './icons';
@@ -18,6 +19,7 @@ const workspaceNavigation = [
   { en: 'Overview', href: '/dashboard', icon: DashboardIcon, zhHant: '總覽' },
   { en: 'AI Workspace', href: '/dashboard/assistant', icon: ChatIcon, zhHant: 'AI 工作台' },
   { en: 'Workflows', href: '/dashboard/workflows', icon: FlowIcon, zhHant: '工作流' },
+  { en: 'Schedules', href: '/dashboard/schedules', icon: ScheduleIcon, zhHant: '排程' },
   { en: 'Runs', href: '/dashboard/runs', icon: RunsIcon, zhHant: '執行紀錄' },
   { en: 'Devices', href: '/dashboard/devices', icon: DeviceIcon, zhHant: '裝置' },
   { en: 'Settings', href: '/dashboard/settings', icon: SettingsIcon, zhHant: '設定' },

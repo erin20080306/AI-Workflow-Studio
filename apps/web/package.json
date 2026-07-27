@@ -14,6 +14,7 @@
     "@ai-workflow-studio/ai-gateway": "workspace:*",
     "@ai-workflow-studio/google-sheets": "workspace:*",
     "@ai-workflow-studio/run-orchestrator": "workspace:*",
+    "@ai-workflow-studio/scheduler": "workspace:*",
     "@ai-workflow-studio/shared": "workspace:*",
     "@ai-workflow-studio/tool-registry": "workspace:*",
     "@ai-workflow-studio/workflow-engine": "workspace:*",

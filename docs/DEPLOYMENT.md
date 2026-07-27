@@ -40,6 +40,12 @@ Google OAuth additionally requires an HTTPS callback registered exactly as
 values are never exposed through `NEXT_PUBLIC_` variables. Missing Google values
 disable live connection creation without breaking the build or Mock mode.
 
+The internal schedule tick requires
+`Authorization: Bearer <CRON_SECRET>`. Do not register the route as a Vercel
+Cron job until the durable Production Run and Desktop Agent dispatcher is
+configured; the route intentionally fails closed before that boundary exists.
+See [safe recurring schedules](./SCHEDULES.md).
+
 ## Desktop release channels
 
 Windows artifacts are built on Windows runners and macOS artifacts on macOS

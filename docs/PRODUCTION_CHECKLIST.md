@@ -103,6 +103,10 @@ a client bundle or log.
       behavior in staging.
 - [ ] Document service ownership, quota alerts, and credential rotation.
 - [ ] Confirm webhook and scheduled routes reject missing or invalid secrets.
+- [ ] Keep the Vercel schedule timer disabled until the durable Production Run
+      and Desktop Agent dispatcher passes recurring-to-approval integration.
+- [ ] After enabling it, verify concurrent schedule ticks create one fire and
+      one Run idempotently.
 
 ## Operations and go-live
 

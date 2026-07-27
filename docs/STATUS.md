@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 20 — Approval-aware execution (completed)
+Phase 21 — Schedules and connectors (completed)
 
 ## Repository baseline
 
@@ -1574,3 +1574,85 @@ Status: completed
 ### Commit
 
 - `fix(web): simplify model disclosure and raise source limit` (follow-up commit)
+
+## Phase 21 — Schedules and connectors
+
+Status: completed
+
+### Implemented
+
+- Added a strict scheduler package with four bounded recurring presets: every
+  15 minutes, hourly, daily, and weekdays. The scheduler validates 24-hour
+  local times and real IANA timezones, derives a five-field Cron expression,
+  calculates the next UTC occurrence across timezone and daylight-saving
+  boundaries, and never accepts arbitrary code or free-form Cron.
+- Added tenant-scoped schedule records and server-only fire claims in Supabase.
+  Composite tenant foreign keys bind each schedule to its exact workflow
+  version and Desktop Agent, while the unique occurrence/idempotency keys
+  prevent duplicate dispatch under concurrent ticks.
+- Kept schedule mutation behind authenticated server routes. Viewers cannot
+  create, pause, or resume schedules; the browser cannot claim fire records or
+  invoke the claim function directly. Schedule creation, pause, and resume
+  write metadata-only audit events.
+- Added a protected `GET /api/internal/schedules/tick` boundary using an
+  independent `CRON_SECRET` bearer value. Mock mode has a test-only secret and
+  permits a deterministic `at` parameter; Production ignores caller-supplied
+  times.
+- Connected each Mock schedule occurrence to the existing run orchestrator
+  using a stable `schedule:<scheduleId>:<dueAt>` key. The scheduled occurrence
+  creates a traceable Run that remains `awaiting_approval`; it cannot bypass
+  existing write, external-action, or destructive-action approval rules.
+- Added bounded failure handling. The scheduler records only safe error codes,
+  advances to the next cadence, and automatically pauses after three
+  consecutive dispatch failures instead of retrying indefinitely.
+- Added a bilingual Schedule workspace with workflow/device selection, cadence,
+  local time, timezone, next occurrence, pause/resume controls, and a direct
+  Google Sheets connection review. The ordinary UI exposes no OAuth token,
+  provider credential, or arbitrary Cron field.
+- Reused the Phase 10 Google Sheets connector as the first authorized business
+  connector. Its server-only encrypted OAuth tokens, bounded scopes, health
+  checks, explicit revocation, retries, and write idempotency remain unchanged.
+  No additional third-party connector was added without a selected provider
+  and explicit workspace authorization.
+- Recorded the Store-only commerce decision for Phase 22: Microsoft Store
+  subscription add-ons remain the single payment source for the first release;
+  the website will not collect card data or present an independent checkout.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all code workspaces, including the scheduler
+- `pnpm test`: passed — 123 tests across 29 files
+- `pnpm db:test`: passed — fresh migrations, tenant isolation, server-only
+  mutation, and duplicate schedule-fire claim coverage
+- `pnpm build:web`: passed — 38 generated pages plus Schedule and Cron routes
+- `pnpm security:scan-client`: passed — 30 built client files inspected
+- `pnpm test:e2e`: passed — six Chromium paths, including schedule creation,
+  protected tick, approval-aware Run creation, pause, resume, and Google
+  connector disclosure
+- Codex in-app browser desktop check: passed at 1280 × 720 — complete Schedule
+  workspace rendered in the Production preview with no horizontal overflow,
+  console errors, or warnings
+- Codex in-app browser mobile check: passed at 390 × 844 — stacked creation,
+  Google Sheets security summary, and empty-state schedule list remained
+  readable with no horizontal overflow
+
+### Known limitations
+
+- Durable Production Desktop Agent and Run persistence/dispatch remain
+  unconfigured. Production schedule definitions can be stored, but the Cron
+  tick fails closed and no Vercel Cron entry is enabled until that adapter is
+  available. Mock mode covers the complete recurring-to-approval integration.
+- Google Sheets remains the only live business connector. Additional Microsoft
+  365, Outlook, Teams, Slack, or other connectors require a separately selected
+  provider, minimum scopes, credential ownership, revocation, and integration
+  tests.
+- Microsoft Store purchase verification, entitlement synchronization, monthly
+  cost budgets, 80%/95% warnings, and the 100% ceiling begin in Phase 22.
+- This phase was not deployed to Production; successful local checks and a
+  GitHub push must not be described as a Vercel deployment.
+
+### Commit
+
+- `feat(web): add safe recurring schedules` (this phase commit)
