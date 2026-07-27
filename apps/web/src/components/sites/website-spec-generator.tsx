@@ -9,9 +9,9 @@ import { useState } from 'react';
 import { z } from 'zod';
 
 import { CheckIcon, ShieldIcon, SparkIcon } from '@/components/icons';
-import { AiModelTierSelector } from '@/components/ai-model-tier-selector';
 import { useLanguage } from '@/components/language-provider';
-import { WebsitePreviewCanvas } from '@/components/sites/website-preview-canvas';
+import { WebsiteModelDropdowns } from '@/components/sites/website-model-dropdowns';
+import { WebsiteSpecEditor } from '@/components/sites/website-spec-editor';
 import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
 
@@ -29,9 +29,6 @@ const copy = {
     generate: 'Generate validated website spec',
     generated: 'Website specification validated',
     generating: 'Generating safely…',
-    level: 'Generation level',
-    levelAuto: 'Auto',
-    levelLocked: 'Locked',
     pages: 'Pages',
     phase: 'AI specification · Phase 24',
     provider: 'Provider',
@@ -49,9 +46,6 @@ const copy = {
     generate: '產生已驗證網站規格',
     generated: '網站規格已通過驗證',
     generating: '安全產生中…',
-    level: '產生等級',
-    levelAuto: '自動',
-    levelLocked: '未解鎖',
     pages: '頁面',
     phase: 'AI 網站規格 · Phase 24',
     provider: 'Provider',
@@ -64,11 +58,13 @@ const copy = {
 
 export function WebsiteSpecGenerator({
   initialGeneration,
+  initialVersions,
   modelOptions,
   projectId,
   tierOptions,
 }: Readonly<{
   initialGeneration: WebsiteSpecClientGeneration | undefined;
+  initialVersions: readonly WebsiteSpecClientGeneration[];
   modelOptions: readonly WebsiteGenerationModelOption[];
   projectId: string;
   tierOptions: readonly AiTierOption[];
@@ -126,59 +122,21 @@ export function WebsiteSpecGenerator({
       {generation === undefined ? (
         modelOptions.length > 0 ? (
           <>
-            <fieldset className="mt-6">
-              <legend className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+            <div className="mt-6">
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                 {text.available}
-              </legend>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {modelOptions.map((option) => {
-                  const active = option.id === selected;
-                  return (
-                    <label
-                      className={`cursor-pointer rounded-2xl border p-4 transition ${
-                        active
-                          ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-100'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                      key={option.id}
-                    >
-                      <input
-                        checked={active}
-                        className="sr-only"
-                        name="website-model"
-                        onChange={() => setSelected(option.id)}
-                        type="radio"
-                        value={option.id}
-                      />
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-semibold text-slate-950">{option.label}</span>
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
-                          {locale === 'en' ? option.level.en : option.level.zhHant}
-                        </span>
-                      </span>
-                      <span className="mt-2 block text-xs leading-5 text-slate-500">
-                        {locale === 'en' ? option.description.en : option.description.zhHant}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-            <fieldset className="mt-5">
-              <legend className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                {text.level}
-              </legend>
-              <div className="mt-3">
-                <AiModelTierSelector
-                  autoLabel={text.levelAuto}
-                  locale={locale}
-                  lockedLabel={text.levelLocked}
-                  onChange={setSelectedTier}
-                  selected={selectedTier}
-                  tiers={tierOptions}
-                />
-              </div>
-            </fieldset>
+              </p>
+              <WebsiteModelDropdowns
+                disabled={generating}
+                locale={locale}
+                modelOptions={modelOptions}
+                onModelChange={setSelected}
+                onTierChange={setSelectedTier}
+                selectedModel={selected}
+                selectedTier={selectedTier}
+                tierOptions={tierOptions}
+              />
+            </div>
             <button
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               disabled={generating}
@@ -216,7 +174,13 @@ export function WebsiteSpecGenerator({
               </div>
             ))}
           </dl>
-          <WebsitePreviewCanvas generation={generation} projectId={projectId} />
+          <WebsiteSpecEditor
+            initialGeneration={generation}
+            initialVersions={initialVersions.length === 0 ? [generation] : initialVersions}
+            modelOptions={modelOptions}
+            projectId={projectId}
+            tierOptions={tierOptions}
+          />
         </div>
       )}
 

@@ -362,14 +362,28 @@ export const WebsiteSpecGenerationInputSchema = z
   })
   .strict();
 
+export const WebsiteSpecVersionSourceSchema = z.enum([
+  'direct',
+  'generated',
+  'natural-language',
+  'restore',
+]);
+
+export const WebsiteVersionNameSchema = safeText(1, 80);
+
 export const WebsiteSpecGenerationSchema = z
   .object({
     attempts: z.number().int().min(1).max(3),
+    changeSummary: safeText(0, 300),
     createdAt: z.string().datetime({ offset: true }),
     model: z.string().min(1).max(120),
+    parentVersion: z.number().int().min(1).optional(),
     provider: WebsiteGenerationProviderSchema,
+    restoredFromVersion: z.number().int().min(1).optional(),
+    source: WebsiteSpecVersionSourceSchema,
     spec: WebsiteSpecSchema,
     version: z.number().int().min(1),
+    versionName: WebsiteVersionNameSchema,
   })
   .strict();
 
@@ -378,6 +392,158 @@ export const WebsiteSpecClientGenerationSchema = WebsiteSpecGenerationSchema.omi
 });
 
 export const WEBSITE_SPEC_PROVIDER_JSON_SCHEMA = z.toJSONSchema(WebsiteSpecSchema);
+
+const WebsiteThemePatchSchema = WebsiteThemeSchema.partial()
+  .strict()
+  .refine((patch) => Object.keys(patch).length > 0, {
+    message: 'At least one website theme property must be supplied.',
+  });
+
+export const WebsiteSectionCopyFieldSchema = z.enum([
+  'attribution',
+  'body',
+  'copyright',
+  'eyebrow',
+  'quote',
+  'title',
+]);
+
+export const WebsiteDirectEditSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      patch: WebsiteThemePatchSchema,
+      type: z.literal('update-theme'),
+    })
+    .strict(),
+  z
+    .object({
+      field: WebsiteSectionCopyFieldSchema,
+      pageSlug: PageSlugSchema,
+      sectionId: IdentifierSchema,
+      type: z.literal('update-section-copy'),
+      value: safeText(1, 1_500),
+    })
+    .strict(),
+  z
+    .object({
+      direction: z.enum(['down', 'up']),
+      pageSlug: PageSlugSchema,
+      sectionId: IdentifierSchema,
+      type: z.literal('move-section'),
+    })
+    .strict(),
+  z
+    .object({
+      pageSlug: PageSlugSchema,
+      sectionId: IdentifierSchema,
+      type: z.literal('duplicate-section'),
+    })
+    .strict(),
+]);
+
+export const WebsiteSpecEditInputSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      edit: WebsiteDirectEditSchema,
+      kind: z.literal('direct'),
+      versionName: WebsiteVersionNameSchema,
+    })
+    .strict(),
+  z
+    .object({
+      instruction: safeText(10, 1_000),
+      kind: z.literal('natural-language'),
+      locale: z.enum(['en', 'zh-Hant']).default('zh-Hant'),
+      model: WebsiteGenerationSelectionSchema.default('auto'),
+      tier: z.enum(['auto', 'economy', 'standard', 'advanced', 'flagship']).default('auto'),
+      versionName: WebsiteVersionNameSchema,
+    })
+    .strict(),
+]);
+
+export const WebsiteSpecRestoreInputSchema = z
+  .object({
+    versionName: WebsiteVersionNameSchema,
+  })
+  .strict();
+
+export interface WebsiteSpecComparison {
+  readonly addedPages: readonly string[];
+  readonly addedSections: number;
+  readonly changedPages: readonly string[];
+  readonly changedSections: number;
+  readonly changedThemeProperties: readonly (keyof WebsiteSpec['theme'])[];
+  readonly movedSections: number;
+  readonly removedPages: readonly string[];
+  readonly removedSections: number;
+}
+
+function stableValue(value: unknown): string {
+  return JSON.stringify(value);
+}
+
+export function compareWebsiteSpecs(
+  baseValue: WebsiteSpec,
+  currentValue: WebsiteSpec,
+): WebsiteSpecComparison {
+  const base = WebsiteSpecSchema.parse(baseValue);
+  const current = WebsiteSpecSchema.parse(currentValue);
+  const basePages = new Map(base.pages.map((page) => [page.slug, page]));
+  const currentPages = new Map(current.pages.map((page) => [page.slug, page]));
+  const addedPages = current.pages
+    .filter((page) => !basePages.has(page.slug))
+    .map((page) => page.slug);
+  const removedPages = base.pages
+    .filter((page) => !currentPages.has(page.slug))
+    .map((page) => page.slug);
+  const changedPages = current.pages
+    .filter((page) => {
+      const previous = basePages.get(page.slug);
+      return previous !== undefined && stableValue(previous) !== stableValue(page);
+    })
+    .map((page) => page.slug);
+  let addedSections = 0;
+  let removedSections = 0;
+  let movedSections = 0;
+  let changedSections = 0;
+
+  for (const page of current.pages) {
+    const previous = basePages.get(page.slug);
+    if (previous === undefined) {
+      addedSections += page.sections.length;
+      continue;
+    }
+    const previousIndexes = new Map(previous.sections.map((section, index) => [section.id, index]));
+    const currentIds = new Set(page.sections.map((section) => section.id));
+    addedSections += page.sections.filter((section) => !previousIndexes.has(section.id)).length;
+    removedSections += previous.sections.filter((section) => !currentIds.has(section.id)).length;
+    page.sections.forEach((section, index) => {
+      const previousIndex = previousIndexes.get(section.id);
+      if (previousIndex === undefined) return;
+      if (previousIndex !== index) movedSections += 1;
+      const previousSection = previous.sections[previousIndex];
+      if (previousSection !== undefined && stableValue(previousSection) !== stableValue(section)) {
+        changedSections += 1;
+      }
+    });
+  }
+  for (const page of base.pages) {
+    if (!currentPages.has(page.slug)) removedSections += page.sections.length;
+  }
+
+  return {
+    addedPages,
+    addedSections,
+    changedPages,
+    changedSections,
+    changedThemeProperties: (
+      Object.keys(base.theme) as readonly (keyof WebsiteSpec['theme'])[]
+    ).filter((key) => base.theme[key] !== current.theme[key]),
+    movedSections,
+    removedPages,
+    removedSections,
+  };
+}
 
 export function createWebsiteSpecForBriefSchema(brief: WebsiteBrief) {
   const expectedSlugs = [...brief.pages.map((page) => page.slug)].sort();
@@ -399,8 +565,12 @@ export function createWebsiteSpecForBriefSchema(brief: WebsiteBrief) {
 export type WebsiteAction = z.infer<typeof WebsiteActionSchema>;
 export type WebsiteGenerationProvider = z.infer<typeof WebsiteGenerationProviderSchema>;
 export type WebsiteGenerationSelection = z.infer<typeof WebsiteGenerationSelectionSchema>;
+export type WebsiteDirectEdit = z.infer<typeof WebsiteDirectEditSchema>;
 export type WebsiteSection = z.infer<typeof WebsiteSectionSchema>;
 export type WebsiteSpec = z.infer<typeof WebsiteSpecSchema>;
 export type WebsiteSpecClientGeneration = z.infer<typeof WebsiteSpecClientGenerationSchema>;
+export type WebsiteSpecEditInput = z.infer<typeof WebsiteSpecEditInputSchema>;
 export type WebsiteSpecGeneration = z.infer<typeof WebsiteSpecGenerationSchema>;
 export type WebsiteSpecGenerationInput = z.infer<typeof WebsiteSpecGenerationInputSchema>;
+export type WebsiteSpecRestoreInput = z.infer<typeof WebsiteSpecRestoreInputSchema>;
+export type WebsiteSpecVersionSource = z.infer<typeof WebsiteSpecVersionSourceSchema>;

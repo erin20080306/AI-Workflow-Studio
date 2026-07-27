@@ -46,7 +46,7 @@ const copy = {
     draftHelp:
       'This phase creates a structured project draft only. It cannot publish, run code, or access credentials.',
     goal: 'Page goal',
-    locked: 'This draft is locked until versioned editing is introduced.',
+    locked: 'The brief is locked. Visual edits below create reversible versions.',
     modelLater:
       'After the brief is locked, choose Auto, OpenAI, Claude, or Gemini to generate a validated component specification.',
     next: 'Save and continue',
@@ -105,7 +105,7 @@ const copy = {
     draft: '草稿已鎖定',
     draftHelp: '本階段只建立結構化專案草稿，不會發布網站、執行程式碼或讀取憑證。',
     goal: '頁面任務',
-    locked: '此草稿會保持鎖定，直到版本化編輯階段開放。',
+    locked: '需求草稿已鎖定；下方視覺編輯會建立可復原的新版本。',
     modelLater: '需求鎖定後，可選擇 Auto、OpenAI、Claude 或 Gemini 產生已驗證元件規格。',
     next: '儲存並繼續',
     pageSlug: '網址代稱',
@@ -164,11 +164,13 @@ function updatePageField(
 export function WebsiteBriefWorkspace({
   initialGeneration,
   initialProject,
+  initialVersions,
   modelOptions,
   tierOptions,
 }: Readonly<{
   initialGeneration: WebsiteSpecClientGeneration | undefined;
   initialProject: WebsiteProject;
+  initialVersions: readonly WebsiteSpecClientGeneration[];
   modelOptions: readonly WebsiteGenerationModelOption[];
   tierOptions: readonly AiTierOption[];
 }>) {
@@ -566,6 +568,7 @@ export function WebsiteBriefWorkspace({
         <div className="mt-5">
           <WebsiteSpecGenerator
             initialGeneration={initialGeneration}
+            initialVersions={initialVersions}
             modelOptions={modelOptions}
             projectId={project.id}
             tierOptions={tierOptions}

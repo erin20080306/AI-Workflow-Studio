@@ -8,7 +8,11 @@ import { buildAiTierOptions } from '@/lib/ai-model-selection';
 import { requireWorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { buildWebsiteGenerationModelOptions } from '@/lib/website-generation-models';
-import { getWebsiteSpecGeneration, websiteSpecClientView } from '@/lib/website-spec-server';
+import {
+  getWebsiteSpecGeneration,
+  listWebsiteSpecGenerations,
+  websiteSpecClientView,
+} from '@/lib/website-spec-server';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
 export const metadata: Metadata = {
@@ -27,12 +31,16 @@ export default async function WebsiteBriefPage({
   const context = await requireWorkspaceContext();
   try {
     const project = await getWebsiteProject(context, parsed.data.projectId);
-    const generation = await getWebsiteSpecGeneration(context, project.id);
-    const mappings = await listAiModelMappings();
+    const [generation, versions, mappings] = await Promise.all([
+      getWebsiteSpecGeneration(context, project.id),
+      listWebsiteSpecGenerations(context, project.id),
+      listAiModelMappings(),
+    ]);
     return (
       <WebsiteBriefWorkspace
         initialGeneration={generation === undefined ? undefined : websiteSpecClientView(generation)}
         initialProject={project}
+        initialVersions={versions.map(websiteSpecClientView)}
         modelOptions={buildWebsiteGenerationModelOptions(getEnvironment())}
         tierOptions={buildAiTierOptions(context.subscription.plan, mappings)}
       />

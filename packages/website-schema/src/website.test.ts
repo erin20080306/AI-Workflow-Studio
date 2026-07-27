@@ -6,7 +6,13 @@ import {
   completeWebsiteBrief,
   websiteBriefProgress,
 } from './website';
-import { WebsiteSpecSchema, createWebsiteSpecForBriefSchema } from './spec';
+import {
+  WebsiteSpecEditInputSchema,
+  WebsiteSpecGenerationSchema,
+  WebsiteSpecSchema,
+  compareWebsiteSpecs,
+  createWebsiteSpecForBriefSchema,
+} from './spec';
 
 const completeBrief = {
   audience: '營運團隊與需要安全自動化工具的中小企業使用者。',
@@ -199,5 +205,64 @@ describe('Website Spec validation', () => {
         pages: [...brief.pages, { goal: '說明方案內容與價格。', slug: 'pricing', title: '方案' }],
       }).parse(validWebsiteSpec),
     ).toThrow();
+  });
+
+  it('accepts bounded direct and natural-language edits without executable content', () => {
+    expect(
+      WebsiteSpecEditInputSchema.parse({
+        edit: {
+          field: 'title',
+          pageSlug: 'home',
+          sectionId: 'home-hero',
+          type: 'update-section-copy',
+          value: '更清楚的安全網站標題',
+        },
+        kind: 'direct',
+        versionName: 'Homepage headline',
+      }).kind,
+    ).toBe('direct');
+    expect(
+      WebsiteSpecEditInputSchema.parse({
+        instruction: '請讓首頁標題更簡潔，並保留所有既有頁面與內容。',
+        kind: 'natural-language',
+        locale: 'zh-Hant',
+        model: 'auto',
+        tier: 'economy',
+        versionName: 'AI copy edit',
+      }).kind,
+    ).toBe('natural-language');
+    expect(() =>
+      WebsiteSpecEditInputSchema.parse({
+        instruction: 'Run this: ```javascript alert(1) ```',
+        kind: 'natural-language',
+        versionName: 'Unsafe edit',
+      }),
+    ).toThrow();
+  });
+
+  it('records reversible version metadata and compares deterministic spec changes', () => {
+    const generation = WebsiteSpecGenerationSchema.parse({
+      attempts: 1,
+      changeSummary: 'Updated the validated website theme.',
+      createdAt: '2026-07-28T00:00:00.000Z',
+      model: 'test-model',
+      parentVersion: 1,
+      provider: 'mock',
+      source: 'direct',
+      spec: {
+        ...validWebsiteSpec,
+        theme: { ...validWebsiteSpec.theme, density: 'compact' },
+      },
+      version: 2,
+      versionName: 'Compact layout',
+    });
+    const comparison = compareWebsiteSpecs(
+      WebsiteSpecSchema.parse(validWebsiteSpec),
+      generation.spec,
+    );
+    expect(generation.parentVersion).toBe(1);
+    expect(comparison.changedThemeProperties).toEqual(['density']);
+    expect(comparison.changedPages).toEqual([]);
+    expect(comparison.changedSections).toBe(0);
   });
 });

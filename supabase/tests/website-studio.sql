@@ -113,6 +113,61 @@ values
     'e1000000-0000-4000-8000-000000000002'
   );
 
+insert into public.website_specs (
+  tenant_id,
+  project_id,
+  version_number,
+  schema_version,
+  provider,
+  model,
+  attempts,
+  spec,
+  created_by,
+  version_name,
+  change_summary,
+  source,
+  parent_version_number
+)
+values (
+  'e2000000-0000-4000-8000-000000000001',
+  'e3000000-0000-4000-8000-000000000001',
+  2,
+  1,
+  'openai',
+  'test-model-a',
+  1,
+  '{"schemaVersion":1,"name":"Tenant A edited spec"}',
+  'e1000000-0000-4000-8000-000000000001',
+  'Edited homepage',
+  'Updated validated copy.',
+  'direct',
+  1
+);
+
+select tests.assert_true(
+  (
+    select
+      version_name = 'Edited homepage'
+      and source = 'direct'
+      and parent_version_number = 1
+    from public.website_specs
+    where project_id = 'e3000000-0000-4000-8000-000000000001'
+      and version_number = 2
+  ),
+  'website edits must preserve their reversible version metadata'
+);
+
+select tests.assert_true(
+  exists (
+    select 1
+    from public.audit_logs
+    where resource_id = 'e3000000-0000-4000-8000-000000000001'
+      and action = 'website_spec.direct'
+      and metadata ->> 'versionName' = 'Edited homepage'
+  ),
+  'website spec version inserts must create an atomic metadata-only audit event'
+);
+
 reset role;
 set local role authenticated;
 select set_config(
@@ -127,7 +182,7 @@ select tests.assert_true(
 );
 
 select tests.assert_true(
-  (select count(*) from public.website_specs) = 1,
+  (select count(*) from public.website_specs) = 2,
   'a member must only see website specs from their tenant'
 );
 

@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 27 — Visual editing and versions (pending)
+Phase 28 — AI website image generation (pending)
 
 ## Repository baseline
 
@@ -2125,3 +2125,53 @@ Status: completed
 ### Commit
 
 - `feat(web): add sandboxed responsive website canvas` (this phase commit)
+
+## Phase 27 — Visual editing and versions
+
+Status: completed
+
+### Implemented
+
+- Replaced the exposed tier-card grid with compact provider and performance
+  dropdowns. Every tier option displays the real allowlisted OpenAI, Claude,
+  and Gemini model names; subscription-locked tiers stay visible but disabled.
+- Added bilingual, validated natural-language edits that must return a complete
+  Website Spec. Model output still cannot insert executable code, arbitrary
+  URLs, or unregistered components.
+- Added direct page, section-copy, theme, reorder, and duplicate controls. Every
+  edit produces a new immutable Website Spec version instead of mutating the
+  current specification in place.
+- Added named versions, deterministic comparisons, version history, restoration,
+  and reversible Undo/Redo. Undo and Redo restore an earlier immutable
+  specification as a newly audited version, preserving the complete history.
+- Added exact-version Canvas previews and version-aware authenticated preview
+  routing, so comparisons and restored specifications can be inspected without
+  weakening iframe isolation.
+- Added an atomic database audit trigger for every Website Spec insertion,
+  version metadata, parent/restored-from relationships, Tenant-scoped API
+  routes, service-role restrictions, and cross-Tenant database tests.
+- Kept operational audit data free of natural-language prompts, secrets,
+  unpublished content, and provider payloads.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 160 tests across 38 files
+- `pnpm build:web`: passed — 40 generated pages plus authenticated edit,
+  version, restore, and version-aware preview routes
+- `pnpm db:test`: passed — fresh migrations, atomic version-audit trigger,
+  Tenant isolation, service-role restrictions, and idempotent seed
+- `pnpm exec playwright test e2e/website-studio.spec.ts`: passed — provider and
+  tier dropdowns, direct editing, live Canvas refresh, version history,
+  Undo, and Redo
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- Website images still render as safe asset placeholders. Private,
+  quota-controlled OpenAI/Gemini image generation and authenticated asset
+  delivery begin in Phase 28.
+- Website publishing, domains, production builds, and rollback remain locked
+  until Phase 29 and still require explicit authenticated approval.

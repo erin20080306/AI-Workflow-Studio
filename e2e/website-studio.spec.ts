@@ -49,16 +49,16 @@ test('collects every guided decision before creating a locked website draft', as
   await page.getByRole('button', { name: '建立已驗證網站草稿' }).click();
   await expect(page.getByText('已建立通過驗證的網站草稿；發布功能仍維持鎖定。')).toBeVisible();
   await expect(page.getByText('草稿已鎖定', { exact: true })).toBeVisible();
-  await expect(page.getByText('此草稿會保持鎖定，直到版本化編輯階段開放。')).toBeVisible();
+  await expect(page.getByText('需求草稿已鎖定；下方視覺編輯會建立可復原的新版本。')).toBeVisible();
   await expect(page.getByRole('heading', { name: '將需求轉成安全的網站結構' })).toBeVisible();
-  await expect(page.getByText('Mock Studio')).toBeVisible();
-  await expect(page.getByText('開發測試')).toBeVisible();
-  await expect(page.getByText('gpt-5.6-luna')).toBeVisible();
-  await expect(page.getByText('claude-haiku-4-5-20251001')).toBeVisible();
-  await expect(page.getByText('gemini-3.5-flash-lite')).toBeVisible();
+  await expect(page.getByLabel('模型')).toContainText('Mock Studio');
+  await expect(page.getByLabel('效能等級')).toContainText('gpt-5.6-luna');
+  await expect(page.getByLabel('效能等級')).toContainText('claude-haiku-4-5-20251001');
+  await expect(page.getByLabel('效能等級')).toContainText('gemini-3.5-flash-lite');
   await expect(page.locator('body')).not.toContainText('mock-website-spec-v1');
   await page.getByRole('button', { name: '產生已驗證網站規格' }).click();
   await expect(page.getByText('網站規格已通過驗證')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '視覺編輯與版本' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '網站預覽 Canvas' })).toBeVisible();
   await expect(page.getByRole('button', { name: /桌機 1440 × 900/ })).toHaveAttribute(
     'aria-pressed',
@@ -79,6 +79,21 @@ test('collects every guided decision before creating a locked website draft', as
   );
   await page.getByLabel('縮放').fill('50');
   await expect(page.getByText('50%')).toBeVisible();
+
+  await page.getByLabel('版本名稱').fill('首頁標題更新');
+  await page.getByLabel('屬性').selectOption('title');
+  await page.getByLabel('區塊文案').fill('更清楚的安全網站工作流程');
+  await page.getByRole('button', { name: '區塊文案' }).click();
+  await expect(page.getByText('v2 · 首頁標題更新').first()).toBeVisible();
+  await expect(preview.getByRole('heading', { name: '更清楚的安全網站工作流程' })).toBeVisible();
+  await expect(page.getByRole('paragraph').filter({ hasText: 'v1 · 初始版本' })).toBeVisible();
+
+  await page.getByRole('button', { name: /復原/ }).click();
+  await expect(page.getByText('v3 · Undo to v1').first()).toBeVisible();
+  await expect(preview.getByRole('heading', { name: '產品首頁' })).toBeVisible();
+  await page.getByRole('button', { name: /重做/ }).click();
+  await expect(page.getByText('v4 · Redo v2').first()).toBeVisible();
+  await expect(preview.getByRole('heading', { name: '更清楚的安全網站工作流程' })).toBeVisible();
 
   const projectId = new URL(page.url()).pathname.split('/').at(-1);
   expect(projectId).toBeDefined();
@@ -109,7 +124,7 @@ test('collects every guided decision before creating a locked website draft', as
     };
   };
   expect(generatedPayload.generation.model).toBeUndefined();
-  expect(generatedPayload.generation.version).toBe(1);
+  expect(generatedPayload.generation.version).toBe(4);
   expect(generatedPayload.generation.spec.schemaVersion).toBe(1);
   expect(
     generatedPayload.generation.spec.pages.flatMap((generatedPage) =>

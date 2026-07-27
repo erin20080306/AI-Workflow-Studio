@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireWorkspaceContext } from '@/lib/auth/context';
 import { WEBSITE_PREVIEW_HEADERS } from '@/lib/website-preview-contract';
 import { renderWebsitePreviewDocument } from '@/lib/website-preview-renderer';
-import { getWebsiteSpecGeneration } from '@/lib/website-spec-server';
+import { getWebsiteSpecGeneration, getWebsiteSpecVersion } from '@/lib/website-spec-server';
 
 const ParamsSchema = z
   .object({
@@ -17,7 +17,7 @@ const ParamsSchema = z
   .strict();
 
 async function previewResponse(
-  _request: Request,
+  request: Request,
   routeContext: {
     readonly params: Promise<{ readonly pageSlug: string; readonly projectId: string }>;
   },
@@ -26,7 +26,19 @@ async function previewResponse(
   try {
     const params = ParamsSchema.parse(await routeContext.params);
     const context = await requireWorkspaceContext();
-    const generation = await getWebsiteSpecGeneration(context, params.projectId);
+    const versionValue = new URL(request.url).searchParams.get('version');
+    const version =
+      versionValue === null ? undefined : z.coerce.number().int().min(1).safeParse(versionValue);
+    if (version !== undefined && !version.success) {
+      return new Response('Preview not found.', {
+        headers: WEBSITE_PREVIEW_HEADERS,
+        status: 404,
+      });
+    }
+    const generation =
+      version === undefined
+        ? await getWebsiteSpecGeneration(context, params.projectId)
+        : await getWebsiteSpecVersion(context, params.projectId, version.data);
     if (generation === undefined) {
       return new Response('Preview not found.', {
         headers: WEBSITE_PREVIEW_HEADERS,
