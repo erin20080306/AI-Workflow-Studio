@@ -3,7 +3,10 @@ import type { Metadata } from 'next';
 import { DevicePairingPanel } from '@/components/devices/device-pairing-panel';
 import { DeviceIcon } from '@/components/icons';
 import { LocalizedText } from '@/components/language-provider';
+import { requireWorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
+import { z } from 'zod';
 
 export const metadata: Metadata = {
   title: '裝置',
@@ -24,9 +27,18 @@ const mockDevices = [
   },
 ] as const;
 
-export default function DevicesPage() {
+const ProductionDeviceSchema = z.object({
+  id: z.string().uuid(),
+  last_seen_at: z.string().datetime({ offset: true }).nullable(),
+  name: z.string().min(1).max(120),
+  status: z.enum(['offline', 'online', 'pairing', 'revoked']),
+});
+
+export default async function DevicesPage() {
   const environment = getEnvironment();
-  const devices = environment.mockMode ? mockDevices : [];
+  const devices = environment.mockMode
+    ? mockDevices.map((device, index) => ({ ...device, id: `mock-${index}` }))
+    : await productionDevices();
 
   return (
     <div className="mx-auto max-w-[1120px]">
@@ -58,14 +70,20 @@ export default function DevicesPage() {
           </div>
           <div className="divide-y divide-slate-100">
             {devices.map((device) => (
-              <article className="flex items-center gap-4 px-5 py-5 sm:px-6" key={device.name}>
+              <article className="flex items-center gap-4 px-5 py-5 sm:px-6" key={device.id}>
                 <span className="grid size-11 place-items-center rounded-xl bg-slate-100 text-slate-600">
                   <DeviceIcon className="size-5" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate text-sm font-semibold text-slate-950">{device.name}</h3>
                   <p className="mt-1 text-xs text-slate-500">
-                    <LocalizedText en={device.lastSeenEn} zhHant={device.lastSeenZhHant} />
+                    {'lastSeenEn' in device ? (
+                      <LocalizedText en={device.lastSeenEn} zhHant={device.lastSeenZhHant} />
+                    ) : device.lastSeenAt === undefined ? (
+                      <LocalizedText en="Not connected yet" zhHant="尚未連線" />
+                    ) : (
+                      new Date(device.lastSeenAt).toLocaleString()
+                    )}
                   </p>
                 </div>
                 <span
@@ -95,4 +113,24 @@ export default function DevicesPage() {
       </div>
     </div>
   );
+}
+
+async function productionDevices() {
+  const context = await requireWorkspaceContext();
+  const result = await createSupabaseAdminClient()
+    .from('devices')
+    .select('id, name, status, last_seen_at')
+    .eq('tenant_id', context.actor.tenantId)
+    .neq('status', 'revoked')
+    .order('name');
+  if (result.error !== null) return [];
+  return z
+    .array(ProductionDeviceSchema)
+    .parse(result.data)
+    .map((device) => ({
+      id: device.id,
+      ...(device.last_seen_at === null ? {} : { lastSeenAt: device.last_seen_at }),
+      name: device.name,
+      status: device.status,
+    }));
 }

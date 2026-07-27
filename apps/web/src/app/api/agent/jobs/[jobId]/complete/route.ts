@@ -14,9 +14,7 @@ export async function POST(
       jobId,
       input,
     );
-    if (!result.duplicate) {
-      await syncAgentCompletion(result.job, input);
-    }
+    await syncAgentCompletion(result.job, input);
     return Response.json(result, {
       headers: { 'cache-control': 'no-store' },
     });

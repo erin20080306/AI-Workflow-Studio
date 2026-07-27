@@ -34,6 +34,7 @@ import {
   AssistantWorkflowRunCreateResponseSchema,
   type AssistantWorkflowDraftSummary,
 } from '@/lib/assistant-execution-schema';
+import type { AssistantExecutionTarget } from '@/lib/assistant-execution-targets';
 import {
   resolveAssistantProvider,
   type AssistantModelId,
@@ -47,7 +48,7 @@ import {
   type AssistantArtifactSummary,
   type AssistantAttachmentSummary,
 } from '@/lib/assistant-resource-schema';
-import { MOCK_DEVICE_ID, MOCK_FOLDER_ALIAS_ID, NODE_PRESENTATION } from '@/lib/mock-workflows';
+import { NODE_PRESENTATION } from '@/lib/mock-workflows';
 
 const PlannerResponseSchema = z
   .object({
@@ -126,6 +127,9 @@ const copy = {
     cancelled: 'Generation stopped. The partial response was kept for audit.',
     conversations: 'Conversations',
     draftOnly: 'Read-only AI',
+    desktopAgent: 'Desktop Agent',
+    desktopOffline: 'Offline · jobs will wait',
+    desktopOnline: 'Online',
     emptyAsk: 'Ask a question, refine an idea, or explore a safe automation approach.',
     emptyPlan:
       'Describe the source, transformation rules, output, and timing. The model can only propose validated Workflow JSON.',
@@ -151,6 +155,7 @@ const copy = {
     levelLocked: 'Locked',
     newConversation: 'New conversation',
     noProvider: 'AI is unavailable. Please contact the platform administrator.',
+    noDesktopAgent: 'Pair a Desktop Agent before creating an executable plan.',
     noSaved: 'No saved conversations yet',
     plan: 'Plan',
     planCreated: 'Validated plan created',
@@ -196,6 +201,9 @@ const copy = {
     cancelled: '已停止產生；部分回應會保留以供稽核。',
     conversations: '對話紀錄',
     draftOnly: '唯讀 AI',
+    desktopAgent: '桌面 Agent',
+    desktopOffline: '離線 · 工作會等待連線',
+    desktopOnline: '在線',
     emptyAsk: '提出問題、釐清想法，或一起探索安全的自動化做法。',
     emptyPlan: '描述資料來源、處理規則、輸出與時間；模型只能提出經驗證的 Workflow JSON。',
     emptyTitle: '今天想一起處理什麼？',
@@ -218,6 +226,7 @@ const copy = {
     levelLocked: '未解鎖',
     newConversation: '新增對話',
     noProvider: 'AI 目前尚未開放，請聯絡平台管理者。',
+    noDesktopAgent: '請先配對 Desktop Agent，才能建立可執行的規劃。',
     noSaved: '目前沒有已保存的對話',
     plan: '規劃',
     planCreated: '已建立通過驗證的計畫',
@@ -280,18 +289,21 @@ function parseSseBlocks(buffer: string): {
 }
 
 export function AssistantWorkspace({
-  mockMode,
+  executionTargets,
   models,
   tiers,
 }: Readonly<{
-  mockMode: boolean;
   models: readonly AssistantModelOption[];
+  executionTargets: readonly AssistantExecutionTarget[];
   tiers: readonly AiTierOption[];
 }>) {
   const { locale } = useLanguage();
   const text = copy[locale];
   const [selectedModel, setSelectedModel] = useState<AssistantModelId>('auto');
   const [selectedTier, setSelectedTier] = useState<AiModelTierSelection>('auto');
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>(
+    executionTargets[0]?.deviceId ?? '',
+  );
   const [mode, setMode] = useState<AssistantConversationMode>('ask');
   const [prompt, setPrompt] = useState('');
   const [promptError, setPromptError] = useState<PromptError>();
@@ -319,6 +331,10 @@ export function AssistantWorkspace({
   const resolvedProvider = useMemo(
     () => resolveAssistantProvider(selectedModel, models),
     [models, selectedModel],
+  );
+  const selectedExecutionTarget = useMemo(
+    () => executionTargets.find((target) => target.deviceId === selectedDeviceId),
+    [executionTargets, selectedDeviceId],
   );
   async function refreshConversations(): Promise<void> {
     try {
@@ -674,10 +690,12 @@ export function AssistantWorkspace({
         attachmentIds: selectedAttachmentIds,
         ...(conversationId === undefined ? {} : { conversationId }),
         context: {
-          allowedFolderAliasIds: mockMode ? [MOCK_FOLDER_ALIAS_ID] : [],
-          executionTarget: mockMode
-            ? { deviceId: MOCK_DEVICE_ID, type: 'desktop' }
-            : { type: 'cloud' },
+          allowedFolderAliasIds:
+            selectedExecutionTarget?.folderAliases.map((folder) => folder.id) ?? [],
+          executionTarget:
+            selectedExecutionTarget === undefined
+              ? { type: 'cloud' }
+              : { deviceId: selectedExecutionTarget.deviceId, type: 'desktop' },
           locale,
           timezone: 'Asia/Taipei',
         },
@@ -874,22 +892,51 @@ export function AssistantWorkspace({
                 </select>
               </label>
             </div>
-            <div>
-              <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                {text.level}
-              </span>
-              <AiModelTierSelector
-                autoLabel={text.levelAuto}
-                disabled={pending}
-                locale={locale}
-                lockedLabel={text.levelLocked}
-                onChange={(tier) => {
-                  setSelectedTier(tier);
-                  setPromptError(undefined);
-                }}
-                selected={selectedTier}
-                tiers={tiers}
-              />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                  {text.level}
+                </span>
+                <AiModelTierSelector
+                  autoLabel={text.levelAuto}
+                  disabled={pending}
+                  locale={locale}
+                  lockedLabel={text.levelLocked}
+                  onChange={(tier) => {
+                    setSelectedTier(tier);
+                    setPromptError(undefined);
+                  }}
+                  selected={selectedTier}
+                  tiers={tiers}
+                />
+              </div>
+              <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-500">
+                <span>{text.desktopAgent}</span>
+                <select
+                  aria-label={text.desktopAgent}
+                  className="max-w-[220px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800"
+                  disabled={pending || executionTargets.length === 0}
+                  onChange={(event) => {
+                    setSelectedDeviceId(event.target.value);
+                    setPlan(undefined);
+                    setPlanMessageId(undefined);
+                    setExecutionDraft(undefined);
+                    setExecutionRun(undefined);
+                  }}
+                  value={selectedDeviceId}
+                >
+                  {executionTargets.length === 0 ? (
+                    <option value="">{text.noDesktopAgent}</option>
+                  ) : (
+                    executionTargets.map((target) => (
+                      <option key={target.deviceId} value={target.deviceId}>
+                        {target.deviceName} ·{' '}
+                        {target.status === 'online' ? text.desktopOnline : text.desktopOffline}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
             </div>
           </div>
 
@@ -965,6 +1012,11 @@ export function AssistantWorkspace({
             {resolvedProvider === undefined && (
               <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
                 {text.noProvider}
+              </div>
+            )}
+            {mode === 'plan' && selectedExecutionTarget === undefined && (
+              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                {text.noDesktopAgent}
               </div>
             )}
             {attachments.length > 0 && (
@@ -1121,7 +1173,11 @@ export function AssistantWorkspace({
                       : 'bg-slate-950 text-white hover:bg-slate-800'
                   }`}
                   disabled={
-                    pending || executionWorking || plan === undefined || planMessageId === undefined
+                    pending ||
+                    executionWorking ||
+                    plan === undefined ||
+                    planMessageId === undefined ||
+                    plan.workflow.executionTarget.type !== 'desktop'
                   }
                   onClick={() => void prepareExecutionReview()}
                   type="button"

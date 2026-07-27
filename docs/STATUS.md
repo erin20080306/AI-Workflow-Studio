@@ -1575,6 +1575,74 @@ Status: completed
 
 - `fix(web): simplify model disclosure and raise source limit` (follow-up commit)
 
+## Phase 20 production-readiness follow-up — Durable Agent execution
+
+Status: completed
+
+### Implemented
+
+- Replaced the Production in-memory Desktop Agent store with a server-only
+  Supabase adapter for pairing codes, hashed expiring device tokens,
+  authentication touch times, heartbeats, device status, job discovery, atomic
+  claims, leases, progress, completion, failure, cancellation, and revocation.
+- Added atomic service-role database functions for one-time pairing, heartbeat
+  recording, and device revocation. Revocation also invalidates device tokens
+  and cancels active jobs; authenticated browser roles cannot invoke these
+  functions.
+- Synchronized approved Desktop folder aliases in heartbeat metadata without
+  sending or storing local absolute paths. Server records contain only stable
+  alias IDs, display names, and read/watch/write permission summaries.
+- Replaced the Production execution failure placeholder with durable Workflow
+  Run, step, approval, Agent Job, notification, and audit persistence. Reviewed
+  immutable drafts now dispatch only to a Tenant-owned, non-revoked Desktop
+  Agent using a stable idempotency key.
+- Added Production approval, rejection, cancellation, timeout, manual retry,
+  current-attempt step progress, completion, and failure synchronization.
+  Retried runs initialize a new attempt-specific step set, while duplicate
+  Agent events can safely repair an interrupted server-side synchronization.
+- Added real Production device and approved-folder discovery to the Assistant.
+  Plan mode targets the selected Desktop Agent, shows online/offline status, and
+  cannot create an executable review until an Agent is paired.
+- Added real Production device listing and Desktop heartbeat transmission of
+  metadata-only folder aliases. Existing local folder containment,
+  permission, symlink, idempotency, backup, and atomic-output controls remain
+  enforced by the Desktop executor.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed — all code workspaces
+- `pnpm test`: passed — 152 tests across 37 files
+- `pnpm db:test`: passed — fresh migrations, one-time pairing, hashed device
+  tokens, heartbeat persistence, service-role-only functions, revocation,
+  active-job cancellation, tenant isolation, and existing database coverage
+- `pnpm build:web`: passed — 40 generated pages and the Production Agent/Run
+  API routes
+- `pnpm security:scan-client`: passed — 33 built client files inspected
+- `pnpm build:desktop`: passed — main, preload, and renderer builds
+- `pnpm test:e2e`: passed — eight Chromium paths covering Agent authorization,
+  AI conversations and Plans, sources, approvals, schedules, usage, workflows,
+  and Website Studio
+
+### Known limitations
+
+- The new migration and application build have not yet been applied to hosted
+  Supabase or Vercel. Production cannot use this adapter until the migration is
+  applied and the matching Web build is deployed.
+- A real Desktop Agent must be installed, paired, online, and granted the
+  required local folders before a Production workflow can execute. The Web
+  application never receives the local absolute folder paths.
+- OpenAI, Claude, and Gemini responses still depend on valid server-only keys,
+  provider account model access, quota, and billing. Provider failures remain
+  fail-closed with safe customer-facing errors.
+- This follow-up does not add arbitrary code or shell execution. Only the
+  registered, validated Workflow nodes can be dispatched.
+
+### Commit
+
+- `fix(platform): persist production agent execution` (follow-up commit)
+
 ## Phase 21 — Schedules and connectors
 
 Status: completed

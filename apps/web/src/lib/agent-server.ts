@@ -5,17 +5,19 @@ import {
   AgentProtocolError,
   AgentService,
   InMemoryAgentStore,
+  type AgentStore,
   type WebActor,
 } from '@ai-workflow-studio/agent-protocol';
 
 import { requireWorkspaceActor } from './auth/context';
 import { getEnvironment } from './env';
+import { SupabaseAgentStore } from './supabase-agent-store';
 
 const MOCK_PEPPER = 'mock-mode-only-agent-pepper-never-use-in-production';
 
 interface AgentServerState {
   readonly service: AgentService;
-  readonly store: InMemoryAgentStore;
+  readonly store: AgentStore;
 }
 
 const agentGlobal = globalThis as typeof globalThis & {
@@ -37,7 +39,7 @@ function agentPepper(): string {
 }
 
 function createState(): AgentServerState {
-  const store = new InMemoryAgentStore();
+  const store = getEnvironment().mockMode ? new InMemoryAgentStore() : new SupabaseAgentStore();
   return {
     service: new AgentService({
       crypto: new AgentCrypto({ pepper: agentPepper() }),
@@ -48,12 +50,6 @@ function createState(): AgentServerState {
 }
 
 export function getAgentServerState(): AgentServerState {
-  if (!getEnvironment().mockMode) {
-    throw new AgentProtocolError(
-      'AGENT_SERVER_NOT_CONFIGURED',
-      'Durable production Agent persistence is not configured.',
-    );
-  }
   agentGlobal.__aiWorkflowAgentState ??= createState();
   return agentGlobal.__aiWorkflowAgentState;
 }

@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { InMemoryAgentStore } from '@ai-workflow-studio/agent-protocol';
 import { RunOrchestrator, type WorkflowRunView } from '@ai-workflow-studio/run-orchestrator';
 import {
   StepResultSchema,
@@ -11,6 +12,16 @@ import { z } from 'zod';
 import { getAgentServerState, getWebActor } from './agent-server';
 import { getEnvironment } from './env';
 import { MOCK_DEVICE_ID, MOCK_VERSION_ID, MOCK_WORKFLOW, MOCK_WORKFLOW_ID } from './mock-workflows';
+import {
+  cancelProductionRun,
+  getProductionRun,
+  listProductionRuns,
+  resolveProductionRunApproval,
+  retryProductionRun,
+  syncProductionAgentCompletion,
+  syncProductionAgentFailure,
+  syncProductionAgentProgress,
+} from './production-run-server';
 
 const StartMockRunSchema = z
   .object({
@@ -81,7 +92,11 @@ export function getRunOrchestrator(): RunOrchestrator {
         return await getAgentServerState().store.cancelJob(tenantId, jobId, now);
       },
       async enqueue(job) {
-        getAgentServerState().store.seedJob(job);
+        const store = getAgentServerState().store;
+        if (!(store instanceof InMemoryAgentStore)) {
+          throw new Error('Mock Run orchestration requires the in-memory Agent store.');
+        }
+        store.seedJob(job);
       },
     },
   });
@@ -105,6 +120,9 @@ export async function createMockRun(input: unknown) {
 }
 
 export async function ensureMockRun(): Promise<void> {
+  if (!getEnvironment().mockMode) {
+    return;
+  }
   const actor = await getWebActor();
   if (getRunOrchestrator().list(actor).length > 0) {
     return;
@@ -118,12 +136,18 @@ export async function ensureMockRun(): Promise<void> {
 
 export async function listRuns(): Promise<readonly WorkflowRunView[]> {
   const actor = await getWebActor();
+  if (!getEnvironment().mockMode) {
+    return await listProductionRuns(actor);
+  }
   await getRunOrchestrator().sweepExpired();
   return getRunOrchestrator().list(actor);
 }
 
 export async function getRun(runId: string): Promise<WorkflowRunView> {
   const actor = await getWebActor();
+  if (!getEnvironment().mockMode) {
+    return await getProductionRun(actor, runId);
+  }
   await getRunOrchestrator().sweepExpired();
   return getRunOrchestrator().get(actor, runId);
 }
@@ -134,21 +158,40 @@ export async function resolveRunApproval(
   decision: 'approve' | 'reject',
 ): Promise<WorkflowRunView> {
   const actor = await getWebActor();
+  if (!getEnvironment().mockMode) {
+    return await resolveProductionRunApproval(actor, runId, approvalId, decision);
+  }
   return decision === 'approve'
     ? await getRunOrchestrator().approve(actor, runId, approvalId)
     : await getRunOrchestrator().reject(actor, runId, approvalId);
 }
 
 export async function cancelRun(runId: string): Promise<WorkflowRunView> {
-  return await getRunOrchestrator().cancel(await getWebActor(), runId);
+  const actor = await getWebActor();
+  return getEnvironment().mockMode
+    ? await getRunOrchestrator().cancel(actor, runId)
+    : await cancelProductionRun(actor, runId);
 }
 
 export async function retryRun(runId: string): Promise<WorkflowRunView> {
-  return await getRunOrchestrator().retry(await getWebActor(), runId);
+  const actor = await getWebActor();
+  return getEnvironment().mockMode
+    ? await getRunOrchestrator().retry(actor, runId)
+    : await retryProductionRun(actor, runId);
 }
 
 export async function syncAgentProgress(job: AgentJob, input: unknown): Promise<void> {
   const parsed = ProgressSyncSchema.parse(input);
+  if (!getEnvironment().mockMode) {
+    await syncProductionAgentProgress({
+      deviceId: job.deviceId,
+      eventId: parsed.eventId,
+      jobId: job.id,
+      step: parsed.step,
+      tenantId: job.tenantId,
+    });
+    return;
+  }
   await getRunOrchestrator().recordAgentProgress({
     deviceId: job.deviceId,
     eventId: parsed.eventId,
@@ -160,6 +203,15 @@ export async function syncAgentProgress(job: AgentJob, input: unknown): Promise<
 
 export async function syncAgentCompletion(job: AgentJob, input: unknown): Promise<void> {
   const parsed = CompleteSyncSchema.parse(input);
+  if (!getEnvironment().mockMode) {
+    await syncProductionAgentCompletion({
+      deviceId: job.deviceId,
+      eventId: parsed.eventId,
+      jobId: job.id,
+      tenantId: job.tenantId,
+    });
+    return;
+  }
   await getRunOrchestrator().completeAgentJob({
     deviceId: job.deviceId,
     eventId: parsed.eventId,
@@ -170,6 +222,16 @@ export async function syncAgentCompletion(job: AgentJob, input: unknown): Promis
 
 export async function syncAgentFailure(job: AgentJob, input: unknown): Promise<void> {
   const parsed = FailSyncSchema.parse(input);
+  if (!getEnvironment().mockMode) {
+    await syncProductionAgentFailure({
+      deviceId: job.deviceId,
+      error: parsed.error,
+      eventId: parsed.eventId,
+      jobId: job.id,
+      tenantId: job.tenantId,
+    });
+    return;
+  }
   await getRunOrchestrator().failAgentJob({
     deviceId: job.deviceId,
     error: parsed.error,

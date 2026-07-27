@@ -222,6 +222,142 @@ begin
     raise exception 'authenticated users must not call service-role job claims';
   end if;
 
+  if has_function_privilege(
+    'authenticated',
+    'public.complete_agent_pairing(bytea,uuid,text,uuid,bytea,text,timestamp with time zone,timestamp with time zone)',
+    'execute'
+  ) then
+    raise exception 'authenticated users must not complete Desktop Agent pairing';
+  end if;
+
+  if has_function_privilege(
+    'authenticated',
+    'public.record_agent_heartbeat(uuid,uuid,text,boolean,jsonb,timestamp with time zone)',
+    'execute'
+  ) then
+    raise exception 'authenticated users must not record Desktop Agent heartbeats';
+  end if;
+
+  if has_function_privilege(
+    'authenticated',
+    'public.revoke_agent_device(uuid,uuid,timestamp with time zone)',
+    'execute'
+  ) then
+    raise exception 'authenticated users must not revoke Desktop Agents';
+  end if;
+
+  update public.tenant_subscriptions
+  set plan_code = 'team'
+  where tenant_id = '72000000-0000-4000-8000-000000000001';
+
+  select count(*) into result_count
+  from public.complete_agent_pairing(
+    extensions.digest('plaintext-pairing-code', 'sha256'),
+    '73000000-0000-4000-8000-000000000004',
+    '1.2.3-test',
+    '74000000-0000-4000-8000-000000000004',
+    extensions.digest('paired-device-token', 'sha256'),
+    'ce-token',
+    statement_timestamp() + interval '90 days',
+    statement_timestamp()
+  );
+  if result_count <> 1 then
+    raise exception 'first atomic Desktop Agent pairing must succeed';
+  end if;
+
+  select count(*) into result_count
+  from public.complete_agent_pairing(
+    extensions.digest('plaintext-pairing-code', 'sha256'),
+    '73000000-0000-4000-8000-000000000005',
+    '1.2.3-test',
+    '74000000-0000-4000-8000-000000000005',
+    extensions.digest('duplicate-device-token', 'sha256'),
+    'ce-token',
+    statement_timestamp() + interval '90 days',
+    statement_timestamp()
+  );
+  if result_count <> 0 then
+    raise exception 'a consumed Desktop Agent pairing code must not be reused';
+  end if;
+
+  if (
+    select count(*)
+    from public.device_tokens
+    where
+      id = '74000000-0000-4000-8000-000000000004'
+      and device_id = '73000000-0000-4000-8000-000000000004'
+      and tenant_id = '72000000-0000-4000-8000-000000000001'
+  ) <> 1 then
+    raise exception 'atomic pairing must persist exactly one hashed device token';
+  end if;
+
+  select count(*) into result_count
+  from public.record_agent_heartbeat(
+    '72000000-0000-4000-8000-000000000001',
+    '73000000-0000-4000-8000-000000000004',
+    '1.2.4-test',
+    true,
+    '{"folderAliasCount":1}',
+    statement_timestamp()
+  );
+  if result_count <> 1 then
+    raise exception 'a paired Desktop Agent heartbeat must be recorded';
+  end if;
+
+  if (
+    select count(*)
+    from public.device_heartbeats
+    where
+      device_id = '73000000-0000-4000-8000-000000000004'
+      and tenant_id = '72000000-0000-4000-8000-000000000001'
+      and executor_running
+  ) <> 1 then
+    raise exception 'heartbeat metadata must be persisted for the paired device';
+  end if;
+
+  insert into public.agent_jobs (
+    id,
+    tenant_id,
+    device_id,
+    workflow_run_id,
+    payload,
+    idempotency_key
+  )
+  values (
+    '78000000-0000-4000-8000-000000000004',
+    '72000000-0000-4000-8000-000000000001',
+    '73000000-0000-4000-8000-000000000004',
+    '77000000-0000-4000-8000-000000000001',
+    '{"workflow":{"schemaVersion":1}}',
+    'agent-job-revoke'
+  );
+
+  if not public.revoke_agent_device(
+    '72000000-0000-4000-8000-000000000001',
+    '73000000-0000-4000-8000-000000000004',
+    statement_timestamp()
+  ) then
+    raise exception 'the paired Desktop Agent must be revocable';
+  end if;
+
+  if (
+    select status
+    from public.agent_jobs
+    where id = '78000000-0000-4000-8000-000000000004'
+  ) <> 'cancelled' then
+    raise exception 'revocation must cancel active Desktop Agent jobs';
+  end if;
+
+  if (
+    select count(*)
+    from public.device_tokens
+    where
+      id = '74000000-0000-4000-8000-000000000004'
+      and revoked_at is not null
+  ) <> 1 then
+    raise exception 'revocation must revoke the Desktop Agent token';
+  end if;
+
   select count(*) into result_count
   from public.claim_agent_job(
     '72000000-0000-4000-8000-000000000001',

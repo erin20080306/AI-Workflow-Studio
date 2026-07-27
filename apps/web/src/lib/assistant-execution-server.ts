@@ -16,6 +16,7 @@ import {
 import { getAssistantConversation } from '@/lib/assistant-conversation-server';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
+import { startProductionRun } from '@/lib/production-run-server';
 import { getRunOrchestrator } from '@/lib/run-server';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
@@ -275,23 +276,18 @@ export async function createAssistantWorkflowDraft(
 
 export async function startAssistantWorkflowDraftRun(context: WorkspaceContext, draftId: string) {
   assertCanCreate(context);
-  if (!getEnvironment().mockMode) {
-    throw new RunOrchestrationError(
-      'RUN_STATE_CONFLICT',
-      'Production Desktop Agent dispatch is not configured on this server.',
-    );
-  }
-  const draft = memoryDrafts().get(draftId);
-  if (draft === undefined || draft.tenantId !== context.actor.tenantId) {
+  const draft = getEnvironment().mockMode
+    ? memoryDrafts().get(draftId)
+    : await productionDraft(context, draftId);
+  if (draft === undefined || draft.tenantId !== context.actor.tenantId)
     throw new RunOrchestrationError('RUN_NOT_FOUND', 'The reviewed workflow draft was not found.');
-  }
   if (draft.workflow.executionTarget.type !== 'desktop') {
     throw new RunOrchestrationError(
       'RUN_INVALID',
       'Only a reviewed Desktop workflow can be dispatched to the Agent.',
     );
   }
-  const started = await getRunOrchestrator().start(context.actor, {
+  const input = {
     deviceId: draft.workflow.executionTarget.deviceId,
     idempotencyKey: `assistant:${draft.summary.id}`,
     maxAttempts: 3,
@@ -299,10 +295,61 @@ export async function startAssistantWorkflowDraftRun(context: WorkspaceContext, 
     workflow: draft.workflow,
     workflowId: draft.summary.workflowId,
     workflowVersionId: draft.summary.workflowVersionId,
-  });
+  };
+  const started = getEnvironment().mockMode
+    ? await getRunOrchestrator().start(context.actor, input)
+    : await startProductionRun(context.actor, input);
   return {
     draft: draft.summary,
     duplicate: started.duplicate,
     run: started.run,
+  };
+}
+
+async function productionDraft(
+  context: WorkspaceContext,
+  draftId: string,
+): Promise<MemoryDraft | undefined> {
+  const admin = createSupabaseAdminClient();
+  const draftResult = await admin
+    .from('ai_workflow_drafts')
+    .select('*')
+    .eq('tenant_id', context.actor.tenantId)
+    .eq('id', draftId)
+    .maybeSingle();
+  if (draftResult.error !== null) {
+    throw new RunOrchestrationError('RUN_STATE_CONFLICT', 'The workflow draft could not be read.');
+  }
+  if (draftResult.data === null) return undefined;
+  const row = DraftRowSchema.parse(draftResult.data);
+  const versionResult = await admin
+    .from('workflow_versions')
+    .select('definition')
+    .eq('tenant_id', context.actor.tenantId)
+    .eq('workflow_id', row.workflow_id)
+    .eq('id', row.workflow_version_id)
+    .maybeSingle();
+  if (versionResult.error !== null) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The reviewed workflow version could not be read.',
+    );
+  }
+  if (versionResult.data === null) return undefined;
+  const workflow = WorkflowSchema.parse(
+    z.object({ definition: z.unknown() }).parse(versionResult.data).definition,
+  );
+  const hash = await definitionHash(workflow);
+  if (hash !== row.definition_hash) {
+    throw new RunOrchestrationError(
+      'RUN_CONFLICT',
+      'The reviewed workflow definition no longer matches its immutable hash.',
+    );
+  }
+  return {
+    createdBy: row.created_by,
+    summary: summarizeDraft(row, workflow),
+    tenantId: row.tenant_id,
+    workflow,
   };
 }

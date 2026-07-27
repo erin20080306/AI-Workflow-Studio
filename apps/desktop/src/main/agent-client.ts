@@ -82,6 +82,17 @@ export interface AgentClientOptions {
   readonly agentVersion: string;
   readonly executeJob?: AgentJobHandler;
   readonly fetchTransport?: AgentFetch;
+  readonly listFolderAliases?: () => Promise<
+    readonly {
+      readonly displayName: string;
+      readonly folderAliasId: string;
+      readonly permissions: {
+        readonly read: boolean;
+        readonly watch: boolean;
+        readonly write: boolean;
+      };
+    }[]
+  >;
   readonly logger: SafeAgentLogger;
   readonly onStatus: (status: AgentClientStatus) => void;
   readonly vault: SessionVault;
@@ -125,6 +136,7 @@ export class AgentClient {
   private readonly agentVersion: string;
   private readonly executeJobHandler: AgentJobHandler | undefined;
   private readonly fetchTransport: AgentFetch;
+  private readonly listFolderAliases: AgentClientOptions['listFolderAliases'] | undefined;
   private readonly logger: SafeAgentLogger;
   private readonly onStatus: (status: AgentClientStatus) => void;
   private readonly vault: SessionVault;
@@ -143,6 +155,7 @@ export class AgentClient {
     this.agentVersion = options.agentVersion;
     this.executeJobHandler = options.executeJob;
     this.fetchTransport = options.fetchTransport ?? fetch;
+    this.listFolderAliases = options.listFolderAliases;
     this.logger = options.logger;
     this.onStatus = options.onStatus;
     this.vault = options.vault;
@@ -220,6 +233,7 @@ export class AgentClient {
 
   async pollOnce(signal?: AbortSignal): Promise<readonly AgentJob[]> {
     const session = this.requireSession();
+    const folderAliases = (await this.listFolderAliases?.()) ?? [];
     const requestTimestamp = new Date().toISOString();
     const headers = {
       authorization: `Bearer ${session.deviceToken}`,
@@ -233,6 +247,7 @@ export class AgentClient {
           agentVersion: this.agentVersion,
           executorRunning: this.executorRunning,
           metadata: {
+            folderAliases,
             platform: process.platform,
           },
         }),

@@ -97,6 +97,13 @@ describe('AgentClient', () => {
     const client = new AgentClient({
       agentVersion: '0.1.0-test',
       fetchTransport,
+      listFolderAliases: async () => [
+        {
+          displayName: 'Approved imports',
+          folderAliasId: '10000000-0000-4000-8000-000000000825',
+          permissions: { read: true, watch: false, write: false },
+        },
+      ],
       logger: { info: vi.fn(), warn: vi.fn() },
       onStatus: (status) => statuses.push(status),
       vault: {
@@ -125,6 +132,18 @@ describe('AgentClient', () => {
     expect(requests[0]?.body).not.toContain(TOKEN);
     expect(requests[1]?.headers.get('authorization')).toBe(`Bearer ${TOKEN}`);
     expect(requests[1]?.body).not.toContain(TENANT_ID);
+    expect(requests[1]?.body).not.toContain('/Users/');
+    expect(JSON.parse(requests[1]?.body ?? '{}')).toMatchObject({
+      metadata: {
+        folderAliases: [
+          {
+            displayName: 'Approved imports',
+            folderAliasId: '10000000-0000-4000-8000-000000000825',
+            permissions: { read: true, watch: false, write: false },
+          },
+        ],
+      },
+    });
     expect(requests[2]?.url).toBe('https://agent.example.invalid/api/agent/jobs');
   });
 

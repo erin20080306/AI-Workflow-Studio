@@ -374,6 +374,10 @@ async function initialize(): Promise<void> {
   agentClient = new AgentClient({
     agentVersion: app.getVersion(),
     executeJob: async (job, reporter) => await workflowJobExecutor.execute(job, reporter),
+    listFolderAliases: async () => {
+      const deviceId = agentClient?.getSession()?.deviceId;
+      return deviceId === undefined ? [] : await folderGrants.list(deviceId);
+    },
     logger,
     onStatus: (status) => {
       agentStatus = status;
