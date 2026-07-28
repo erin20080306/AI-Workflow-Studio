@@ -1,7 +1,11 @@
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 
-import { getGithubAppConfiguration, githubAppInstallationUrl } from '@/lib/github-app-client';
+import {
+  createGithubOauthSecrets,
+  getGithubAppConfiguration,
+  githubAppInstallationUrl,
+} from '@/lib/github-app-client';
 import {
   GITHUB_OAUTH_COOKIES,
   GITHUB_OAUTH_COOKIE_MAX_AGE_SECONDS,
@@ -22,15 +26,20 @@ export async function GET(request: Request): Promise<Response> {
     await getWebsiteProject(context, query.projectId);
     const state = await getWebsiteGithubState(context);
     if (!state.configured) getGithubAppConfiguration();
+    const configuration = getGithubAppConfiguration();
+    const secrets = createGithubOauthSecrets();
     const cookieStore = await cookies();
-    cookieStore.set(GITHUB_OAUTH_COOKIES.project, query.projectId, {
+    const options = {
       httpOnly: true,
       maxAge: GITHUB_OAUTH_COOKIE_MAX_AGE_SECONDS,
       path: '/api/integrations/github',
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
-    });
-    return Response.redirect(githubAppInstallationUrl(getGithubAppConfiguration().appSlug), 303);
+    } as const;
+    cookieStore.set(GITHUB_OAUTH_COOKIES.project, query.projectId, options);
+    cookieStore.set(GITHUB_OAUTH_COOKIES.state, secrets.state, options);
+    cookieStore.set(GITHUB_OAUTH_COOKIES.verifier, secrets.verifier, options);
+    return Response.redirect(githubAppInstallationUrl(configuration.appSlug, secrets.state), 303);
   } catch (error) {
     return websiteApiError(error);
   }

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { getGithubAppConfiguration } from './github-app-client';
+import { getGithubAppConfiguration, githubAppInstallationUrl } from './github-app-client';
 
 describe('getGithubAppConfiguration', () => {
   afterEach(() => {
@@ -26,5 +26,13 @@ describe('getGithubAppConfiguration', () => {
       clientId: 'Iv1.example-client',
       clientSecret: 'github-client-secret-long-enough',
     });
+  });
+
+  it('binds the installation redirect to the generated OAuth state', () => {
+    expect(
+      githubAppInstallationUrl('ai-workflow-studio-publisher', 'state-with-random-entropy'),
+    ).toBe(
+      'https://github.com/apps/ai-workflow-studio-publisher/installations/new?state=state-with-random-entropy',
+    );
   });
 });

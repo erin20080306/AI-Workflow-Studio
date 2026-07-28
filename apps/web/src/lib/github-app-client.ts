@@ -243,8 +243,10 @@ export async function listGithubInstallationRepositories(
   }
 }
 
-export function githubAppInstallationUrl(appSlug: string): string {
-  return `https://github.com/apps/${encodeURIComponent(appSlug)}/installations/new`;
+export function githubAppInstallationUrl(appSlug: string, state: string): string {
+  const url = new URL(`https://github.com/apps/${encodeURIComponent(appSlug)}/installations/new`);
+  url.searchParams.set('state', state);
+  return url.toString();
 }
 
 export function githubOauthUrl(input: {

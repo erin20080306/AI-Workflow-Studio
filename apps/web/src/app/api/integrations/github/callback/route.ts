@@ -14,6 +14,10 @@ import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-serv
 
 const QuerySchema = z.object({
   code: z.string().min(8).max(500),
+  installation_id: z
+    .string()
+    .regex(/^[1-9][0-9]{0,19}$/)
+    .optional(),
   state: z.string().min(20).max(200),
 });
 
@@ -26,7 +30,8 @@ export async function GET(request: Request): Promise<Response> {
     const context = await requireWorkspaceContext();
     const cookieStore = await cookies();
     const expectedState = cookieStore.get(GITHUB_OAUTH_COOKIES.state)?.value;
-    const installationId = cookieStore.get(GITHUB_OAUTH_COOKIES.installation)?.value;
+    const installationId =
+      cookieStore.get(GITHUB_OAUTH_COOKIES.installation)?.value ?? query.installation_id;
     const projectId = cookieStore.get(GITHUB_OAUTH_COOKIES.project)?.value;
     const verifier = cookieStore.get(GITHUB_OAUTH_COOKIES.verifier)?.value;
     if (
