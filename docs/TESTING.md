@@ -83,11 +83,9 @@ roles cannot mutate those resources; a stored draft must carry all six
 completion steps and required timestamps; only an authorized service RPC can
 publish; and a second release preserves one active slug plus an immutable
 superseded record.
-Customer-domain assertions additionally verify a globally unique hostname
-index, active-state ownership/routing consistency, Tenant-scoped browser reads,
-and service-only mutations. Unit tests reject platform, reserved, wildcard,
-local, IP, path-bearing, and port-bearing claims and verify apex A versus
-subdomain CNAME instructions.
+Platform-subdomain assertions additionally verify reserved-name rejection,
+normalization, DNS-label length, service-only publication, stable re-publishing,
+and globally unique active labels.
 
 ### End to end
 
@@ -130,12 +128,9 @@ the public route. The advanced journey completes purpose, audience, pages,
 brand direction, content, and calls to action, proves incomplete briefs cannot
 create drafts, verifies immutable editing/Undo/Redo and private AI images, and
 proves an unversioned post-draft update fails closed.
-Hosting acceptance additionally opens every generated page through the platform
-wildcard and compatibility path. A real custom-domain acceptance run must use a
-customer-owned disposable hostname, apply the exact provider DNS records,
-observe both ownership and routing verification, then load the homepage and
-every inner-page link over unauthenticated HTTPS. Mock verification is not
-evidence of a working public customer domain.
+Hosting acceptance additionally chooses an unused platform label, publishes,
+and opens every generated page through the resulting wildcard and compatibility
+path. A second project must be unable to reserve the same active label.
 
 Paid-delivery acceptance uses separate Free and paid sessions. Free may create,
 preview, and publish on the platform but cannot download source or initiate a

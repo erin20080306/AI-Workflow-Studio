@@ -2,8 +2,7 @@
 
 ## Current phase
 
-Phase 36 — Customer custom domains (blocked on an external customer-owned test
-hostname)
+Phase 36 — Customer-selected platform subdomains (in progress)
 
 ## Repository baseline
 
@@ -2734,38 +2733,26 @@ Status: completed
 
 - `feat(web): add portable website export` (this phase commit)
 
-## Phase 36 — Customer custom domains
+## Phase 36 — Customer-selected platform subdomains
 
-Status: blocked on production provider configuration and a disposable
-customer-owned acceptance hostname
+Status: in progress
 
 ### Implemented
 
-- Added a globally unique, Tenant-bound `website_custom_domains` claim table
-  with active-state consistency checks, authenticated read-only RLS, and
-  service-role-only mutations.
-- Added paid owner/admin access control. Free, trial, canceled, editor, and
-  viewer customer contexts cannot claim or verify a domain; platform
-  administrators retain an audited support path.
-- Added strict hostname normalization that rejects URLs, ports, wildcards, IP
-  addresses, local/reserved suffixes, Vercel hosts, the platform apex, and every
-  platform subdomain.
-- Added server-only Vercel project-domain registration, idempotent claim retry,
-  ownership verification, provider-recommended DNS instructions, routing
-  configuration checks, and classified provider errors.
-- Added a Website Studio panel that displays the exact TXT/A/CNAME records,
-  ownership and routing state, safe platform fallback URL, and a verification
-  action without exposing provider credentials.
-- Added custom-host proxy routing to the same current immutable publication and
-  safe public asset endpoint used by platform-hosted sites. Client-supplied
-  internal routing headers are removed, and inactive or unverified claims fail
-  closed with a public 404.
-- Added metadata-only domain audit events using a hostname fingerprint. DNS
-  values, Vercel responses, provider tokens, and generated site content are not
-  written to the audit log.
-- Applied hosted Supabase migration
-  `202607280010_customer_custom_domains.sql` and verified the local/remote
-  migration histories match.
+- The user clarified that customer-owned external domains are not part of the
+  desired product. The required experience is a customer-selected label on the
+  existing verified wildcard:
+  `{customer-name}.sites.erin-aiworkflowstudio.com`.
+- The previously applied
+  `202607280010_customer_custom_domains.sql` migration remains immutable in
+  migration history but its external-domain table is not exposed by application
+  routes or UI.
+- Phase 36 now adds normalized 3–63 character platform labels, reserved-name
+  rejection, authenticated availability checks, globally unique active
+  publication reservation, stable re-publication, and transactional collision
+  protection.
+- Free and paid customers may publish on the platform wildcard. Customer source
+  ZIP and future GitHub delivery remain paid-only.
 - Added future Phase 37 AI-first website briefs, Phase 38 paid GitHub site
   publishing, Phase 39 guided safe payment/API integrations, and Phase 40
   end-to-end website delivery acceptance to the execution plan. Free users
@@ -2774,33 +2761,26 @@ customer-owned acceptance hostname
 
 ### Validation
 
-- Focused hostname, routing, access, and environment tests: passed — 30 tests
-- `pnpm db:test`: passed — fresh migrations, globally unique domain index,
-  Tenant-scoped reads, and service-only mutations
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
-- `pnpm typecheck`: passed
-- `pnpm test`: passed — 239 tests across 51 files
-- `pnpm build:web`: passed — 42 generated application pages, including custom
-  domain claim/verify APIs and public host route. The initial sandboxed attempt
-  could not bind a Turbopack worker port; the permitted unrestricted retry
-  compiled and generated every route successfully.
-- `pnpm build:desktop`: not applicable — no Desktop code changed
+- `pnpm typecheck`: passed after regenerating the current Next.js route types
+- `pnpm test`: passed — 222 tests across 49 files
+- `pnpm db:test`: passed against a fresh local database, including restricted
+  RPC access, stable re-publication, and selected-label coverage
+- `pnpm build:web`: passed — 42 routes, including the authenticated subdomain
+  availability API and excluding the discarded external-domain routes
+- `pnpm security:scan-client`: passed — 34 client files scanned
+- `pnpm build:desktop`: not applicable — no desktop files changed
+- `pnpm exec supabase db push --linked`: passed — applied
+  `202607280011_platform_subdomain_names.sql` to the linked production project
 
-### Production state and blocker
+### Production state
 
-- The existing Vercel Production deployment and aliases were inspected and
-  reported `Ready`. Unauthenticated HTTPS returned `200 OK` for the platform
-  homepage, Website Studio route, and a real wildcard customer-site host.
-- The Vercel Production project now contains server-only
-  `VERCEL_CUSTOM_DOMAIN_TOKEN`, `VERCEL_CUSTOM_DOMAIN_PROJECT_ID`, and
-  `VERCEL_CUSTOM_DOMAIN_TEAM_ID`. The environment-variable names were verified
-  without revealing the Token value, and the latest user-triggered Production
-  redeployment reported `Ready`.
-- Completing the Phase 36 acceptance gate still requires one disposable
-  customer-owned hostname outside `erin-aiworkflowstudio.com`. Both ownership
-  and routing must pass Vercel, then `/` and all generated inner pages must
-  return the expected public site over HTTPS.
+- Production deployment `dpl_H32fMXciBNzBiWkXoLndFReU27Y4` is Ready and the
+  platform homepage plus an existing wildcard inner page returned `200`.
+- The three temporary external-domain environment variables are no longer
+  required and must be removed after the replacement build is deployed. Any
+  token created solely for that discarded scope should be revoked.
 - The default Website Studio brief is still the six-step questionnaire. The
   user-approved Phase 37 design replaces it with one natural-language direction
   prompt, bounded AI follow-ups, an inferred review summary, and the existing

@@ -188,19 +188,12 @@ renderer uses registered components, ID-based approved assets, a restrictive
 CSP, and no customer script/form/external-URL execution path. See
 [`WEBSITE_STUDIO.md`](./WEBSITE_STUDIO.md).
 
-Customer hostname claims are globally unique and written only by the
-authenticated server after it derives the Tenant, project, actor, subscription,
-and role. Free, trial, canceled, editor, and viewer customer contexts cannot
-claim or verify a hostname. Platform, reserved, wildcard, IP, local, and Vercel
-hostnames are rejected. A hostname routes publicly only while its claim is
-active and both provider ownership and DNS routing checks are true.
-
-The Vercel domain token, project identifiers, DNS-provider sessions, and TLS
-private keys never enter Website Specs, browser state, generated documents,
-exports, or audit metadata. Audit events store a hostname fingerprint, internal
-domain identifier, record types, state, and outcome—not DNS record values or
-provider responses. Public custom-host requests strip client-supplied internal
-routing headers and resolve only the current immutable active publication.
+Platform subdomain labels are normalized and checked by the authenticated
+server. Reserved system names and invalid DNS labels are rejected. A partial
+unique index protects the active publication label globally, and the publishing
+transaction fails without superseding the current release when another project
+already owns that label. Customers never receive Vercel, DNS, or TLS
+credentials.
 
 Portable source and future GitHub releases reuse the registered-component static
 renderer. They must not include provider keys, OAuth tokens, payment secrets,

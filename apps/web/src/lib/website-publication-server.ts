@@ -13,7 +13,11 @@ import { z } from 'zod';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
-import { normalizeCustomerHostname } from '@/lib/website-custom-domain';
+import {
+  defaultWebsiteSiteSlug,
+  normalizeWebsiteSiteSlug,
+  websiteSiteUrl,
+} from '@/lib/website-site-host';
 import { getWebsiteSpecVersion } from '@/lib/website-spec-server';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
@@ -59,10 +63,6 @@ function publicationView(row: z.infer<typeof WebsitePublicationRowSchema>): Webs
     ...(row.superseded_at === null ? {} : { supersededAt: row.superseded_at }),
     version: row.spec_version,
   });
-}
-
-function publicSlug(projectSlug: string, projectId: string): string {
-  return `${projectSlug}-${projectId.replaceAll('-', '').slice(0, 8)}`;
 }
 
 function memoryPublicationView(publication: MemoryPublication): WebsitePublication {
@@ -129,6 +129,20 @@ export async function publishWebsite(
     throw new WebsiteStudioError('WEBSITE_NOT_FOUND', 'The website version was not found.');
   }
   WebsiteSpecSchema.parse(generation.spec);
+  const existingPublication = await getActiveWebsitePublication(context, project.id);
+  let requestedSiteSlug: string;
+  try {
+    requestedSiteSlug = normalizeWebsiteSiteSlug(
+      input.siteSlug ??
+        existingPublication?.slug ??
+        defaultWebsiteSiteSlug(project.slug, project.id),
+    );
+  } catch {
+    throw new WebsiteStudioError(
+      'WEBSITE_INVALID',
+      'Choose a valid platform subdomain name using lowercase letters, numbers, and hyphens.',
+    );
+  }
 
   if (getEnvironment().mockMode) {
     const now = new Date().toISOString();
@@ -142,13 +156,26 @@ export async function publishWebsite(
           }
         : publication,
     );
-    const slug = publicSlug(project.slug, project.id);
+    const conflict = [...memoryPublications().values()]
+      .flat()
+      .some(
+        (publication) =>
+          publication.slug === requestedSiteSlug &&
+          publication.status === 'active' &&
+          publication.projectId !== project.id,
+      );
+    if (conflict) {
+      throw new WebsiteStudioError(
+        'WEBSITE_STATE_CONFLICT',
+        'This platform subdomain name is already in use.',
+      );
+    }
     const publication: MemoryPublication = {
       id: crypto.randomUUID(),
       projectId: project.id,
-      publicPath: `/s/${slug}`,
+      publicPath: `/s/${requestedSiteSlug}`,
       publishedAt: now,
-      slug,
+      slug: requestedSiteSlug,
       spec: generation.spec,
       status: 'active',
       tenantId: context.actor.tenantId,
@@ -158,8 +185,9 @@ export async function publishWebsite(
     return memoryPublicationView(publication);
   }
 
-  const result = await createSupabaseAdminClient().rpc('publish_website', {
+  const result = await createSupabaseAdminClient().rpc('publish_website_with_slug', {
     actor_user_id: context.actor.userId,
+    requested_slug: requestedSiteSlug,
     target_project_id: project.id,
     target_spec_version: input.version,
     target_tenant_id: context.actor.tenantId,
@@ -178,6 +206,60 @@ export async function publishWebsite(
     );
   }
   return publication;
+}
+
+export async function getWebsiteSiteSlugAvailability(
+  context: WorkspaceContext,
+  projectId: string,
+  slugValue: string,
+): Promise<{
+  readonly available: boolean;
+  readonly normalizedSlug: string;
+  readonly publicUrl: string;
+}> {
+  const project = await getWebsiteProject(context, projectId);
+  let normalizedSlug: string;
+  try {
+    normalizedSlug = normalizeWebsiteSiteSlug(slugValue);
+  } catch {
+    throw new WebsiteStudioError(
+      'WEBSITE_INVALID',
+      'Choose 3–63 lowercase letters, numbers, or hyphens and avoid reserved names.',
+    );
+  }
+  if (getEnvironment().mockMode) {
+    const conflict = [...memoryPublications().values()]
+      .flat()
+      .some(
+        (publication) =>
+          publication.slug === normalizedSlug &&
+          publication.status === 'active' &&
+          publication.projectId !== project.id,
+      );
+    return {
+      available: !conflict,
+      normalizedSlug,
+      publicUrl: websiteSiteUrl(normalizedSlug),
+    };
+  }
+  const result = await createSupabaseAdminClient()
+    .from('website_publications')
+    .select('project_id')
+    .eq('slug', normalizedSlug)
+    .eq('status', 'active')
+    .maybeSingle();
+  const row = z.object({ project_id: z.string().uuid() }).strict().safeParse(result.data);
+  if (result.error !== null) {
+    throw new WebsiteStudioError(
+      'WEBSITE_STATE_CONFLICT',
+      'The platform subdomain name could not be checked.',
+    );
+  }
+  return {
+    available: result.data === null || (row.success && row.data.project_id === project.id),
+    normalizedSlug,
+    publicUrl: websiteSiteUrl(normalizedSlug),
+  };
 }
 
 export interface PublishedWebsite {
@@ -240,42 +322,4 @@ export async function getPublishedWebsiteBySlug(
   if (publicationResult.error !== null || publicationResult.data === null) return undefined;
   const row = WebsitePublicationRowSchema.parse(publicationResult.data);
   return publishedWebsiteFromRow(row);
-}
-
-export async function getPublishedWebsiteByDomain(
-  hostnameValue: string,
-): Promise<PublishedWebsite | undefined> {
-  let hostname: string;
-  try {
-    hostname = normalizeCustomerHostname(hostnameValue);
-  } catch {
-    return undefined;
-  }
-  if (getEnvironment().mockMode) return undefined;
-  const admin = createSupabaseAdminClient();
-  const domainResult = await admin
-    .from('website_custom_domains')
-    .select('project_id, tenant_id')
-    .eq('hostname', hostname)
-    .eq('status', 'active')
-    .eq('ownership_verified', true)
-    .eq('routing_verified', true)
-    .maybeSingle();
-  const domain = z
-    .object({
-      project_id: z.string().uuid(),
-      tenant_id: z.string().uuid(),
-    })
-    .strict()
-    .safeParse(domainResult.data);
-  if (domainResult.error !== null || !domain.success) return undefined;
-  const publicationResult = await admin
-    .from('website_publications')
-    .select('id, project_id, published_at, slug, spec_version, status, superseded_at, tenant_id')
-    .eq('tenant_id', domain.data.tenant_id)
-    .eq('project_id', domain.data.project_id)
-    .eq('status', 'active')
-    .maybeSingle();
-  if (publicationResult.error !== null || publicationResult.data === null) return undefined;
-  return publishedWebsiteFromRow(WebsitePublicationRowSchema.parse(publicationResult.data));
 }

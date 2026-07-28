@@ -23,9 +23,6 @@ describe('parseEnvironment', () => {
         openai: 'gpt-5.6-sol',
       },
       supabaseConfigured: false,
-      vercelCustomDomains: {
-        configured: false,
-      },
     });
   });
 
@@ -99,26 +96,5 @@ describe('parseEnvironment', () => {
         MICROSOFT_STORE_PLAN_MAPPINGS: '[{"plan":"unlimited"}]',
       }),
     ).toThrowError('Invalid environment configuration: MICROSOFT_STORE_PLAN_MAPPINGS');
-  });
-
-  it('enables customer-domain automation only with a server project and token', () => {
-    expect(
-      parseEnvironment({
-        VERCEL_CUSTOM_DOMAIN_PROJECT_ID: 'prj_customer_sites',
-        VERCEL_CUSTOM_DOMAIN_TEAM_ID: 'team_customer_sites',
-        VERCEL_CUSTOM_DOMAIN_TOKEN: 'server-only-vercel-token-value',
-      }).vercelCustomDomains,
-    ).toEqual({
-      configured: true,
-      projectId: 'prj_customer_sites',
-      teamId: 'team_customer_sites',
-      token: 'server-only-vercel-token-value',
-    });
-
-    expect(
-      parseEnvironment({
-        VERCEL_CUSTOM_DOMAIN_PROJECT_ID: 'prj_customer_sites',
-      }).vercelCustomDomains.configured,
-    ).toBe(false);
   });
 });

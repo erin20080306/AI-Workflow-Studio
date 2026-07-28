@@ -111,7 +111,7 @@ true` request for one exact existing version.
 
 ## Follow-on hosting work
 
-- Customer custom-domain verification and routing.
+- Customer-selected labels on the verified platform wildcard.
 - Per-site independent deployment projects where commercially required.
 - Generated sitemap/robots indexes for multi-page sites.
 - Publication-history and rollback controls in the member UI.

@@ -118,6 +118,20 @@ describe('Prompt-to-site conversation and publishing validation', () => {
     ).toThrow();
     expect(() => WebsitePublishInputSchema.parse({ confirmed: false, version: 1 })).toThrow();
     expect(
+      WebsitePublishInputSchema.parse({
+        confirmed: true,
+        siteSlug: 'erin-studio',
+        version: 1,
+      }).siteSlug,
+    ).toBe('erin-studio');
+    expect(() =>
+      WebsitePublishInputSchema.parse({
+        confirmed: true,
+        siteSlug: 'invalid_slug',
+        version: 1,
+      }),
+    ).toThrow();
+    expect(
       WebsitePublicationSchema.parse({
         id: 'a1000000-0000-4000-8000-000000000001',
         projectId: 'a2000000-0000-4000-8000-000000000001',

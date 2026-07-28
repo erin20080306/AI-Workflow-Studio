@@ -410,6 +410,15 @@ select tests.assert_true(
   'website publishing must require the authenticated server service'
 );
 
+select tests.assert_true(
+  not has_function_privilege(
+    'authenticated',
+    'public.publish_website_with_slug(uuid,uuid,uuid,integer,text)',
+    'execute'
+  ),
+  'platform subdomain publishing must require the authenticated server service'
+);
+
 reset role;
 set local role service_role;
 
@@ -498,18 +507,20 @@ values
     'direct'
   );
 
-select public.publish_website(
+select public.publish_website_with_slug(
   'e1000000-0000-4000-8000-000000000001',
   'e2000000-0000-4000-8000-000000000001',
   'e3000000-0000-4000-8000-000000000003',
-  1
+  1,
+  'customer-chosen-name'
 );
 
-select public.publish_website(
+select public.publish_website_with_slug(
   'e1000000-0000-4000-8000-000000000001',
   'e2000000-0000-4000-8000-000000000001',
   'e3000000-0000-4000-8000-000000000003',
-  2
+  2,
+  'customer-chosen-name'
 );
 
 select tests.assert_true(
@@ -521,6 +532,16 @@ select tests.assert_true(
       and status = 'active'
   ),
   'publishing a new immutable release must supersede the prior active release'
+);
+
+select tests.assert_true(
+  (
+    select slug = 'customer-chosen-name'
+    from public.website_publications
+    where project_id = 'e3000000-0000-4000-8000-000000000003'
+      and status = 'active'
+  ),
+  'the customer-selected platform subdomain label must remain stable across releases'
 );
 
 select tests.assert_true(

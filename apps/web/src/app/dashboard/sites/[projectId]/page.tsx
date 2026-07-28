@@ -8,8 +8,6 @@ import { buildAiTierOptions } from '@/lib/ai-model-selection';
 import { requireWorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { buildWebsiteGenerationModelOptions } from '@/lib/website-generation-models';
-import { canManageWebsiteCustomDomains } from '@/lib/website-custom-domain-access';
-import { listWebsiteCustomDomains } from '@/lib/website-custom-domain-server';
 import { listWebsiteBriefMessages } from '@/lib/website-prompt-server';
 import { getActiveWebsitePublication } from '@/lib/website-publication-server';
 import {
@@ -36,26 +34,22 @@ export default async function WebsiteBriefPage({
   const context = await requireWorkspaceContext();
   try {
     const project = await getWebsiteProject(context, parsed.data.projectId);
-    const [generation, versions, mappings, messages, publication, domains] = await Promise.all([
+    const [generation, versions, mappings, messages, publication] = await Promise.all([
       getWebsiteSpecGeneration(context, project.id),
       listWebsiteSpecGenerations(context, project.id),
       listAccountAvailableAiModelMappings(),
       listWebsiteBriefMessages(context, project.id),
       getActiveWebsitePublication(context, project.id),
-      listWebsiteCustomDomains(context, project.id),
     ]);
     return (
       <WebsiteBriefWorkspace
         canExportWebsite={canDownloadWebsiteExport(context)}
-        canManageCustomDomains={canManageWebsiteCustomDomains(context)}
         initialGeneration={generation === undefined ? undefined : websiteSpecClientView(generation)}
-        initialDomains={domains}
         initialMessages={messages}
         initialPublication={publication}
         initialProject={project}
         initialVersions={versions.map(websiteSpecClientView)}
         modelOptions={buildWebsiteGenerationModelOptions(getEnvironment())}
-        providerConfigured={getEnvironment().vercelCustomDomains.configured}
         tierOptions={buildAiTierOptions(context.subscription.plan, mappings)}
       />
     );

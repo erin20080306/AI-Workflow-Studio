@@ -2,7 +2,6 @@
 
 import {
   WebsiteGeneratedAssetSchema,
-  type WebsiteCustomDomain,
   type WebsitePublication,
   WebsiteSpecClientGenerationSchema,
   WebsiteThemeSchema,
@@ -202,25 +201,21 @@ function sectionFieldValue(section: WebsiteSection | undefined, field: EditableF
 
 export function WebsiteSpecEditor({
   canExportWebsite,
-  canManageCustomDomains,
   initialGeneration,
-  initialDomains,
   initialPublication,
   initialVersions,
   modelOptions,
   projectId,
-  providerConfigured,
+  suggestedSiteSlug,
   tierOptions,
 }: Readonly<{
   canExportWebsite: boolean;
-  canManageCustomDomains: boolean;
   initialGeneration: WebsiteSpecClientGeneration;
-  initialDomains: readonly WebsiteCustomDomain[];
   initialPublication: WebsitePublication | undefined;
   initialVersions: readonly WebsiteSpecClientGeneration[];
   modelOptions: readonly WebsiteGenerationModelOption[];
   projectId: string;
-  providerConfigured: boolean;
+  suggestedSiteSlug: string;
   tierOptions: readonly AiTierOption[];
 }>) {
   const { locale } = useLanguage();
@@ -821,12 +816,10 @@ export function WebsiteSpecEditor({
 
       <WebsitePreviewCanvas generation={generation} projectId={projectId} />
       <WebsitePublishPanel
-        canManageCustomDomains={canManageCustomDomains}
         generation={generation}
-        initialDomains={initialDomains}
         initialPublication={initialPublication}
         projectId={projectId}
-        providerConfigured={providerConfigured}
+        suggestedSiteSlug={suggestedSiteSlug}
       />
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_1.2fr]">

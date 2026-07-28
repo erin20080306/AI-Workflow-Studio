@@ -36,21 +36,14 @@ export {
   type WebsitePromptStartInput,
 } from './conversation';
 export {
-  WebsiteCustomDomainClaimInputSchema,
-  WebsiteCustomDomainSchema,
-  WebsiteCustomDomainStatusSchema,
-  WebsiteDnsRecordSchema,
-  WebsiteDnsRecordTypeSchema,
   WebsitePublicationSchema,
   WebsitePublicationStatusSchema,
   WebsitePublishInputSchema,
-  type WebsiteCustomDomain,
-  type WebsiteCustomDomainClaimInput,
-  type WebsiteCustomDomainStatus,
-  type WebsiteDnsRecord,
+  WebsiteSiteSlugAvailabilitySchema,
   type WebsitePublication,
   type WebsitePublicationStatus,
   type WebsitePublishInput,
+  type WebsiteSiteSlugAvailability,
 } from './publication';
 export {
   WEBSITE_SPEC_PROVIDER_JSON_SCHEMA,

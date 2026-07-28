@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  defaultWebsiteSiteSlug,
   isPublishedWebsiteAssetPath,
+  normalizeWebsiteSiteSlug,
   websiteSiteRewritePath,
   websiteSiteSlugFromHost,
   websiteSiteUrl,
@@ -44,6 +46,22 @@ describe('website wildcard host routing', () => {
 
   it('builds the stable HTTPS platform subdomain', () => {
     expect(websiteSiteUrl(slug)).toBe(`https://${slug}.sites.erin-aiworkflowstudio.com`);
-    expect(() => websiteSiteUrl('bad_slug')).toThrow();
+    expect(websiteSiteUrl('bad_slug')).toBe('https://bad-slug.sites.erin-aiworkflowstudio.com');
+  });
+
+  it('normalizes a customer-selected label while rejecting system names', () => {
+    expect(normalizeWebsiteSiteSlug('  Erin Studio 2026 ')).toBe('erin-studio-2026');
+    expect(normalizeWebsiteSiteSlug('ERIN__SHOP')).toBe('erin-shop');
+    expect(() => normalizeWebsiteSiteSlug('www')).toThrow();
+    expect(() => normalizeWebsiteSiteSlug('中文網站')).toThrow();
+  });
+
+  it('creates a DNS-safe default label with a stable project suffix', () => {
+    const generated = defaultWebsiteSiteSlug(
+      'this-project-name-is-intentionally-longer-than-a-single-friendly-prefix',
+      'a45676dc-89ac-69a7-39d3-45c2a6d7aa64',
+    );
+    expect(generated).toBe('this-project-name-is-intentionally-long-a45676dc');
+    expect(generated.length).toBeLessThanOrEqual(63);
   });
 });
