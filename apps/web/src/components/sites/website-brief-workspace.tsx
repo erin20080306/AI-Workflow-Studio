@@ -198,6 +198,7 @@ function updatePageField(
 }
 
 export function WebsiteBriefWorkspace({
+  canExportWebsite,
   initialGeneration,
   initialMessages,
   initialPublication,
@@ -206,6 +207,7 @@ export function WebsiteBriefWorkspace({
   modelOptions,
   tierOptions,
 }: Readonly<{
+  canExportWebsite: boolean;
   initialGeneration: WebsiteSpecClientGeneration | undefined;
   initialMessages: readonly WebsiteBriefMessage[];
   initialPublication: WebsitePublication | undefined;
@@ -773,6 +775,7 @@ export function WebsiteBriefWorkspace({
       {locked ? (
         <div className="mt-5">
           <WebsiteSpecGenerator
+            canExportWebsite={canExportWebsite}
             initialGeneration={generation}
             initialPublication={initialPublication}
             initialVersions={initialVersions}

@@ -15,6 +15,7 @@ import {
   listWebsiteSpecGenerations,
   websiteSpecClientView,
 } from '@/lib/website-spec-server';
+import { canDownloadWebsiteExport } from '@/lib/website-static-export-access';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
 export const metadata: Metadata = {
@@ -42,6 +43,7 @@ export default async function WebsiteBriefPage({
     ]);
     return (
       <WebsiteBriefWorkspace
+        canExportWebsite={canDownloadWebsiteExport(context)}
         initialGeneration={generation === undefined ? undefined : websiteSpecClientView(generation)}
         initialMessages={messages}
         initialPublication={publication}

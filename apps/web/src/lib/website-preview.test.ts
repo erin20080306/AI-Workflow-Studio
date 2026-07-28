@@ -10,6 +10,8 @@ import {
 import {
   renderWebsitePreviewDocument,
   renderWebsitePublishedDocument,
+  renderWebsiteStaticDocument,
+  websiteStaticPagePath,
 } from './website-preview-renderer';
 
 const spec = WebsiteSpecSchema.parse({
@@ -100,6 +102,42 @@ describe('website preview', () => {
     );
     expect(html).toContain('href="/home"');
     expect(html).not.toContain('href="/s/product-site-a1000000/home"');
+  });
+
+  it('renders portable static navigation to deterministic HTML files', () => {
+    const multiPage = WebsiteSpecSchema.parse({
+      ...spec,
+      navigation: {
+        ...spec.navigation,
+        items: [
+          { label: 'Home', pageSlug: 'home' },
+          { label: 'Services', pageSlug: 'services' },
+        ],
+      },
+      pages: [
+        ...spec.pages,
+        {
+          metaDescription: 'A second portable website page for testing.',
+          sections: [
+            {
+              body: 'Portable static content stays inside the downloaded archive.',
+              id: 'services-content',
+              layout: 'text',
+              title: 'Services',
+              type: 'content',
+            },
+          ],
+          slug: 'services',
+          title: 'Services',
+        },
+      ],
+    });
+    const html = renderWebsiteStaticDocument(multiPage, 'services');
+    expect(websiteStaticPagePath(multiPage, 'home')).toBe('index.html');
+    expect(websiteStaticPagePath(multiPage, 'services')).toBe('page-services.html');
+    expect(html).toContain('href="index.html"');
+    expect(html).toContain('href="page-services.html"');
+    expect(html).not.toContain('/s/');
   });
 
   it('renders deterministically and keeps asset references inside registered markup', () => {

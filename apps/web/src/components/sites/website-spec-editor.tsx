@@ -78,6 +78,11 @@ const copy = {
     direct: 'Direct property controls',
     duplicate: 'Duplicate',
     editing: 'Saving a validated version…',
+    exportHelp:
+      'Download any exact version as a portable static ZIP with HTML, local assets, a manifest, and SHA-256 integrity metadata.',
+    exportPaid: 'ZIP export is included with active paid subscriptions.',
+    exportRequiresPaid: 'Paid plan required',
+    exportZip: 'Export ZIP',
     failed: 'The edit could not be validated or saved.',
     history: 'Version history',
     imageAlt: 'Accessible alternative text',
@@ -132,6 +137,11 @@ const copy = {
     direct: '直接屬性控制',
     duplicate: '複製區塊',
     editing: '正在儲存已驗證版本…',
+    exportHelp:
+      '可將任一指定版本下載為靜態網站 ZIP，內含 HTML、本機素材、manifest 與 SHA-256 完整性資料。',
+    exportPaid: 'ZIP 匯出包含在有效付費訂閱方案內。',
+    exportRequiresPaid: '需付費方案',
+    exportZip: '匯出 ZIP',
     failed: '修改未通過驗證，或目前無法儲存。',
     history: '版本紀錄',
     imageAlt: '無障礙替代文字',
@@ -190,6 +200,7 @@ function sectionFieldValue(section: WebsiteSection | undefined, field: EditableF
 }
 
 export function WebsiteSpecEditor({
+  canExportWebsite,
   initialGeneration,
   initialPublication,
   initialVersions,
@@ -197,6 +208,7 @@ export function WebsiteSpecEditor({
   projectId,
   tierOptions,
 }: Readonly<{
+  canExportWebsite: boolean;
   initialGeneration: WebsiteSpecClientGeneration;
   initialPublication: WebsitePublication | undefined;
   initialVersions: readonly WebsiteSpecClientGeneration[];
@@ -847,6 +859,9 @@ export function WebsiteSpecEditor({
 
         <article className="rounded-2xl border border-slate-200 p-4 sm:p-5">
           <h4 className="text-sm font-semibold text-slate-950">{text.history}</h4>
+          <p className="mt-1 text-[11px] leading-5 text-slate-500">
+            {canExportWebsite ? text.exportHelp : text.exportPaid}
+          </p>
           <div className="mt-3 max-h-80 space-y-2 overflow-auto pr-1">
             {versions.map((version) => (
               <div
@@ -871,20 +886,35 @@ export function WebsiteSpecEditor({
                     )}
                   </p>
                 </div>
-                {version.version === generation.version ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800">
-                    <CheckIcon className="size-3.5" /> {text.current}
-                  </span>
-                ) : (
-                  <button
-                    className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-[10px] font-semibold text-slate-700 disabled:opacity-40"
-                    disabled={busy}
-                    onClick={() => void restoreVersion(version.version, 'history')}
-                    type="button"
-                  >
-                    {text.restore}
-                  </button>
-                )}
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  {canExportWebsite ? (
+                    <a
+                      className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-[10px] font-semibold text-indigo-700"
+                      download
+                      href={`/api/websites/${projectId}/versions/${version.version}/export`}
+                    >
+                      ↓ {text.exportZip}
+                    </a>
+                  ) : (
+                    <span className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-[10px] font-semibold text-slate-500">
+                      {text.exportRequiresPaid}
+                    </span>
+                  )}
+                  {version.version === generation.version ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800">
+                      <CheckIcon className="size-3.5" /> {text.current}
+                    </span>
+                  ) : (
+                    <button
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-[10px] font-semibold text-slate-700 disabled:opacity-40"
+                      disabled={busy}
+                      onClick={() => void restoreVersion(version.version, 'history')}
+                      type="button"
+                    >
+                      {text.restore}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

@@ -58,6 +58,7 @@ const copy = {
 } as const;
 
 export function WebsiteSpecGenerator({
+  canExportWebsite,
   initialGeneration,
   initialPublication,
   initialVersions,
@@ -65,6 +66,7 @@ export function WebsiteSpecGenerator({
   projectId,
   tierOptions,
 }: Readonly<{
+  canExportWebsite: boolean;
   initialGeneration: WebsiteSpecClientGeneration | undefined;
   initialPublication: WebsitePublication | undefined;
   initialVersions: readonly WebsiteSpecClientGeneration[];
@@ -178,6 +180,7 @@ export function WebsiteSpecGenerator({
             ))}
           </dl>
           <WebsiteSpecEditor
+            canExportWebsite={canExportWebsite}
             initialGeneration={generation}
             initialPublication={initialPublication}
             initialVersions={initialVersions.length === 0 ? [generation] : initialVersions}

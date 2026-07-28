@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 34 — Tenant wildcard subdomain hosting (completed)
+Phase 35 — Portable static website export (completed)
 
 ## Repository baseline
 
@@ -2644,3 +2644,91 @@ Status: completed
 ### Commit
 
 - `feat(web): add wildcard site hosting` (this phase commit)
+
+## Phase 35 — Portable static website export
+
+Status: completed
+
+### Implemented
+
+- Added an authenticated, tenant-scoped export route for one exact immutable
+  Website Studio version:
+  `/api/websites/{projectId}/versions/{versionNumber}/export`.
+- Added a deterministic ZIP builder that emits portable `index.html` and
+  `page-{slug}.html` files, validated local PNG assets, a machine-readable
+  manifest, a human-readable README, and per-file SHA-256 integrity metadata.
+- Kept exported navigation and image references local to the archive. The
+  exported document does not depend on dashboard sessions, platform API paths,
+  wildcard rewrites, or a running AI Workflow Studio server.
+- Reused the registered-component safe renderer and rejected missing assets,
+  invalid PNG content, unsupported asset references, path traversal, excessive
+  file counts, and oversized archives before download.
+- Added metadata-only `website.export.downloaded` audit events. Exported content,
+  prompts, credentials, provider responses, and asset bytes are not written to
+  the audit log.
+- Added an exact-version `Export ZIP` action to every Website Studio version
+  history row, including clear copy that the archive contains local HTML,
+  assets, manifest metadata, and SHA-256 checksums.
+- Restricted customer ZIP downloads to active paid plans, including the
+  existing billing grace state. Free, trial, canceled, and incomplete customer
+  subscriptions receive no download action and are rejected again by the
+  server route. Platform administrators retain support and production-QA
+  access without becoming a customer-plan bypass.
+- Confirmed Website Studio AI discovery, initial generation,
+  natural-language modification, and image generation already reserve and
+  settle against the Tenant monthly AI cost allowance. Model-tier access and
+  single-request ceilings continue to follow the subscription plan.
+- Added `fflate` for bounded in-memory ZIP generation without temporary
+  secret-bearing application state.
+- Deployed Vercel Production deployment
+  `dpl_GcCjW5aywd8RigHcM5ua44KyJ4uM` and aliased it to
+  `https://www.erin-aiworkflowstudio.com`.
+
+### Production acceptance
+
+- An authenticated administrator downloaded
+  `site-a45676dc-v5.zip` from the production Website Studio editor.
+- The archive SHA-256 is
+  `d2320c8d557633331f88995798d01a36f33346f9d1d6bf17130ccc32a589b24d`.
+- `unzip -t` passed for all seven files. The archive contained four portable
+  pages (`index`, `services`, `story`, and `contact`), `manifest.json`,
+  `integrity.sha256`, and `README.txt`.
+- `shasum -a 256 -c integrity.sha256` passed for every listed file.
+- Every navigation target resolved to another local HTML file. Acceptance scans
+  found no platform `/api/` or `/s/` dependency, script element, traversal
+  segment, or absolute local-system path.
+- After the paid-plan gate deployment, the platform administrator support path
+  downloaded the same v5 archive again with the identical deterministic
+  SHA-256. Unit acceptance covers denial for free, trial, canceled, and
+  incomplete customer subscriptions.
+- Browser interaction followed the production wildcard navigation through the
+  homepage, services, story, contact, and back to the homepage. Every page
+  loaded its expected heading and content without redirecting to authentication
+  or a dashboard route.
+
+### Validation
+
+- Focused Website Studio renderer/export/access tests: passed — 17 tests
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 220 tests across 49 files
+- `pnpm build:web`: passed — 42 generated application pages, including the
+  version export API route. The initial sandboxed attempt could not bind a
+  Turbopack worker port; the same build passed on the permitted unrestricted
+  retry and in Vercel Production.
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- The archive is intentionally a static, registered-component website. It does
+  not include customer-authored scripts, server code, secrets, executable model
+  output, or platform credentials.
+- This production version references no generated image assets, so its accepted
+  archive has no `assets/` directory; PNG asset packaging is covered by focused
+  deterministic export tests.
+- Customer-owned domain onboarding is the next isolated hosting phase.
+
+### Commit
+
+- `feat(web): add portable website export` (this phase commit)

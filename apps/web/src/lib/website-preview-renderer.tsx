@@ -64,11 +64,11 @@ function escapeHtml(value: string): string {
 }
 
 interface PublishedRenderOptions {
-  readonly routePrefix: string;
+  readonly pageHref: (pageSlug: string) => string;
 }
 
 function publishedPageHref(published: PublishedRenderOptions, pageSlug: string): string {
-  return `${published.routePrefix}/${pageSlug}`;
+  return published.pageHref(pageSlug);
 }
 
 function actionHref(action: WebsiteAction, published: PublishedRenderOptions): string {
@@ -98,6 +98,7 @@ function actionMarkup(
 function safeAssetUrl(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   if (value.startsWith('data:image/png;base64,')) return value;
+  if (/^assets\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\.png$/u.test(value)) return value;
   if (/^\/api\/public-sites\/[a-z0-9-]+\/assets\/[a-z][a-z0-9-]*$/u.test(value)) return value;
   try {
     const parsed = new URL(value);
@@ -303,7 +304,26 @@ export function renderWebsitePublishedDocument(
 ): string {
   const published = zSiteSlug(siteSlug);
   return renderWebsiteDocument(specValue, pageSlug, assetUrls, {
-    routePrefix: routeMode === 'site-host' ? '' : `/s/${published}`,
+    pageHref: (targetPageSlug) =>
+      routeMode === 'site-host' ? `/${targetPageSlug}` : `/s/${published}/${targetPageSlug}`,
+  });
+}
+
+export function websiteStaticPagePath(specValue: WebsiteSpec, pageSlug: string): string {
+  const spec = WebsiteSpecSchema.parse(specValue);
+  const pageIndex = spec.pages.findIndex((page) => page.slug === pageSlug);
+  if (pageIndex < 0) throw new Error('Website export page not found.');
+  return pageIndex === 0 ? 'index.html' : `page-${pageSlug}.html`;
+}
+
+export function renderWebsiteStaticDocument(
+  specValue: WebsiteSpec,
+  pageSlug: string,
+  assetUrls: ReadonlyMap<string, string> = new Map(),
+): string {
+  const spec = WebsiteSpecSchema.parse(specValue);
+  return renderWebsiteDocument(spec, pageSlug, assetUrls, {
+    pageHref: (targetPageSlug) => websiteStaticPagePath(spec, targetPageSlug),
   });
 }
 
