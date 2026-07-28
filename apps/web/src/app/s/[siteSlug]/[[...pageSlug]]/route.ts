@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { WEBSITE_PUBLIC_HEADERS } from '@/lib/website-preview-contract';
 import { renderWebsitePublishedDocument } from '@/lib/website-preview-renderer';
 import { getPublishedWebsiteBySlug } from '@/lib/website-publication-server';
+import { WEBSITE_SITE_HOST_HEADER } from '@/lib/website-site-host';
 
 const ParamsSchema = z
   .object({
@@ -16,7 +17,7 @@ const ParamsSchema = z
   .strict();
 
 export async function GET(
-  _request: Request,
+  request: Request,
   routeContext: {
     readonly params: Promise<{
       readonly pageSlug?: readonly string[];
@@ -26,6 +27,10 @@ export async function GET(
 ): Promise<Response> {
   try {
     const params = ParamsSchema.parse(await routeContext.params);
+    const routeMode =
+      request.headers.get(WEBSITE_SITE_HOST_HEADER) === params.siteSlug
+        ? 'site-host'
+        : 'platform-path';
     const website = await getPublishedWebsiteBySlug(params.siteSlug);
     if (website === undefined) {
       return new Response('Website not found.', { headers: WEBSITE_PUBLIC_HEADERS, status: 404 });
@@ -47,7 +52,13 @@ export async function GET(
         ]),
     );
     return new Response(
-      renderWebsitePublishedDocument(website.spec, pageSlug, website.publication.slug, assetUrls),
+      renderWebsitePublishedDocument(
+        website.spec,
+        pageSlug,
+        website.publication.slug,
+        assetUrls,
+        routeMode,
+      ),
       {
         headers: WEBSITE_PUBLIC_HEADERS,
         status: 200,

@@ -90,6 +90,18 @@ describe('website preview', () => {
     expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("frame-ancestors 'none'");
   });
 
+  it('renders wildcard-host navigation without leaking the platform path prefix', () => {
+    const html = renderWebsitePublishedDocument(
+      spec,
+      'home',
+      'product-site-a1000000',
+      new Map(),
+      'site-host',
+    );
+    expect(html).toContain('href="/home"');
+    expect(html).not.toContain('href="/s/product-site-a1000000/home"');
+  });
+
   it('renders deterministically and keeps asset references inside registered markup', () => {
     const assetSpec = WebsiteSpecSchema.parse({
       ...spec,

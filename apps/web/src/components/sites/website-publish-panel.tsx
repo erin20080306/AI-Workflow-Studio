@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import { CheckIcon, ShieldIcon } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
+import { websiteSiteUrl } from '@/lib/website-site-host';
 
 const PublicationResponseSchema = z.object({ publication: WebsitePublicationSchema }).strict();
 
@@ -103,7 +104,7 @@ export function WebsitePublishPanel({
               </span>
               <a
                 className="font-semibold text-indigo-700 underline underline-offset-4"
-                href={publication.publicPath}
+                href={websiteSiteUrl(publication.slug)}
                 rel="noreferrer"
                 target="_blank"
               >

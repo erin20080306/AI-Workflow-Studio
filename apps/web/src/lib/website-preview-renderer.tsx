@@ -64,7 +64,11 @@ function escapeHtml(value: string): string {
 }
 
 interface PublishedRenderOptions {
-  readonly siteSlug: string;
+  readonly routePrefix: string;
+}
+
+function publishedPageHref(published: PublishedRenderOptions, pageSlug: string): string {
+  return `${published.routePrefix}/${pageSlug}`;
 }
 
 function actionHref(action: WebsiteAction, published: PublishedRenderOptions): string {
@@ -72,7 +76,7 @@ function actionHref(action: WebsiteAction, published: PublishedRenderOptions): s
     case 'contact':
       return '#contact';
     case 'page':
-      return `/s/${published.siteSlug}/${action.target.pageSlug}`;
+      return publishedPageHref(published, action.target.pageSlug);
     case 'section':
       return `#${action.target.sectionId}`;
   }
@@ -273,8 +277,8 @@ function renderWebsiteDocument(
     .map((item) =>
       published === undefined
         ? `<span class="nav-item">${escapeHtml(item.label)}</span>`
-        : `<a class="nav-item" href="/s/${escapeHtml(published.siteSlug)}/${escapeHtml(
-            item.pageSlug,
+        : `<a class="nav-item" href="${escapeHtml(
+            publishedPageHref(published, item.pageSlug),
           )}">${escapeHtml(item.label)}</a>`,
     )
     .join('')}</nav></header><main>${page.sections
@@ -295,9 +299,12 @@ export function renderWebsitePublishedDocument(
   pageSlug: string,
   siteSlug: string,
   assetUrls: ReadonlyMap<string, string> = new Map(),
+  routeMode: 'platform-path' | 'site-host' = 'platform-path',
 ): string {
   const published = zSiteSlug(siteSlug);
-  return renderWebsiteDocument(specValue, pageSlug, assetUrls, { siteSlug: published });
+  return renderWebsiteDocument(specValue, pageSlug, assetUrls, {
+    routePrefix: routeMode === 'site-host' ? '' : `/s/${published}`,
+  });
 }
 
 function zSiteSlug(value: string): string {

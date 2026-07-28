@@ -5,17 +5,38 @@ import {
   hasSupabasePublicConfiguration,
   parseSupabasePublicConfiguration,
 } from './lib/supabase/config';
+import {
+  isPublishedWebsiteAssetPath,
+  WEBSITE_SITE_HOST_HEADER,
+  websiteSiteRewritePath,
+  websiteSiteSlugFromHost,
+} from './lib/website-site-host';
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
+  const siteSlug = websiteSiteSlugFromHost(
+    request.headers.get('x-forwarded-host') ?? request.headers.get('host'),
+  );
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete(WEBSITE_SITE_HOST_HEADER);
+  if (siteSlug !== undefined) {
+    if (isPublishedWebsiteAssetPath(request.nextUrl.pathname, siteSlug)) {
+      return NextResponse.next({ request: { headers: requestHeaders } });
+    }
+    requestHeaders.set(WEBSITE_SITE_HOST_HEADER, siteSlug);
+    const destination = request.nextUrl.clone();
+    destination.pathname = websiteSiteRewritePath(siteSlug, request.nextUrl.pathname);
+    return NextResponse.rewrite(destination, { request: { headers: requestHeaders } });
+  }
+
   if (
     process.env.NEXT_PUBLIC_MOCK_MODE !== 'false' ||
     !hasSupabasePublicConfiguration(process.env)
   ) {
-    return NextResponse.next({ request });
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   const configuration = parseSupabasePublicConfiguration(process.env);
-  let response = NextResponse.next({ request });
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
   const supabase = createServerClient(configuration.url, configuration.key, {
     cookies: {
       getAll() {
@@ -23,7 +44,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       },
       setAll(cookiesToSet, headers) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
+        response = NextResponse.next({ request: { headers: requestHeaders } });
         cookiesToSet.forEach(({ name, options, value }) => {
           response.cookies.set(name, value, options);
         });

@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 33 — Production prompt-to-site acceptance (completed)
+Phase 34 — Tenant wildcard subdomain hosting (completed)
 
 ## Repository baseline
 
@@ -2577,3 +2577,70 @@ Status: completed
 ### Commit
 
 - `feat(web): prove production prompt-to-site acceptance` (this phase commit)
+
+## Phase 34 — Tenant wildcard subdomain hosting
+
+Status: completed
+
+### Implemented
+
+- Added a strict host resolver for exactly one normalized publication slug below
+  `sites.erin-aiworkflowstudio.com`. Apex, nested, unrelated, malformed, and
+  port-bearing spoof variants are rejected before a publication lookup.
+- Added a Proxy boundary that internally rewrites wildcard-host page requests to
+  the existing `/s/{siteSlug}` safe renderer while removing any client-supplied
+  internal routing header. Requests on ordinary platform hosts continue through
+  the existing Supabase session refresh path.
+- Kept wildcard site requests outside dashboard authentication and cookie
+  refresh. Only the matching immutable public-asset endpoint bypasses the page
+  rewrite; unrelated API paths cannot be reached through a customer site host.
+- Added renderer routing modes so wildcard-host navigation uses clean
+  publication paths such as `/services`, while the existing platform path
+  remains a compatible fallback.
+- Updated Website Studio's published-site action to open the stable HTTPS
+  wildcard URL rather than the compatibility `/s/{siteSlug}` route.
+- Added focused tests for hostname normalization, one-label isolation, inner
+  page rewrites, asset scoping, stable HTTPS URLs, and clean wildcard
+  navigation.
+- Added `*.sites.erin-aiworkflowstudio.com` to Vercel and associated it with the
+  production project. Vercel reports the wildcard on its edge network with the
+  platform-managed nameservers.
+- Deployed Vercel Production deployment
+  `dpl_Bj8vxawybBsXny5MVx69eG34g5gG` and aliased it to both
+  `https://www.erin-aiworkflowstudio.com` and the wildcard site host.
+
+### Production acceptance
+
+- Public DNS resolved
+  `site-a45676dc-89ac69a7.sites.erin-aiworkflowstudio.com` to the Vercel edge.
+- Unauthenticated HTTPS requests using the real wildcard hostname returned
+  `200 OK` for both `/` and `/services`.
+- The generated `/services` document contained clean `/index`, `/services`,
+  `/story`, and `/contact` navigation links and did not expose the internal
+  `/s/{siteSlug}` rewrite path.
+- The public response retained the restrictive Website Studio CSP and matched
+  the existing safe publication renderer rather than a dashboard route.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed, including a repeat after the production build
+- `pnpm test`: passed — 212 tests across 47 files
+- `pnpm build:web`: passed — 42 generated application pages
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- DNS-negative caches in already-open browsers may briefly retain an earlier
+  not-found result immediately after wildcard provisioning. Authoritative DNS
+  and an unauthenticated TLS request to the Vercel edge passed.
+- Published sites remain registered-component static documents. Customer
+  scripts, server code, arbitrary uploads, and executable model output remain
+  intentionally unsupported.
+- Portable ZIP export and customer-owned domain onboarding are the next
+  isolated phases.
+
+### Commit
+
+- `feat(web): add wildcard site hosting` (this phase commit)
