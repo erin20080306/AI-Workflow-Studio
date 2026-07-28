@@ -455,7 +455,22 @@ repository identifiers, commit metadata, integrity digest, and outcome in the
 audit log. AI suggestions may prepare the release but may never push on their
 own.
 
-## Phase 39 — Guided site integrations
+## Phase 39 — Guided site delivery
+
+Make the two supported delivery paths explicit after a Website Spec version is
+validated. Platform hosting remains the recommended default and asks the
+customer only for the first label of the existing wildcard subdomain. The
+alternative paid path accepts a pasted HTTPS GitHub repository URL, matches it
+against repositories explicitly authorized to the connected GitHub App, pushes
+only to the platform-managed branch after confirmation, and then presents
+bounded deployment guidance for an allowlisted provider.
+
+The interface must never ask ordinary customers for a GitHub token, Vercel
+token, DNS credentials, provider secret, or platform configuration. Invalid or
+unauthorized repositories cannot enable an external write, and switching
+delivery paths must not change the immutable Website Spec version.
+
+## Phase 40 — Guided site integrations
 
 Add a step-by-step integration workspace for allowlisted capabilities such as
 contact delivery, analytics, an approved payment provider, and selected APIs.
@@ -471,7 +486,7 @@ that require a backend rather than presenting non-functional forms or checkout
 buttons. Enabling external writes or payment collection requires an
 authenticated explicit confirmation and provider-specific test acceptance.
 
-## Phase 40 — Website delivery acceptance
+## Phase 41 — Website delivery acceptance
 
 Verify the complete website product with separate Free, paid member, workspace
 administrator, and platform administrator sessions. Cover creation, all

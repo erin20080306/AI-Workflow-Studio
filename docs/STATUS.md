@@ -3022,9 +3022,26 @@ Status: completed
   credentials or deploy on the customer's behalf.
 - Payment and external API integration guidance remains the isolated Phase 40
   scope. Complete free/paid delivery acceptance remains Phase 41.
-- The requested operation video remains intentionally paused until the newly
-  deployed production interface passes authenticated acceptance.
+- The requested operation video remains intentionally paused until Phase 40
+  integrations and Phase 41 delivery acceptance are complete.
+
+### Production acceptance
+
+- Git commit `de221d6` was pushed to `codex/ai-workflow-platform`.
+- Vercel Production deployment `dpl_YFtuLuaHGRmvGjXsEiXiYswKvNnv` is Ready and
+  serves `https://www.erin-aiworkflowstudio.com` plus the existing wildcard
+  platform-site domain.
+- Authenticated production acceptance confirmed that an unauthorized pasted
+  GitHub repository is rejected, an App-authorized repository is recognized,
+  and the push action remains locked until the exact-version confirmation is
+  checked. No additional repository write was made during acceptance.
+- The recommended platform path accepts only the first wildcard subdomain label
+  and reported `site-e1741111.sites.erin-aiworkflowstudio.com` as available
+  without asking for GitHub, DNS, or deployment credentials.
+- Read-only public acceptance verified the already published example site's
+  `/index`, `/services`, `/story`, and `/contact` pages, including the expected
+  page titles and main content.
 
 ### Commit
 
-- `feat(web): add guided website delivery` (this phase commit)
+- `de221d6` — `feat(web): add guided website delivery`
