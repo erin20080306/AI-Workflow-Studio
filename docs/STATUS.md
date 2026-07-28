@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 31 — Prompt-to-workflow automation (completed)
+Phase 32 — Account-verified AI model routing (completed)
 
 ## Repository baseline
 
@@ -2429,3 +2429,87 @@ Status: completed
 ### Commit
 
 - `feat(web): automate short-prompt workflow planning` (this phase commit)
+
+## Phase 32 — Account-verified AI model routing
+
+Status: completed
+
+### Implemented
+
+- Added server-only model inventory discovery for the configured OpenAI,
+  Anthropic, and Gemini accounts. Platform administration now reports the exact
+  account response count and offers only account-returned IDs in each tier:
+  Claude 10, Gemini 41, and OpenAI 125 during production acceptance.
+- Replaced fixed member/provider routing with audited tier mappings that resolve
+  the exact selected model for Assistant chat, workflow planning, the workflow
+  composer, and Website Studio. Free members currently see the three enabled
+  Economy choices while locked Store tiers remain visible and disabled.
+- Added the hosted model-tier migration and database assertions so an enabled
+  mapping must reference an exact account-verified model before ordinary member
+  routing may use it.
+- Added provider-specific request and response handling, model diagnostics, and
+  safe error classification. The OpenAI `insufficient_quota` response is now
+  rendered as a quota limitation instead of a generic provider failure.
+- Preserved native structured-output schemas for bounded Website Spec
+  generation while keeping the larger Workflow v1 request portable across the
+  three providers.
+- Added a canonical Workflow v1 example and bounded repair feedback to planning.
+  If the final model response remains invalid, the rejected output is never
+  released; the server substitutes a validated, disabled, read-only
+  `data.validate` draft that preserves the authenticated execution target and
+  requires an approved source or Desktop Agent before expansion.
+- Capped workflow output at 4,096 tokens to match the reserved request budget.
+  All provider repair attempts are aggregated into one usage settlement, and a
+  reservation is settled exactly once on its terminal outcome.
+- Deployed Vercel Production deployment
+  `dpl_EJUopytHPpkz6Yu4Nom3d2whHSdt` and aliased it to
+  `https://www.erin-aiworkflowstudio.com`.
+
+### Production acceptance
+
+- Claude `claude-haiku-4-5-20251001`: exact selection and live streaming chat
+  passed.
+- Gemini `gemini-3.5-flash-lite`: exact selection and live streaming chat
+  passed.
+- OpenAI `gpt-5.6-luna`: exact selection and provider call passed through the
+  platform boundary; the configured OpenAI project returned
+  `insufficient_quota`, and the member UI correctly displayed the quota warning.
+- Gemini workflow planning: passed after bounded AI attempts and safe
+  normalization. The resulting one-node Workflow v1 plan passed validation and
+  was persisted as an immutable review draft with Read 1, Write 0, External 0,
+  Destructive 0. No Run was created and no action was executed.
+- Platform administration showed keys only as verified/not configured state and
+  never returned credential values. Exact model inventory dropdowns rendered for
+  all three providers.
+- Authenticated smoke checks passed for Dashboard, Assistant, Website Studio,
+  new Workflow, Schedules, Runs, Usage, Settings, and Platform Admin.
+- Production logs showed successful Claude, Gemini, workflow-plan, and
+  review-draft requests with no usage-settlement failure. The only provider
+  error in the final pass was the expected OpenAI account quota response.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 189 tests across 43 files
+- `pnpm build:web`: passed — 42 generated application pages
+- Hosted Supabase migration
+  `202607280009_account_verified_ai_models.sql`: applied successfully
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- OpenAI generation is externally blocked until billing or credits are enabled
+  for the same OpenAI project/service account that owns the Production key.
+  Claude and Gemini remain available, and Auto can route around that provider.
+- The Free plan unlocks only Economy models. Standard, Advanced, and Flagship
+  choices require verified Microsoft Store entitlement mappings; the production
+  administrator page currently reports zero Store product mappings.
+- A safe-normalized workflow is intentionally conservative and read-only. File
+  access, richer CSV processing, scheduling, and execution require a paired
+  Desktop Agent or explicitly approved connector/folder authority.
+
+### Commit
+
+- `feat(web): route account-verified AI models` (this phase commit)

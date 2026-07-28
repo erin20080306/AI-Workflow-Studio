@@ -20,12 +20,14 @@ const OpenAiResponseSchema = z
     output: z.array(
       z
         .object({
-          content: z.array(
-            z.discriminatedUnion('type', [
-              z.object({ text: z.string(), type: z.literal('output_text') }).passthrough(),
-              z.object({ refusal: z.string(), type: z.literal('refusal') }).passthrough(),
-            ]),
-          ),
+          content: z
+            .array(
+              z.discriminatedUnion('type', [
+                z.object({ text: z.string(), type: z.literal('output_text') }).passthrough(),
+                z.object({ refusal: z.string(), type: z.literal('refusal') }).passthrough(),
+              ]),
+            )
+            .optional(),
           type: z.string(),
         })
         .passthrough(),
@@ -36,7 +38,7 @@ const OpenAiResponseSchema = z
         output_tokens: z.number().int().min(0),
         total_tokens: z.number().int().min(0),
       })
-      .optional(),
+      .nullish(),
   })
   .passthrough();
 
@@ -53,13 +55,60 @@ const OpenAiStreamEventSchema = z
             output_tokens: z.number().int().min(0),
             total_tokens: z.number().int().min(0),
           })
-          .optional(),
+          .nullish(),
       })
       .passthrough()
       .optional(),
     type: z.string().min(1),
   })
   .passthrough();
+
+const OpenAiStreamFailureSchema = z
+  .object({
+    code: z.union([z.number(), z.string()]).nullish(),
+    error: z
+      .object({
+        code: z.union([z.number(), z.string()]).nullish(),
+        param: z.string().nullish(),
+        type: z.string().nullish(),
+      })
+      .passthrough()
+      .nullish(),
+    param: z.string().nullish(),
+    response: z
+      .object({
+        error: z
+          .object({
+            code: z.union([z.number(), z.string()]).nullish(),
+            param: z.string().nullish(),
+            type: z.string().nullish(),
+          })
+          .passthrough()
+          .nullish(),
+      })
+      .passthrough()
+      .nullish(),
+  })
+  .passthrough();
+
+function openAiStreamFailureDetails(raw: unknown): Readonly<Record<string, unknown>> {
+  const parsed = OpenAiStreamFailureSchema.safeParse(raw);
+  if (!parsed.success) return {};
+  const nested = parsed.data.error ?? parsed.data.response?.error;
+  const details: Record<string, unknown> = {};
+  const providerCode = parsed.data.code ?? nested?.code;
+  const providerParam = parsed.data.param ?? nested?.param;
+  if (providerCode !== null && providerCode !== undefined) {
+    details.providerCode = providerCode;
+  }
+  if (providerParam !== null && providerParam !== undefined) {
+    details.providerParam = providerParam;
+  }
+  if (nested?.type !== null && nested?.type !== undefined) {
+    details.providerType = nested.type;
+  }
+  return details;
+}
 
 export interface OpenAiAdapterOptions {
   readonly apiKey: string;
@@ -76,6 +125,16 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
   private readonly baseUrl: string;
   private readonly fetchTransport: FetchTransport | undefined;
   private readonly reasoningEffort: 'high' | 'low' | 'medium';
+
+  private reasoningConfig():
+    | Readonly<{ reasoning: { effort: 'high' | 'low' | 'medium' } }>
+    | {
+        readonly reasoning?: never;
+      } {
+    return /^gpt-5(?:[.-]|$)/.test(this.model)
+      ? { reasoning: { effort: this.reasoningEffort } }
+      : {};
+  }
 
   constructor(options: OpenAiAdapterOptions) {
     const config = validateProviderConfig(
@@ -104,7 +163,7 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
         instructions: request.systemPrompt,
         max_output_tokens: request.chatRequest.maxOutputTokens,
         model: this.model,
-        reasoning: { effort: this.reasoningEffort },
+        ...this.reasoningConfig(),
         store: false,
         stream: true,
       },
@@ -117,9 +176,14 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
     })) {
       const event = OpenAiStreamEventSchema.safeParse(raw);
       if (!event.success) {
+        const eventType =
+          typeof raw === 'object' && raw !== null && 'type' in raw && typeof raw.type === 'string'
+            ? raw.type
+            : 'unknown';
         throw new AiGatewayError(
           'AI_PROVIDER_RESPONSE_INVALID',
           'OpenAI returned an unexpected streaming event.',
+          { details: { eventType } },
         );
       }
       if (event.data.type === 'response.output_text.delta') {
@@ -129,7 +193,22 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
         continue;
       }
       if (event.data.type === 'error' || event.data.type === 'response.failed') {
-        throw new AiGatewayError('AI_PROVIDER_REQUEST_FAILED', 'OpenAI streaming request failed.');
+        const failureDetails = openAiStreamFailureDetails(raw);
+        const details: Readonly<Record<string, unknown>> = {
+          eventType: event.data.type,
+          ...failureDetails,
+        };
+        throw new AiGatewayError(
+          failureDetails.providerCode === 'insufficient_quota'
+            ? 'AI_PROVIDER_QUOTA_EXCEEDED'
+            : 'AI_PROVIDER_REQUEST_FAILED',
+          failureDetails.providerCode === 'insufficient_quota'
+            ? 'OpenAI account quota is exhausted.'
+            : 'OpenAI streaming request failed.',
+          {
+            details,
+          },
+        );
       }
       if (event.data.type === 'response.completed') {
         const response = event.data.response;
@@ -177,7 +256,7 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
         instructions: request.systemPrompt,
         max_output_tokens: request.maxOutputTokens,
         model: this.model,
-        reasoning: { effort: this.reasoningEffort },
+        ...this.reasoningConfig(),
         store: false,
         text: {
           format,
@@ -198,7 +277,7 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
       );
     }
     const refusal = parsed.data.output
-      .flatMap((item) => item.content)
+      .flatMap((item) => item.content ?? [])
       .find((content) => content.type === 'refusal');
     if (refusal !== undefined) {
       throw new AiGatewayError(
@@ -207,7 +286,7 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
       );
     }
     const text = parsed.data.output
-      .flatMap((item) => item.content)
+      .flatMap((item) => item.content ?? [])
       .filter((content) => content.type === 'output_text')
       .map((content) => content.text)
       .join('');

@@ -6,7 +6,11 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { requirePlatformAdmin } from '@/lib/platform-admin';
-import { ALLOWED_AI_MODELS_BY_TIER, type ProductionAiProvider } from '@/lib/ai-model-catalog';
+import {
+  isAccountModelCompatibleWithTier,
+  type ProductionAiProvider,
+} from '@/lib/ai-model-catalog';
+import { getAiProviderHealth } from '@/lib/ai-provider-health';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
 const PlanChangeSchema = z
@@ -24,10 +28,10 @@ const ModelMappingSchema = z
     tier: z.enum(['economy', 'standard', 'advanced', 'flagship']),
   })
   .superRefine((value, context) => {
-    if (!ALLOWED_AI_MODELS_BY_TIER[value.provider][value.tier].includes(value.model)) {
+    if (!isAccountModelCompatibleWithTier(value.provider, value.tier, value.model)) {
       context.addIssue({
         code: 'custom',
-        message: 'Model is not on the provider allowlist.',
+        message: 'Model family is not compatible with this cost tier.',
         path: ['model'],
       });
     }
@@ -73,6 +77,10 @@ export async function updateAiModelMappingAction(formData: FormData): Promise<ne
     tier: formData.get('tier'),
   });
   if (!parsed.success) {
+    redirect('/admin/ai-providers?status=invalid-mapping');
+  }
+  const providerHealth = await getAiProviderHealth(parsed.data.provider, { force: true });
+  if (providerHealth.status !== 'available' || !providerHealth.models.includes(parsed.data.model)) {
     redirect('/admin/ai-providers?status=invalid-mapping');
   }
   const result = await createSupabaseAdminClient().rpc('platform_admin_update_ai_model_mapping', {

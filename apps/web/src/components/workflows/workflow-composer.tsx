@@ -39,6 +39,7 @@ const copy = {
     folderCount: (count: number) => `${count} approved folder ${count === 1 ? 'alias' : 'aliases'}`,
     help: 'Start with a short phrase. Add a source, timing, or output only when you want more control.',
     minLength: 'Enter at least 2 meaningful characters.',
+    modelUsed: 'Account model',
     noFolders: 'No local folder access',
     openWorkflow: 'Open workflow',
     planner: 'Automatic AI planner',
@@ -67,6 +68,7 @@ const copy = {
     folderCount: (count: number) => `${count} 個已核准資料夾別名`,
     help: '先輸入短句即可；若想更精準，再補上來源、時間或輸出方式。',
     minLength: '請至少輸入 2 個有意義的字元。',
+    modelUsed: '帳戶實際模型',
     noFolders: '沒有本機資料夾權限',
     openWorkflow: '開啟工作流',
     planner: 'AI 自動規劃器',
@@ -84,13 +86,20 @@ const PlannerApiResponseSchema = z
   .object({
     assistantMessage: z.object({ id: z.string().uuid() }).passthrough(),
     conversationId: z.string().uuid(),
+    model: z.string().min(2).max(120),
     output: AIPlannerOutputSchema,
+    provider: z.enum(['anthropic', 'gemini', 'mock', 'openai']),
   })
   .passthrough();
 
 interface PlanReference {
   readonly conversationId: string;
   readonly messageId: string;
+}
+
+interface PlannedModel {
+  readonly model: string;
+  readonly provider: 'anthropic' | 'gemini' | 'mock' | 'openai';
 }
 
 type DraftStatus =
@@ -113,6 +122,7 @@ export function WorkflowComposer({
   const [prompt, setPrompt] = useState('');
   const [promptError, setPromptError] = useState<'invalid' | 'unavailable'>();
   const [workflow, setWorkflow] = useState<Workflow>();
+  const [plannedModel, setPlannedModel] = useState<PlannedModel>();
   const [planReference, setPlanReference] = useState<PlanReference>();
   const [planning, setPlanning] = useState(false);
   const [draft, setDraft] = useState<DraftStatus>({ status: 'idle' });
@@ -142,6 +152,7 @@ export function WorkflowComposer({
     setPlanReference(undefined);
     if (requestPrompt.length < 2) {
       setWorkflow(undefined);
+      setPlannedModel(undefined);
       setPromptError('invalid');
       return;
     }
@@ -173,10 +184,12 @@ export function WorkflowComposer({
         messageId: parsed.data.assistantMessage.id,
       };
       setWorkflow(parsed.data.output.workflow);
+      setPlannedModel({ model: parsed.data.model, provider: parsed.data.provider });
       setPlanReference(reference);
       await saveDraft(reference);
     } catch {
       setWorkflow(undefined);
+      setPlannedModel(undefined);
       setPromptError('unavailable');
     } finally {
       setPlanning(false);
@@ -298,6 +311,14 @@ export function WorkflowComposer({
               {workflow.name}
             </h2>
             <p className="mt-1 text-sm text-slate-600">{workflow.description}</p>
+            {plannedModel !== undefined ? (
+              <p className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-[11px] text-indigo-900">
+                <span className="font-semibold">{text.modelUsed}</span>
+                <code className="break-all font-mono">
+                  {plannedModel.provider} · {plannedModel.model}
+                </code>
+              </p>
+            ) : null}
             {draft.status === 'failed' && (
               <p className="mt-3 text-sm font-medium text-amber-800" role="alert">
                 {text.retrySave}

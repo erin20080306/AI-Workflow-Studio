@@ -127,3 +127,110 @@ export const ALLOWED_AI_MODELS_BY_TIER: Readonly<
     standard: ['gpt-5.6-terra'],
   },
 };
+
+const NON_TEXT_MODEL_MARKERS = [
+  'audio',
+  'chat-latest',
+  'codex',
+  'computer-use',
+  'deep-research',
+  'embedding',
+  'imagen',
+  'image',
+  'live',
+  'moderation',
+  'realtime',
+  'robotics',
+  'search',
+  'transcribe',
+  'translation',
+  'tts',
+] as const;
+
+function isTextModelName(model: string): boolean {
+  const normalized = model.toLowerCase();
+  return !NON_TEXT_MODEL_MARKERS.some((marker) => normalized.includes(marker));
+}
+
+/**
+ * Accepts account-listed text model IDs only when their product role matches
+ * the requested cost tier. The provider model-list response remains the source
+ * of truth; this classifier prevents a valid key from routing to unrelated
+ * image, audio, embedding, or higher-cost model families.
+ */
+export function isAccountModelCompatibleWithTier(
+  provider: ProductionAiProvider,
+  tier: AiModelTier,
+  model: string,
+): boolean {
+  if (!/^[A-Za-z0-9._:-]{2,120}$/.test(model) || !isTextModelName(model)) return false;
+  const normalized = model.toLowerCase();
+
+  if (provider === 'openai') {
+    if (!/^gpt-[a-z0-9.-]+$/.test(normalized)) return false;
+    const economy = /-(?:luna|mini|nano)(?:-|$)/.test(normalized);
+    const standard = /-(?:terra|mini)(?:-|$)/.test(normalized);
+    const sol = /-sol(?:-|$)/.test(normalized);
+    if (tier === 'economy') return economy;
+    if (tier === 'standard') return standard;
+    if (tier === 'flagship') return sol;
+    return sol || (!economy && !standard && /^gpt-(?:4\.1|5(?:[.-]\d+)?)(?:-|$)/.test(normalized));
+  }
+
+  if (provider === 'anthropic') {
+    if (!/^claude-(?:fable|haiku|opus|sonnet)-[a-z0-9-]+$/.test(normalized)) return false;
+    if (tier === 'economy') return normalized.startsWith('claude-haiku-');
+    if (tier === 'standard') return normalized.startsWith('claude-sonnet-');
+    if (tier === 'advanced') return normalized.startsWith('claude-opus-');
+    return normalized.startsWith('claude-fable-') || normalized.startsWith('claude-opus-');
+  }
+
+  if (!/^gemini-[a-z0-9.-]+$/.test(normalized)) return false;
+  const flashLite = normalized.includes('flash-lite');
+  const flash = normalized.includes('flash');
+  const pro = normalized.includes('pro');
+  if (tier === 'economy') return flashLite;
+  if (tier === 'standard') return flash && !flashLite;
+  if (tier === 'advanced') return (flash && !flashLite) || pro;
+  return pro;
+}
+
+function stableModelRank(model: string): number {
+  return /(?:^|[-.])(?:exp|experimental|latest|preview)(?:[-.]|$)/i.test(model) ? 0 : 1;
+}
+
+export function listAccountModelsForTier(
+  provider: ProductionAiProvider,
+  tier: AiModelTier,
+  models: readonly string[],
+): readonly string[] {
+  return [...new Set(models)]
+    .filter((model) => isAccountModelCompatibleWithTier(provider, tier, model))
+    .sort((left, right) => {
+      const stability = stableModelRank(right) - stableModelRank(left);
+      return stability === 0
+        ? right.localeCompare(left, 'en', { numeric: true, sensitivity: 'base' })
+        : stability;
+    });
+}
+
+function preferredModelPrefixes(preferred: string): readonly string[] {
+  const withoutDate = preferred.replace(/-\d{8}$/, '');
+  return withoutDate === preferred ? [`${preferred}-`] : [`${preferred}-`, `${withoutDate}-`];
+}
+
+export function resolveAccountModelForTier(
+  provider: ProductionAiProvider,
+  tier: AiModelTier,
+  preferred: string,
+  accountModels: readonly string[],
+): string | undefined {
+  const candidates = listAccountModelsForTier(provider, tier, accountModels);
+  if (candidates.includes(preferred)) return preferred;
+
+  for (const prefix of preferredModelPrefixes(preferred)) {
+    const versioned = candidates.find((candidate) => candidate.startsWith(prefix));
+    if (versioned !== undefined) return versioned;
+  }
+  return candidates[0];
+}

@@ -225,6 +225,36 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
     const safe = assistantErrorDetails(error);
+    const providerDetails =
+      error instanceof AiGatewayError
+        ? {
+            ...(Array.isArray(error.details.validationCodes)
+              ? {
+                  validationCodes: error.details.validationCodes.filter(
+                    (code): code is string => typeof code === 'string',
+                  ),
+                }
+              : {}),
+            ...(typeof error.details.providerCode === 'number' ||
+            typeof error.details.providerCode === 'string'
+              ? { providerCode: error.details.providerCode }
+              : {}),
+            ...(typeof error.details.providerType === 'string'
+              ? { providerType: error.details.providerType }
+              : {}),
+          }
+        : {};
+    console.error(
+      JSON.stringify({
+        aiPlanFailure: {
+          code: safe.code,
+          model: route.model,
+          provider: route.provider,
+          reason: error instanceof Error ? error.message : safe.message,
+          ...providerDetails,
+        },
+      }),
+    );
     return Response.json(
       {
         error: {

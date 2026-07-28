@@ -115,6 +115,7 @@ export interface TenantUsageSnapshot {
 export interface AssistantUsageReservation {
   readonly costMultiplier: number;
   readonly id: string;
+  readonly maxAttempts: number;
   readonly maximumCostMicrounits: number;
   release(): Promise<void>;
 }
@@ -327,6 +328,7 @@ export async function reserveAssistantUsage(
     return {
       costMultiplier,
       id,
+      maxAttempts: input.maxAttempts ?? 1,
       maximumCostMicrounits,
       async release() {
         state.reservations.delete(id);
@@ -349,6 +351,7 @@ export async function reserveAssistantUsage(
   return {
     costMultiplier,
     id,
+    maxAttempts: input.maxAttempts ?? 1,
     maximumCostMicrounits,
     async release() {
       await createSupabaseAdminClient().rpc('release_tenant_usage_reservation', {
@@ -405,6 +408,7 @@ export async function reserveWebsiteImageUsage(
     return {
       costMultiplier: 1,
       id,
+      maxAttempts: 1,
       maximumCostMicrounits,
       async release() {
         state.reservations.delete(id);
@@ -427,6 +431,7 @@ export async function reserveWebsiteImageUsage(
   return {
     costMultiplier: 1,
     id,
+    maxAttempts: 1,
     maximumCostMicrounits,
     async release() {
       await createSupabaseAdminClient().rpc('release_tenant_usage_reservation', {

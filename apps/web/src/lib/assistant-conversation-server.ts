@@ -23,6 +23,10 @@ import {
   type AssistantImageSummary,
 } from '@/lib/assistant-conversation-schema';
 import { deleteMemoryAssistantImages } from '@/lib/assistant-image-server';
+import {
+  aggregateAssistantUsageRecords,
+  shouldSettleAssistantUsage,
+} from '@/lib/assistant-usage-settlement';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
@@ -458,6 +462,22 @@ export function createAssistantUsageSink(
   conversationId: string,
   reservation: AssistantUsageReservation,
 ): UsageSink {
+  let settled = false;
+  const records: UsageRecord[] = [];
+
+  async function settle(record: UsageRecord): Promise<void> {
+    if (settled) return;
+    records.push(structuredClone(record));
+    if (!shouldSettleAssistantUsage(record, reservation.maxAttempts)) return;
+    await recordReservedAssistantUsage(
+      context,
+      reservation,
+      conversationId,
+      aggregateAssistantUsageRecords(records),
+    );
+    settled = true;
+  }
+
   if (getEnvironment().mockMode) {
     return {
       async record(record) {
@@ -466,14 +486,14 @@ export function createAssistantUsageSink(
         if (usage.length > 1_000) {
           usage.splice(0, usage.length - 1_000);
         }
-        await recordReservedAssistantUsage(context, reservation, conversationId, record);
+        await settle(record);
       },
     };
   }
   return {
     async record(record) {
       try {
-        await recordReservedAssistantUsage(context, reservation, conversationId, record);
+        await settle(record);
       } catch (error) {
         throw new AssistantPersistenceError(
           'ASSISTANT_PERSISTENCE_FAILED',

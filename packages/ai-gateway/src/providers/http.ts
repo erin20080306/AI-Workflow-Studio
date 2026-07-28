@@ -1,5 +1,6 @@
 import { AiGatewayError } from '../errors';
 import type { FetchTransport } from '../types';
+import { z } from 'zod';
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MAX_RESPONSE_BYTES = 1_000_000;
@@ -13,20 +14,78 @@ interface PostJsonOptions {
   readonly url: string;
 }
 
-function httpError(status: number): AiGatewayError {
+const ProviderErrorEnvelopeSchema = z
+  .object({
+    error: z
+      .object({
+        code: z.union([z.number(), z.string()]).nullish(),
+        param: z.string().nullish(),
+        type: z.string().nullish(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+async function providerErrorDetails(
+  response: Response,
+): Promise<Readonly<Record<string, unknown>>> {
+  const details: Record<string, unknown> = { status: response.status };
+  const requestId =
+    response.headers.get('x-request-id') ??
+    response.headers.get('request-id') ??
+    response.headers.get('x-goog-request-id');
+  if (requestId !== null && requestId.length > 0) {
+    details.requestId = requestId;
+  }
+
+  try {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) {
+      return details;
+    }
+    const parsed = ProviderErrorEnvelopeSchema.safeParse(JSON.parse(text) as unknown);
+    if (!parsed.success) {
+      return details;
+    }
+    const providerError = parsed.data.error;
+    if (providerError.code !== null && providerError.code !== undefined) {
+      details.providerCode = providerError.code;
+    }
+    if (providerError.param !== null && providerError.param !== undefined) {
+      details.providerParam = providerError.param;
+    }
+    if (providerError.type !== null && providerError.type !== undefined) {
+      details.providerType = providerError.type;
+    }
+  } catch {
+    return details;
+  }
+  return details;
+}
+
+async function httpError(response: Response): Promise<AiGatewayError> {
+  const details = await providerErrorDetails(response);
+  const status = response.status;
+  if (details.providerCode === 'insufficient_quota') {
+    return new AiGatewayError('AI_PROVIDER_QUOTA_EXCEEDED', 'AI provider quota is exhausted.', {
+      details,
+    });
+  }
   if (status === 401 || status === 403) {
     return new AiGatewayError(
       'AI_PROVIDER_AUTHENTICATION_FAILED',
       'AI provider authentication failed.',
+      { details },
     );
   }
   if (status === 429) {
     return new AiGatewayError('AI_PROVIDER_RATE_LIMITED', 'AI provider rate limit exceeded.', {
+      details,
       retryable: true,
     });
   }
   return new AiGatewayError('AI_PROVIDER_REQUEST_FAILED', 'AI provider request failed.', {
-    details: { status },
+    details,
     retryable: status >= 500,
   });
 }
@@ -69,7 +128,7 @@ export async function* streamJsonEvents(options: StreamJsonOptions): AsyncIterab
       signal: controller.signal,
     });
     if (!response.ok) {
-      throw httpError(response.status);
+      throw await httpError(response);
     }
     if (response.body === null) {
       throw new AiGatewayError(
@@ -175,7 +234,7 @@ export async function postJson(options: PostJsonOptions): Promise<unknown> {
     });
 
     if (!response.ok) {
-      throw httpError(response.status);
+      throw await httpError(response);
     }
     const contentLength = Number(response.headers.get('content-length') ?? '0');
     if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {

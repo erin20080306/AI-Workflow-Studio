@@ -1,4 +1,9 @@
-import { NODE_CATALOG, type WorkflowValidationIssue } from '@ai-workflow-studio/workflow-schema';
+import {
+  AIPlannerOutputSchema,
+  NODE_CATALOG,
+  type AIPlannerOutput,
+  type WorkflowValidationIssue,
+} from '@ai-workflow-studio/workflow-schema';
 
 import type { PlannerRequest } from './types';
 
@@ -38,6 +43,57 @@ function repairFeedback(issues: readonly WorkflowValidationIssue[]): string {
   return `\n\nThe previous output was rejected. Return a complete replacement JSON object that fixes only these validation classes:\n${lines}`;
 }
 
+export function buildPlannerShapeExample(request: PlannerRequest): AIPlannerOutput {
+  return AIPlannerOutputSchema.parse({
+    assumptions: [
+      'This shape example uses a manual trigger and a read-only validation node.',
+      'Replace its business labels and rules only when the trusted context supports the request.',
+    ],
+    explanation:
+      'Create a disabled, read-only draft that validates a bounded input before any approved execution.',
+    mappingProposals: [],
+    workflow: {
+      description: 'Validate an approved input with bounded, deterministic rules.',
+      edges: [],
+      executionTarget: request.context.executionTarget,
+      name: 'Safe input validation draft',
+      nodes: [
+        {
+          config: {
+            onInvalid: 'separate',
+            rules: [{ dataType: 'string', field: 'id', required: true }],
+          },
+          id: 'validate_input',
+          type: 'data.validate',
+          version: 1,
+        },
+      ],
+      schemaVersion: 1,
+      trigger: { config: {}, type: 'manual.trigger' },
+    },
+  });
+}
+
+export function buildPlannerSafeFallback(
+  request: PlannerRequest,
+  issues: readonly WorkflowValidationIssue[],
+): AIPlannerOutput {
+  const example = buildPlannerShapeExample(request);
+  const validationClasses = [...new Set(issues.map((issue) => issue.code))].sort();
+  return AIPlannerOutputSchema.parse({
+    ...example,
+    assumptions: [
+      'The provider response required server-side normalization before it could be released.',
+      'This conservative draft stays read-only and does not execute or access an unapproved integration.',
+      ...(validationClasses.length === 0
+        ? []
+        : [`Rejected provider validation classes: ${validationClasses.join(', ')}.`]),
+    ],
+    explanation:
+      'A safe, disabled validation draft was created automatically. Connect an approved source or Desktop Agent before extending it with file access or execution.',
+  });
+}
+
 export function buildPlannerUserPrompt(
   request: PlannerRequest,
   issues: readonly WorkflowValidationIssue[] = [],
@@ -55,5 +111,10 @@ Trusted execution context:
 ${JSON.stringify(context)}
 
 Use only IDs present in the trusted execution context. Do not invent credentials, connection IDs, device IDs, or folder aliases.
-If the requirement is brief, infer safe defaults and record them in assumptions. Produce the most useful valid draft supported by this context instead of asking the user to assemble workflow nodes.${repairFeedback(issues)}`;
+If the requirement is brief, infer safe defaults and record them in assumptions. Produce the most useful valid draft supported by this context instead of asking the user to assemble workflow nodes.
+
+Canonical valid shape example:
+${JSON.stringify(buildPlannerShapeExample(request))}
+
+Keep the exact envelope, node fields, config field names, and executionTarget shape demonstrated above. Adapt the nodes only when their required trusted IDs are available; otherwise return a useful read-only data validation draft and explain the unavailable integration in assumptions.${repairFeedback(issues)}`;
 }

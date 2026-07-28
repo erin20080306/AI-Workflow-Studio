@@ -82,6 +82,12 @@ describe('provider adapters', () => {
         model: 'gpt-5.6-sol',
         output: [
           {
+            encrypted_content: 'opaque-reasoning-item',
+            id: 'rs_test',
+            summary: [],
+            type: 'reasoning',
+          },
+          {
             content: [{ text: '{"ok":true}', type: 'output_text' }],
             type: 'message',
           },
@@ -123,6 +129,69 @@ describe('provider adapters', () => {
       text: '{"ok":true}',
       usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
     });
+  });
+
+  it('omits reasoning configuration for account-listed non-reasoning GPT models', async () => {
+    let capturedInit: RequestInit | undefined;
+    const fetchTransport: FetchTransport = async (_input, init) => {
+      capturedInit = init;
+      return jsonResponse({
+        id: 'resp_compatibility',
+        model: 'gpt-4.1-mini',
+        output: [
+          {
+            content: [{ text: '{"ok":true}', type: 'output_text' }],
+            type: 'message',
+          },
+        ],
+      });
+    };
+
+    await new OpenAiAdapter({
+      apiKey: API_KEY,
+      fetchTransport,
+      model: 'gpt-4.1-mini',
+    }).complete(completionRequest);
+    const body = JSON.parse(String(capturedInit?.body)) as Record<string, unknown>;
+
+    expect(body).not.toHaveProperty('reasoning');
+  });
+
+  it('preserves only safe upstream error metadata', async () => {
+    const fetchTransport: FetchTransport = async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 'unsupported_value',
+            message: 'Sensitive provider message that must not be retained.',
+            param: 'reasoning.effort',
+            type: 'invalid_request_error',
+          },
+        }),
+        {
+          headers: { 'content-type': 'application/json', 'x-request-id': 'req_safe_test' },
+          status: 400,
+        },
+      );
+
+    const error = await new OpenAiAdapter({
+      apiKey: API_KEY,
+      fetchTransport,
+    })
+      .complete(completionRequest)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      code: 'AI_PROVIDER_REQUEST_FAILED',
+      details: {
+        providerCode: 'unsupported_value',
+        providerParam: 'reasoning.effort',
+        providerType: 'invalid_request_error',
+        requestId: 'req_safe_test',
+        status: 400,
+      },
+    });
+    expect(JSON.stringify(error)).not.toContain('Sensitive provider message');
   });
 
   it('uses Anthropic Messages JSON instructions without unsupported workflow schema options', async () => {
@@ -294,7 +363,14 @@ describe('provider adapters', () => {
         apiKey: API_KEY,
         fetchTransport: async () =>
           sseResponse([
-            { type: 'response.created' },
+            {
+              response: {
+                id: 'resp_stream',
+                model: 'gpt-5.6-sol',
+                usage: null,
+              },
+              type: 'response.created',
+            },
             { delta: '安全', type: 'response.output_text.delta' },
             {
               response: {
@@ -317,6 +393,58 @@ describe('provider adapters', () => {
         usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 },
       },
     ]);
+  });
+
+  it('preserves safe OpenAI streaming failure metadata', async () => {
+    const error = await collectChat(
+      new OpenAiAdapter({
+        apiKey: API_KEY,
+        fetchTransport: async () =>
+          sseResponse([
+            {
+              code: 'model_error',
+              message: 'Provider message must not be retained.',
+              param: 'model',
+              type: 'error',
+            },
+          ]),
+      }),
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      code: 'AI_PROVIDER_REQUEST_FAILED',
+      details: {
+        eventType: 'error',
+        providerCode: 'model_error',
+        providerParam: 'model',
+      },
+    });
+    expect(JSON.stringify(error)).not.toContain('Provider message');
+  });
+
+  it('classifies exhausted OpenAI quota without exposing provider messages', async () => {
+    const error = await collectChat(
+      new OpenAiAdapter({
+        apiKey: API_KEY,
+        fetchTransport: async () =>
+          sseResponse([
+            {
+              code: 'insufficient_quota',
+              message: 'Account-specific billing text must not be retained.',
+              type: 'error',
+            },
+          ]),
+      }),
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      code: 'AI_PROVIDER_QUOTA_EXCEEDED',
+      details: {
+        eventType: 'error',
+        providerCode: 'insufficient_quota',
+      },
+    });
+    expect(JSON.stringify(error)).not.toContain('Account-specific billing text');
   });
 
   it('normalizes Anthropic content deltas and cumulative usage', async () => {

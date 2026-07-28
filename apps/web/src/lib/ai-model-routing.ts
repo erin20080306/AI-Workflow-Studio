@@ -13,9 +13,10 @@ import {
 import { z } from 'zod';
 
 import {
-  ALLOWED_AI_MODELS_BY_TIER,
   DEFAULT_AI_MODEL_MAPPINGS,
   ProductionAiProviderSchema,
+  isAccountModelCompatibleWithTier,
+  resolveAccountModelForTier,
   type AiModelMapping,
   type OpenAiReasoningEffort,
   type ProductionAiProvider,
@@ -45,7 +46,7 @@ export interface ResolvedAiModelRoute extends Omit<AiModelMapping, 'provider'> {
 }
 
 function isAllowedMapping(mapping: AiModelMapping): boolean {
-  return ALLOWED_AI_MODELS_BY_TIER[mapping.provider][mapping.tier].includes(mapping.model);
+  return isAccountModelCompatibleWithTier(mapping.provider, mapping.tier, mapping.model);
 }
 
 export async function listAiModelMappings(): Promise<readonly AiModelMapping[]> {
@@ -85,6 +86,34 @@ export async function listAiModelMappings(): Promise<readonly AiModelMapping[]> 
 }
 
 export type { OpenAiReasoningEffort };
+
+export async function listAccountAvailableAiModelMappings(): Promise<readonly AiModelMapping[]> {
+  const mappings = await listAiModelMappings();
+  if (getEnvironment().mockMode) return mappings;
+
+  const healthByProvider = new Map(
+    (
+      await Promise.all(
+        ProductionAiProviderSchema.options.map(async (provider) => {
+          const health = await getAiProviderHealth(provider);
+          return [provider, health] as const;
+        }),
+      )
+    ).map((entry) => entry),
+  );
+
+  return mappings.map((mapping) => {
+    const health = healthByProvider.get(mapping.provider);
+    if (health?.status !== 'available') return { ...mapping, enabled: false };
+    const model = resolveAccountModelForTier(
+      mapping.provider,
+      mapping.tier,
+      mapping.model,
+      health.models,
+    );
+    return model === undefined ? { ...mapping, enabled: false } : { ...mapping, model };
+  });
+}
 
 function effectivePlan(context: WorkspaceContext): PlanCode {
   return ['active', 'past_due', 'trialing'].includes(context.subscription.status)
@@ -216,16 +245,22 @@ export async function resolveAiModelRoute(
       if (input.provider !== 'auto') explicitProviderError = providerHealthError(health.status);
       continue;
     }
-    if (!health.models.includes(mapping.model)) {
+    const model = resolveAccountModelForTier(
+      mapping.provider,
+      mapping.tier,
+      mapping.model,
+      health.models,
+    );
+    if (model === undefined) {
       if (input.provider !== 'auto') {
         explicitProviderError = new AiGatewayError(
           'AI_PROVIDER_NOT_CONFIGURED',
-          'The selected model is not available to this provider account.',
+          'No tier-compatible text model is available to this provider account.',
         );
       }
       continue;
     }
-    return { ...mapping, plan };
+    return { ...mapping, model, plan };
   }
 
   if (explicitProviderError !== undefined) throw explicitProviderError;

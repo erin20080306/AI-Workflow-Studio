@@ -199,6 +199,14 @@ select public.platform_admin_update_ai_model_mapping(
   false
 );
 
+select public.platform_admin_update_ai_model_mapping(
+  'f1000000-0000-0000-0000-000000000001',
+  'openai',
+  'advanced',
+  'gpt-5.6-sol-20260728',
+  true
+);
+
 reset role;
 
 select tests.assert_true(
@@ -208,6 +216,14 @@ select tests.assert_true(
     where provider = 'gemini' and tier = 'economy'
   ),
   'superadmin must be able to update an allowlisted model mapping'
+);
+select tests.assert_true(
+  (
+    select model = 'gpt-5.6-sol-20260728'
+    from public.ai_model_tier_mappings
+    where provider = 'openai' and tier = 'advanced'
+  ),
+  'superadmin must be able to store an account-listed versioned model ID'
 );
 select tests.assert_true(
   exists (

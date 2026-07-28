@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { z } from 'zod';
 
 import { WebsiteBriefWorkspace } from '@/components/sites/website-brief-workspace';
-import { listAiModelMappings } from '@/lib/ai-model-routing';
+import { listAccountAvailableAiModelMappings } from '@/lib/ai-model-routing';
 import { buildAiTierOptions } from '@/lib/ai-model-selection';
 import { requireWorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
@@ -36,7 +36,7 @@ export default async function WebsiteBriefPage({
     const [generation, versions, mappings, messages, publication] = await Promise.all([
       getWebsiteSpecGeneration(context, project.id),
       listWebsiteSpecGenerations(context, project.id),
-      listAiModelMappings(),
+      listAccountAvailableAiModelMappings(),
       listWebsiteBriefMessages(context, project.id),
       getActiveWebsitePublication(context, project.id),
     ]);

@@ -2,7 +2,7 @@ import type { WorkflowValidationIssue } from '@ai-workflow-studio/workflow-schem
 
 import { AiGatewayError } from './errors';
 import { parseStrictPlannerOutput } from './json';
-import { buildPlannerUserPrompt, PLANNER_SYSTEM_PROMPT } from './prompts';
+import { buildPlannerSafeFallback, buildPlannerUserPrompt, PLANNER_SYSTEM_PROMPT } from './prompts';
 import { PLANNER_PROVIDER_JSON_SCHEMA } from './provider-schema';
 import type {
   AiProviderAdapter,
@@ -54,7 +54,7 @@ export class AiGateway {
         completion = await this.adapter.complete({
           attempt,
           jsonSchema: PLANNER_PROVIDER_JSON_SCHEMA,
-          maxOutputTokens: 12_000,
+          maxOutputTokens: 4_096,
           operation: 'workflow_plan',
           plannerRequest: request,
           schemaName: 'workflow_plan',
@@ -80,23 +80,28 @@ export class AiGateway {
       aggregateUsage = addUsage(aggregateUsage, completion.usage);
       const validation = parseStrictPlannerOutput(completion.text);
       const validationCodes = [...new Set(validation.issues.map((issue) => issue.code))].sort();
+      const fallback =
+        !validation.success && attempt === maxAttempts
+          ? buildPlannerSafeFallback(request, validation.issues)
+          : undefined;
       await recordUsage(this.usageSink, {
         attempt,
         durationMs: Math.max(0, Date.now() - startedAt),
         inputTokens: completion.usage.inputTokens,
         model: completion.model,
         operation: 'workflow_plan',
-        outcome: validation.success ? 'succeeded' : 'invalid',
+        outcome: validation.success || fallback !== undefined ? 'succeeded' : 'invalid',
         outputTokens: completion.usage.outputTokens,
         provider: this.adapter.provider,
         validationCodes,
       });
 
-      if (validation.success && validation.output !== undefined) {
+      const output = validation.success ? validation.output : fallback;
+      if (output !== undefined) {
         return {
           attempts: attempt,
           model: completion.model,
-          output: validation.output,
+          output,
           provider: this.adapter.provider,
           usage: aggregateUsage,
         };

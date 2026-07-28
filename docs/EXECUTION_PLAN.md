@@ -47,6 +47,7 @@ test, and build checks and has been committed.
 | 29    | Unified AI workspace          | Exact models, chat images, and confirmed deletion remain quota and Tenant safe   | completed |
 | 30    | Prompt-to-site and publishing | Prompt, follow-up, Canvas, edits, and approved public releases pass all gates    | completed |
 | 31    | Prompt-to-workflow automation | Short prompts create validated, persisted, approval-aware workflow drafts        | completed |
+| 32    | Account-verified AI models    | Three providers route only to account-listed, tier-compatible text model IDs     | completed |
 
 ## Phase 0 — Repository audit
 
@@ -325,3 +326,24 @@ validation before it is persisted. A validated plan is automatically saved as a
 Tenant-scoped draft and may be dry-run without writes. Activation, external
 calls, writes, and destructive actions remain separate explicit approvals and
 must never be initiated by model output.
+
+## Phase 32 — Account-verified AI model routing
+
+Replace aspirational provider model labels with the exact model IDs returned by
+the configured OpenAI, Anthropic, and Gemini accounts. Discover provider model
+inventories only from server-side credentials, keep the inventories and mapping
+controls restricted to platform Super Admin, and expose ordinary members only to
+the exact allowlisted choices available to their Store-backed tier.
+
+Route Assistant chat, workflow planning, and Website Studio through the selected
+account-verified model. Distinguish authentication, quota, rate-limit, timeout,
+and malformed-response failures without returning credentials or provider
+bodies. Aggregate all bounded repair attempts into one cost settlement. If a
+provider's final workflow JSON still fails strict validation, release only a
+server-constructed, validated, read-only fallback draft; never release or
+execute the rejected model output.
+
+Deploy the verified source to Vercel Production and repeat authenticated
+end-to-end checks for exact-model selection, Claude and Gemini chat, OpenAI
+provider status, safe workflow planning, review-draft persistence, administrator
+inventory visibility, and all primary workspace routes.

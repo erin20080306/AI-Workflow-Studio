@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 import { AssistantWorkspace } from '@/components/assistant/assistant-workspace';
-import { listAiModelMappings } from '@/lib/ai-model-routing';
+import { listAccountAvailableAiModelMappings } from '@/lib/ai-model-routing';
 import { buildAiTierOptions } from '@/lib/ai-model-selection';
 import { buildAssistantModelOptions } from '@/lib/assistant-models';
 import { listAssistantExecutionTargets } from '@/lib/assistant-execution-targets';
@@ -16,7 +16,7 @@ export default async function AssistantPage() {
   const environment = getEnvironment();
   const context = await requireWorkspaceContext();
   const [mappings, executionTargets] = await Promise.all([
-    listAiModelMappings(),
+    listAccountAvailableAiModelMappings(),
     listAssistantExecutionTargets(context),
   ]);
 

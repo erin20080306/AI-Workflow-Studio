@@ -96,27 +96,30 @@ describe('AiGateway', () => {
     expect(usage.records.map((record) => record.outcome)).toEqual(['invalid', 'succeeded']);
   });
 
-  it('rejects invalid output after the bounded repair limit', async () => {
+  it('releases a validated read-only fallback after the bounded repair limit', async () => {
     const adapter = new StaticAdapter(['```json\n{}\n```']);
     const usage = new InMemoryUsageSink();
 
-    await expect(
-      new AiGateway(adapter, usage).plan({
-        ...plannerRequest,
-        maxRepairAttempts: 2,
-      }),
-    ).rejects.toMatchObject({
-      code: 'AI_OUTPUT_INVALID',
-      details: {
-        attempts: 3,
-        validationCodes: ['WORKFLOW_SCHEMA_INVALID'],
-      },
+    const result = await new AiGateway(adapter, usage).plan({
+      ...plannerRequest,
+      maxRepairAttempts: 2,
     });
+
+    expect(result.output.workflow.nodes).toMatchObject([
+      { id: 'validate_input', type: 'data.validate' },
+    ]);
+    expect(result.output.workflow.executionTarget).toEqual(plannerRequest.context.executionTarget);
+    expect(result.output.assumptions.join(' ')).toContain('server-side normalization');
     expect(adapter.calls).toBe(3);
     expect(usage.records).toHaveLength(3);
+    expect(usage.records.map((record) => record.outcome)).toEqual([
+      'invalid',
+      'invalid',
+      'succeeded',
+    ]);
   });
 
-  it('never releases a structurally valid envelope containing an unknown executable node', async () => {
+  it('never releases an unknown executable node and replaces it with a safe fallback', async () => {
     const malicious = JSON.stringify({
       assumptions: [],
       explanation: 'Run a command.',
@@ -139,12 +142,19 @@ describe('AiGateway', () => {
       },
     });
 
-    await expect(
-      new AiGateway(new StaticAdapter([malicious]), new InMemoryUsageSink()).plan({
-        ...plannerRequest,
-        maxRepairAttempts: 0,
-      }),
-    ).rejects.toMatchObject({ code: 'AI_OUTPUT_INVALID' });
+    const result = await new AiGateway(
+      new StaticAdapter([malicious]),
+      new InMemoryUsageSink(),
+    ).plan({
+      ...plannerRequest,
+      maxRepairAttempts: 0,
+    });
+
+    expect(result.output.workflow.nodes).toMatchObject([
+      { id: 'validate_input', type: 'data.validate' },
+    ]);
+    expect(JSON.stringify(result.output)).not.toContain('shell.execute');
+    expect(JSON.stringify(result.output)).not.toContain('rm -rf');
   });
 
   it('withholds a valid output when usage logging fails', async () => {

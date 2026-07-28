@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ArrowRightIcon, CheckIcon, ShieldIcon, SparkIcon } from '@/components/icons';
 import { LocalizedText } from '@/components/language-provider';
 import { updateAiModelMappingAction } from '@/app/admin/actions';
-import { ALLOWED_AI_MODELS_BY_TIER, type ProductionAiProvider } from '@/lib/ai-model-catalog';
+import { listAccountModelsForTier, resolveAccountModelForTier } from '@/lib/ai-model-catalog';
 import { listAiModelMappings } from '@/lib/ai-model-routing';
 import { listAiProviderHealth, type AiProviderHealthStatus } from '@/lib/ai-provider-health';
 import { getEnvironment } from '@/lib/env';
@@ -89,6 +89,7 @@ export default async function AdminAiProvidersPage({
       return {
         environmentVariable: providerCopy[provider].environmentVariable,
         healthStatus,
+        accountModels: health?.models ?? [],
         label: providerCopy[provider].label,
         mappings: mappings.filter((mapping) => mapping.provider === provider),
         provider,
@@ -156,6 +157,12 @@ export default async function AdminAiProvidersPage({
                     <p className="mt-3 font-mono text-[10px] text-slate-400">
                       {provider.environmentVariable}
                     </p>
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      <LocalizedText
+                        en={`${provider.accountModels.length} account-listed models`}
+                        zhHant={`帳戶回傳 ${provider.accountModels.length} 個模型`}
+                      />
+                    </p>
                   </div>
                 </div>
                 <span
@@ -171,55 +178,84 @@ export default async function AdminAiProvidersPage({
                 </span>
               </div>
               <div className="mt-5 grid gap-3 lg:grid-cols-2">
-                {provider.mappings.map((mapping) => (
-                  <form
-                    action={updateAiModelMappingAction}
-                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                    key={mapping.tier}
-                  >
-                    <input name="provider" type="hidden" value={provider.provider} />
-                    <input name="tier" type="hidden" value={mapping.tier} />
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
-                        <LocalizedText
-                          en={tierCopy[mapping.tier].en}
-                          zhHant={tierCopy[mapping.tier].zhHant}
-                        />
-                      </p>
-                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                        <input defaultChecked={mapping.enabled} name="enabled" type="checkbox" />
-                        <LocalizedText en="Enabled" zhHant="開放" />
-                      </label>
-                    </div>
-                    <select
-                      className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700"
-                      defaultValue={mapping.model}
-                      name="model"
+                {provider.mappings.map((mapping) => {
+                  const accountModels = listAccountModelsForTier(
+                    provider.provider,
+                    mapping.tier,
+                    provider.accountModels,
+                  );
+                  const resolvedModel = resolveAccountModelForTier(
+                    provider.provider,
+                    mapping.tier,
+                    mapping.model,
+                    provider.accountModels,
+                  );
+                  return (
+                    <form
+                      action={updateAiModelMappingAction}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                      key={mapping.tier}
                     >
-                      {ALLOWED_AI_MODELS_BY_TIER[provider.provider as ProductionAiProvider][
-                        mapping.tier
-                      ].map((model) => (
-                        <option key={model} value={model}>
-                          {model}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <span className="text-[10px] text-slate-400">
-                        {mapping.costMultiplier.toFixed(1)}×
-                        {mapping.reasoningEffort === undefined
-                          ? ''
-                          : ` · ${mapping.reasoningEffort}`}
-                      </span>
-                      <button
-                        className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white"
-                        type="submit"
+                      <input name="provider" type="hidden" value={provider.provider} />
+                      <input name="tier" type="hidden" value={mapping.tier} />
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
+                          <LocalizedText
+                            en={tierCopy[mapping.tier].en}
+                            zhHant={tierCopy[mapping.tier].zhHant}
+                          />
+                        </p>
+                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                          <input defaultChecked={mapping.enabled} name="enabled" type="checkbox" />
+                          <LocalizedText en="Enabled" zhHant="開放" />
+                        </label>
+                      </div>
+                      <select
+                        className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-700 disabled:text-slate-400"
+                        defaultValue={resolvedModel ?? ''}
+                        disabled={accountModels.length === 0}
+                        name="model"
                       >
-                        <LocalizedText en="Update" zhHant="更新" />
-                      </button>
-                    </div>
-                  </form>
-                ))}
+                        {accountModels.length === 0 ? (
+                          <option value="">
+                            {provider.healthStatus === 'available'
+                              ? 'No compatible account model'
+                              : 'Provider check unavailable'}
+                          </option>
+                        ) : (
+                          accountModels.map((model) => (
+                            <option key={model} value={model}>
+                              {model}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      {resolvedModel !== mapping.model ? (
+                        <p className="mt-2 text-[10px] leading-4 text-amber-700">
+                          <LocalizedText
+                            en={`Preferred ${mapping.model}; account route ${resolvedModel ?? 'unavailable'}.`}
+                            zhHant={`偏好 ${mapping.model}；帳戶實際路由 ${resolvedModel ?? '不可用'}。`}
+                          />
+                        </p>
+                      ) : null}
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <span className="text-[10px] text-slate-400">
+                          {mapping.costMultiplier.toFixed(1)}×
+                          {mapping.reasoningEffort === undefined
+                            ? ''
+                            : ` · ${mapping.reasoningEffort}`}
+                        </span>
+                        <button
+                          className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                          disabled={accountModels.length === 0}
+                          type="submit"
+                        >
+                          <LocalizedText en="Update" zhHant="更新" />
+                        </button>
+                      </div>
+                    </form>
+                  );
+                })}
               </div>
             </article>
           ))}

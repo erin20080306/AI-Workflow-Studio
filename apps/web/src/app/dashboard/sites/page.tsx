@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 import { WebsiteStudioHome } from '@/components/sites/website-studio-home';
-import { listAiModelMappings } from '@/lib/ai-model-routing';
+import { listAccountAvailableAiModelMappings } from '@/lib/ai-model-routing';
 import { buildAiTierOptions } from '@/lib/ai-model-selection';
 import { requireWorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
@@ -16,7 +16,7 @@ export default async function WebsiteStudioPage() {
   const context = await requireWorkspaceContext();
   const [projects, mappings] = await Promise.all([
     listWebsiteProjects(context),
-    listAiModelMappings(),
+    listAccountAvailableAiModelMappings(),
   ]);
   return (
     <WebsiteStudioHome

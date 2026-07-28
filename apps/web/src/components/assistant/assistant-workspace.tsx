@@ -98,7 +98,7 @@ class AssistantRequestError extends Error {
 
 function promptErrorForCode(code: string): Exclude<PromptError, 'short'> {
   if (code === 'AI_PROVIDER_AUTHENTICATION_FAILED') return 'authentication';
-  if (code === 'AI_PROVIDER_RATE_LIMITED') return 'rate';
+  if (code === 'AI_PROVIDER_QUOTA_EXCEEDED' || code === 'AI_PROVIDER_RATE_LIMITED') return 'rate';
   if (code === 'AI_PROVIDER_NOT_CONFIGURED') return 'model';
   if (code === 'AI_PROVIDER_REQUEST_FAILED' || code === 'AI_PROVIDER_TIMEOUT') return 'temporary';
   return 'unavailable';

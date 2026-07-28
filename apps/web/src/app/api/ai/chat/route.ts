@@ -174,6 +174,41 @@ export async function POST(request: Request): Promise<Response> {
           }
         } catch (error) {
           const safe = assistantErrorDetails(error);
+          const providerDetails =
+            error instanceof AiGatewayError
+              ? {
+                  ...(typeof error.details.providerCode === 'number' ||
+                  typeof error.details.providerCode === 'string'
+                    ? { providerCode: error.details.providerCode }
+                    : {}),
+                  ...(typeof error.details.providerParam === 'string'
+                    ? { providerParam: error.details.providerParam }
+                    : {}),
+                  ...(typeof error.details.providerType === 'string'
+                    ? { providerType: error.details.providerType }
+                    : {}),
+                  ...(typeof error.details.requestId === 'string'
+                    ? { requestId: error.details.requestId }
+                    : {}),
+                  ...(typeof error.details.status === 'number'
+                    ? { upstreamStatus: error.details.status }
+                    : {}),
+                  ...(typeof error.details.eventType === 'string'
+                    ? { eventType: error.details.eventType }
+                    : {}),
+                }
+              : {};
+          console.error(
+            JSON.stringify({
+              aiChatFailure: {
+                code: safe.code,
+                model: route.model,
+                provider: route.provider,
+                reason: error instanceof Error ? error.message : safe.message,
+                ...providerDetails,
+              },
+            }),
+          );
           const status =
             error instanceof AiGatewayError && error.code === 'AI_PROVIDER_CANCELLED'
               ? 'cancelled'
