@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type WebsiteCustomDomain,
   WebsitePublicationSchema,
   type WebsitePublication,
   type WebsiteSpecClientGeneration,
@@ -10,6 +11,7 @@ import { z } from 'zod';
 
 import { CheckIcon, ShieldIcon } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
+import { WebsiteCustomDomainPanel } from '@/components/sites/website-custom-domain-panel';
 import { websiteSiteUrl } from '@/lib/website-site-host';
 
 const PublicationResponseSchema = z.object({ publication: WebsitePublicationSchema }).strict();
@@ -47,13 +49,19 @@ const copy = {
 } as const;
 
 export function WebsitePublishPanel({
+  canManageCustomDomains,
   generation,
+  initialDomains,
   initialPublication,
   projectId,
+  providerConfigured,
 }: Readonly<{
+  canManageCustomDomains: boolean;
   generation: WebsiteSpecClientGeneration;
+  initialDomains: readonly WebsiteCustomDomain[];
   initialPublication: WebsitePublication | undefined;
   projectId: string;
+  providerConfigured: boolean;
 }>) {
   const { locale } = useLanguage();
   const text = copy[locale];
@@ -164,6 +172,15 @@ export function WebsitePublishPanel({
         <p aria-live="polite" className="mt-3 text-xs font-semibold text-rose-700">
           {message}
         </p>
+      ) : null}
+
+      {publication !== undefined ? (
+        <WebsiteCustomDomainPanel
+          canManage={canManageCustomDomains}
+          initialDomains={initialDomains}
+          projectId={projectId}
+          providerConfigured={providerConfigured}
+        />
       ) : null}
     </section>
   );

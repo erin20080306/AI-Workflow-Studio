@@ -2,7 +2,8 @@
 
 ## Current phase
 
-Phase 35 — Portable static website export (completed)
+Phase 36 — Customer custom domains (blocked on an external customer-owned test
+hostname)
 
 ## Repository baseline
 
@@ -2732,3 +2733,79 @@ Status: completed
 ### Commit
 
 - `feat(web): add portable website export` (this phase commit)
+
+## Phase 36 — Customer custom domains
+
+Status: blocked on production provider configuration and a disposable
+customer-owned acceptance hostname
+
+### Implemented
+
+- Added a globally unique, Tenant-bound `website_custom_domains` claim table
+  with active-state consistency checks, authenticated read-only RLS, and
+  service-role-only mutations.
+- Added paid owner/admin access control. Free, trial, canceled, editor, and
+  viewer customer contexts cannot claim or verify a domain; platform
+  administrators retain an audited support path.
+- Added strict hostname normalization that rejects URLs, ports, wildcards, IP
+  addresses, local/reserved suffixes, Vercel hosts, the platform apex, and every
+  platform subdomain.
+- Added server-only Vercel project-domain registration, idempotent claim retry,
+  ownership verification, provider-recommended DNS instructions, routing
+  configuration checks, and classified provider errors.
+- Added a Website Studio panel that displays the exact TXT/A/CNAME records,
+  ownership and routing state, safe platform fallback URL, and a verification
+  action without exposing provider credentials.
+- Added custom-host proxy routing to the same current immutable publication and
+  safe public asset endpoint used by platform-hosted sites. Client-supplied
+  internal routing headers are removed, and inactive or unverified claims fail
+  closed with a public 404.
+- Added metadata-only domain audit events using a hostname fingerprint. DNS
+  values, Vercel responses, provider tokens, and generated site content are not
+  written to the audit log.
+- Applied hosted Supabase migration
+  `202607280010_customer_custom_domains.sql` and verified the local/remote
+  migration histories match.
+- Added future Phase 37 AI-first website briefs, Phase 38 paid GitHub site
+  publishing, Phase 39 guided safe payment/API integrations, and Phase 40
+  end-to-end website delivery acceptance to the execution plan. Free users
+  remain allowed to create, preview, and publish on platform hosting; ZIP and
+  future customer GitHub delivery remain paid-only.
+
+### Validation
+
+- Focused hostname, routing, access, and environment tests: passed — 30 tests
+- `pnpm db:test`: passed — fresh migrations, globally unique domain index,
+  Tenant-scoped reads, and service-only mutations
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 239 tests across 51 files
+- `pnpm build:web`: passed — 42 generated application pages, including custom
+  domain claim/verify APIs and public host route. The initial sandboxed attempt
+  could not bind a Turbopack worker port; the permitted unrestricted retry
+  compiled and generated every route successfully.
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Production state and blocker
+
+- The existing Vercel Production deployment and aliases were inspected and
+  reported `Ready`. Unauthenticated HTTPS returned `200 OK` for the platform
+  homepage, Website Studio route, and a real wildcard customer-site host.
+- The Vercel Production project now contains server-only
+  `VERCEL_CUSTOM_DOMAIN_TOKEN`, `VERCEL_CUSTOM_DOMAIN_PROJECT_ID`, and
+  `VERCEL_CUSTOM_DOMAIN_TEAM_ID`. The environment-variable names were verified
+  without revealing the Token value, and the latest user-triggered Production
+  redeployment reported `Ready`.
+- Completing the Phase 36 acceptance gate still requires one disposable
+  customer-owned hostname outside `erin-aiworkflowstudio.com`. Both ownership
+  and routing must pass Vercel, then `/` and all generated inner pages must
+  return the expected public site over HTTPS.
+- The default Website Studio brief is still the six-step questionnaire. The
+  user-approved Phase 37 design replaces it with one natural-language direction
+  prompt, bounded AI follow-ups, an inferred review summary, and the existing
+  questionnaire as optional advanced settings.
+- Customer-generated sites are not yet pushed to a customer's GitHub account,
+  and payment/API integration modules are not yet implemented. Those are the
+  explicitly pending Phase 38 and Phase 39 scopes and must not be represented as
+  available customer features.

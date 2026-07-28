@@ -2,6 +2,7 @@
 
 import {
   WebsiteSpecClientGenerationSchema,
+  type WebsiteCustomDomain,
   type WebsitePublication,
   type WebsiteGenerationSelection,
   type WebsiteSpecClientGeneration,
@@ -59,19 +60,25 @@ const copy = {
 
 export function WebsiteSpecGenerator({
   canExportWebsite,
+  canManageCustomDomains,
   initialGeneration,
+  initialDomains,
   initialPublication,
   initialVersions,
   modelOptions,
   projectId,
+  providerConfigured,
   tierOptions,
 }: Readonly<{
   canExportWebsite: boolean;
+  canManageCustomDomains: boolean;
   initialGeneration: WebsiteSpecClientGeneration | undefined;
+  initialDomains: readonly WebsiteCustomDomain[];
   initialPublication: WebsitePublication | undefined;
   initialVersions: readonly WebsiteSpecClientGeneration[];
   modelOptions: readonly WebsiteGenerationModelOption[];
   projectId: string;
+  providerConfigured: boolean;
   tierOptions: readonly AiTierOption[];
 }>) {
   const { locale } = useLanguage();
@@ -181,11 +188,14 @@ export function WebsiteSpecGenerator({
           </dl>
           <WebsiteSpecEditor
             canExportWebsite={canExportWebsite}
+            canManageCustomDomains={canManageCustomDomains}
             initialGeneration={generation}
+            initialDomains={initialDomains}
             initialPublication={initialPublication}
             initialVersions={initialVersions.length === 0 ? [generation] : initialVersions}
             modelOptions={modelOptions}
             projectId={projectId}
+            providerConfigured={providerConfigured}
             tierOptions={tierOptions}
           />
         </div>

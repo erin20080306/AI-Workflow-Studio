@@ -83,6 +83,11 @@ roles cannot mutate those resources; a stored draft must carry all six
 completion steps and required timestamps; only an authorized service RPC can
 publish; and a second release preserves one active slug plus an immutable
 superseded record.
+Customer-domain assertions additionally verify a globally unique hostname
+index, active-state ownership/routing consistency, Tenant-scoped browser reads,
+and service-only mutations. Unit tests reject platform, reserved, wildcard,
+local, IP, path-bearing, and port-bearing claims and verify apex A versus
+subdomain CNAME instructions.
 
 ### End to end
 
@@ -125,6 +130,20 @@ the public route. The advanced journey completes purpose, audience, pages,
 brand direction, content, and calls to action, proves incomplete briefs cannot
 create drafts, verifies immutable editing/Undo/Redo and private AI images, and
 proves an unversioned post-draft update fails closed.
+Hosting acceptance additionally opens every generated page through the platform
+wildcard and compatibility path. A real custom-domain acceptance run must use a
+customer-owned disposable hostname, apply the exact provider DNS records,
+observe both ownership and routing verification, then load the homepage and
+every inner-page link over unauthenticated HTTPS. Mock verification is not
+evidence of a working public customer domain.
+
+Paid-delivery acceptance uses separate Free and paid sessions. Free may create,
+preview, and publish on the platform but cannot download source or initiate a
+customer GitHub write. A paid owner may export an exact version and, after Phase
+37, explicitly publish the same integrity-checked release through a
+least-privilege GitHub authorization. Phase 38 integration tests must use
+provider test modes and prove that generated source contains placeholders rather
+than live credentials.
 
 The Agent API E2E starts a write-capable Run while its paired Agent is offline,
 asserts no Job exists before approval, approves it, reconnects, claims exactly

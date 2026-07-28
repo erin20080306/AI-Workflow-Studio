@@ -545,5 +545,82 @@ select tests.assert_true(
   'approved website publishing must create a metadata-only audit event'
 );
 
+insert into public.website_custom_domains (
+  id,
+  tenant_id,
+  project_id,
+  hostname,
+  status,
+  ownership_verified,
+  routing_verified,
+  dns_records,
+  created_by,
+  updated_by,
+  activated_at
+)
+values
+  (
+    'e8000000-0000-4000-8000-000000000001',
+    'e2000000-0000-4000-8000-000000000001',
+    'e3000000-0000-4000-8000-000000000003',
+    'www.tenant-a-site.example.com',
+    'active',
+    true,
+    true,
+    '[{"name":"www.tenant-a-site.example.com","purpose":"routing","type":"CNAME","value":"cname.vercel-dns-0.com"}]',
+    'e1000000-0000-4000-8000-000000000001',
+    'e1000000-0000-4000-8000-000000000001',
+    now()
+  ),
+  (
+    'e8000000-0000-4000-8000-000000000002',
+    'e2000000-0000-4000-8000-000000000002',
+    'e3000000-0000-4000-8000-000000000002',
+    'www.tenant-b-site.example.com',
+    'pending_dns',
+    true,
+    false,
+    '[{"name":"www.tenant-b-site.example.com","purpose":"routing","type":"CNAME","value":"cname.vercel-dns-0.com"}]',
+    'e1000000-0000-4000-8000-000000000002',
+    'e1000000-0000-4000-8000-000000000002',
+    null
+  );
+
+select tests.assert_true(
+  (
+    select count(*) = 1
+    from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'website_custom_domains'
+      and indexname = 'website_custom_domains_hostname_idx'
+      and indexdef like 'CREATE UNIQUE INDEX%'
+  ),
+  'customer website hostnames must be globally unique'
+);
+
+reset role;
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  'e1000000-0000-4000-8000-000000000001',
+  true
+);
+
+select tests.assert_true(
+  (
+    select count(*) = 1
+      and bool_and(tenant_id = 'e2000000-0000-4000-8000-000000000001')
+    from public.website_custom_domains
+  ),
+  'a member must only read custom domains from their tenant'
+);
+
+select tests.assert_true(
+  not has_table_privilege('authenticated', 'public.website_custom_domains', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_custom_domains', 'update')
+  and not has_table_privilege('authenticated', 'public.website_custom_domains', 'delete'),
+  'customer domain mutations must remain behind authenticated server routes'
+);
+
 reset role;
 rollback;

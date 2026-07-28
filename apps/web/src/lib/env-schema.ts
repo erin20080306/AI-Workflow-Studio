@@ -75,6 +75,15 @@ const environmentSchema = z.object({
   OPENAI_API_KEY: optionalSecret,
   OPENAI_MODEL: optionalModel,
   SUPABASE_SERVICE_ROLE_KEY: optionalSecret,
+  VERCEL_CUSTOM_DOMAIN_PROJECT_ID: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().min(3).max(160).optional(),
+  ),
+  VERCEL_CUSTOM_DOMAIN_TEAM_ID: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().min(3).max(160).optional(),
+  ),
+  VERCEL_CUSTOM_DOMAIN_TOKEN: optionalSecret,
 });
 
 export interface AppEnvironment {
@@ -101,6 +110,12 @@ export interface AppEnvironment {
     readonly openai: string;
   };
   readonly supabaseConfigured: boolean;
+  readonly vercelCustomDomains: {
+    readonly configured: boolean;
+    readonly projectId?: string;
+    readonly teamId?: string;
+    readonly token?: string;
+  };
 }
 
 export function parseEnvironment(input: Record<string, string | undefined>): AppEnvironment {
@@ -150,5 +165,19 @@ export function parseEnvironment(input: Record<string, string | undefined>): App
       openai: parsed.data.OPENAI_MODEL ?? 'gpt-5.6-sol',
     },
     supabaseConfigured,
+    vercelCustomDomains: {
+      configured: Boolean(
+        parsed.data.VERCEL_CUSTOM_DOMAIN_PROJECT_ID && parsed.data.VERCEL_CUSTOM_DOMAIN_TOKEN,
+      ),
+      ...(parsed.data.VERCEL_CUSTOM_DOMAIN_PROJECT_ID
+        ? { projectId: parsed.data.VERCEL_CUSTOM_DOMAIN_PROJECT_ID }
+        : {}),
+      ...(parsed.data.VERCEL_CUSTOM_DOMAIN_TEAM_ID
+        ? { teamId: parsed.data.VERCEL_CUSTOM_DOMAIN_TEAM_ID }
+        : {}),
+      ...(parsed.data.VERCEL_CUSTOM_DOMAIN_TOKEN
+        ? { token: parsed.data.VERCEL_CUSTOM_DOMAIN_TOKEN }
+        : {}),
+    },
   };
 }

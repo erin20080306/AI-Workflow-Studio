@@ -36,9 +36,18 @@ export {
   type WebsitePromptStartInput,
 } from './conversation';
 export {
+  WebsiteCustomDomainClaimInputSchema,
+  WebsiteCustomDomainSchema,
+  WebsiteCustomDomainStatusSchema,
+  WebsiteDnsRecordSchema,
+  WebsiteDnsRecordTypeSchema,
   WebsitePublicationSchema,
   WebsitePublicationStatusSchema,
   WebsitePublishInputSchema,
+  type WebsiteCustomDomain,
+  type WebsiteCustomDomainClaimInput,
+  type WebsiteCustomDomainStatus,
+  type WebsiteDnsRecord,
   type WebsitePublication,
   type WebsitePublicationStatus,
   type WebsitePublishInput,

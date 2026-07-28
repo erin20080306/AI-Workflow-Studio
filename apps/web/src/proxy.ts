@@ -6,6 +6,12 @@ import {
   parseSupabasePublicConfiguration,
 } from './lib/supabase/config';
 import {
+  customerHostnameFromHost,
+  isAnyPublishedWebsiteAssetPath,
+  WEBSITE_CUSTOM_HOST_HEADER,
+  websiteCustomDomainRewritePath,
+} from './lib/website-custom-domain';
+import {
   isPublishedWebsiteAssetPath,
   WEBSITE_SITE_HOST_HEADER,
   websiteSiteRewritePath,
@@ -13,11 +19,12 @@ import {
 } from './lib/website-site-host';
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
-  const siteSlug = websiteSiteSlugFromHost(
-    request.headers.get('x-forwarded-host') ?? request.headers.get('host'),
-  );
+  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
+  const siteSlug = websiteSiteSlugFromHost(host);
+  const customHostname = customerHostnameFromHost(host);
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete(WEBSITE_SITE_HOST_HEADER);
+  requestHeaders.delete(WEBSITE_CUSTOM_HOST_HEADER);
   if (siteSlug !== undefined) {
     if (isPublishedWebsiteAssetPath(request.nextUrl.pathname, siteSlug)) {
       return NextResponse.next({ request: { headers: requestHeaders } });
@@ -25,6 +32,15 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     requestHeaders.set(WEBSITE_SITE_HOST_HEADER, siteSlug);
     const destination = request.nextUrl.clone();
     destination.pathname = websiteSiteRewritePath(siteSlug, request.nextUrl.pathname);
+    return NextResponse.rewrite(destination, { request: { headers: requestHeaders } });
+  }
+  if (customHostname !== undefined) {
+    if (isAnyPublishedWebsiteAssetPath(request.nextUrl.pathname)) {
+      return NextResponse.next({ request: { headers: requestHeaders } });
+    }
+    requestHeaders.set(WEBSITE_CUSTOM_HOST_HEADER, customHostname);
+    const destination = request.nextUrl.clone();
+    destination.pathname = websiteCustomDomainRewritePath(customHostname, request.nextUrl.pathname);
     return NextResponse.rewrite(destination, { request: { headers: requestHeaders } });
   }
 

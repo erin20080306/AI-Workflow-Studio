@@ -188,6 +188,27 @@ renderer uses registered components, ID-based approved assets, a restrictive
 CSP, and no customer script/form/external-URL execution path. See
 [`WEBSITE_STUDIO.md`](./WEBSITE_STUDIO.md).
 
+Customer hostname claims are globally unique and written only by the
+authenticated server after it derives the Tenant, project, actor, subscription,
+and role. Free, trial, canceled, editor, and viewer customer contexts cannot
+claim or verify a hostname. Platform, reserved, wildcard, IP, local, and Vercel
+hostnames are rejected. A hostname routes publicly only while its claim is
+active and both provider ownership and DNS routing checks are true.
+
+The Vercel domain token, project identifiers, DNS-provider sessions, and TLS
+private keys never enter Website Specs, browser state, generated documents,
+exports, or audit metadata. Audit events store a hostname fingerprint, internal
+domain identifier, record types, state, and outcome—not DNS record values or
+provider responses. Public custom-host requests strip client-supplied internal
+routing headers and resolve only the current immutable active publication.
+
+Portable source and future GitHub releases reuse the registered-component static
+renderer. They must not include provider keys, OAuth tokens, payment secrets,
+webhook secrets, local paths, prompts, private version history, arbitrary
+scripts, or executable model output. Future integration modules may expose only
+validated public configuration and secret-name placeholders; all functional
+provider credentials remain in a server-side deployment boundary.
+
 ## Security review gates
 
 - Dependency and license audit.

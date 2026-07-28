@@ -10,6 +10,7 @@ import {
   type WebsiteBriefDraft,
   type WebsiteBriefPatch,
   type WebsiteBriefStep,
+  type WebsiteCustomDomain,
   type WebsitePage,
   type WebsitePublication,
   type WebsiteProject,
@@ -199,21 +200,27 @@ function updatePageField(
 
 export function WebsiteBriefWorkspace({
   canExportWebsite,
+  canManageCustomDomains,
   initialGeneration,
+  initialDomains,
   initialMessages,
   initialPublication,
   initialProject,
   initialVersions,
   modelOptions,
+  providerConfigured,
   tierOptions,
 }: Readonly<{
   canExportWebsite: boolean;
+  canManageCustomDomains: boolean;
   initialGeneration: WebsiteSpecClientGeneration | undefined;
+  initialDomains: readonly WebsiteCustomDomain[];
   initialMessages: readonly WebsiteBriefMessage[];
   initialPublication: WebsitePublication | undefined;
   initialProject: WebsiteProject;
   initialVersions: readonly WebsiteSpecClientGeneration[];
   modelOptions: readonly WebsiteGenerationModelOption[];
+  providerConfigured: boolean;
   tierOptions: readonly AiTierOption[];
 }>) {
   const { locale } = useLanguage();
@@ -776,11 +783,14 @@ export function WebsiteBriefWorkspace({
         <div className="mt-5">
           <WebsiteSpecGenerator
             canExportWebsite={canExportWebsite}
+            canManageCustomDomains={canManageCustomDomains}
             initialGeneration={generation}
+            initialDomains={initialDomains}
             initialPublication={initialPublication}
             initialVersions={initialVersions}
             modelOptions={modelOptions}
             projectId={project.id}
+            providerConfigured={providerConfigured}
             tierOptions={tierOptions}
           />
         </div>

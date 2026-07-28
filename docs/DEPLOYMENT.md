@@ -55,6 +55,36 @@ authenticated synchronization route; it is not a Vercel environment variable
 and is never persisted. See
 [usage control and Store entitlements](./USAGE_AND_STORE.md).
 
+Customer custom-domain automation additionally requires
+`VERCEL_CUSTOM_DOMAIN_PROJECT_ID`, an optional
+`VERCEL_CUSTOM_DOMAIN_TEAM_ID`, and a server-only
+`VERCEL_CUSTOM_DOMAIN_TOKEN`. The token must be limited to the Vercel scope and
+team that owns the production project and must never use a `NEXT_PUBLIC_`
+variable. Missing credentials keep the platform host and wildcard subdomains
+available while the custom-domain claim control fails closed.
+
+For each customer hostname, the server registers the hostname with the existing
+Vercel project and returns the provider's exact ownership and routing records.
+Do not copy a generic DNS value when Vercel supplies a different recommendation.
+The application marks a hostname active only when Vercel reports both ownership
+verification and a non-misconfigured DNS route. Vercel provisions TLS after
+those checks pass; the application does not store certificate private keys.
+
+Production setup order:
+
+1. Apply the `website_custom_domains` migration.
+2. Add the three server-only Vercel variables to Production.
+3. Deploy the matching Git commit.
+4. Claim a disposable customer-owned test hostname as a paid workspace owner.
+5. Add the exact DNS records shown by the application.
+6. Recheck until both verification badges pass.
+7. Test `/` and every generated inner-page link over unauthenticated HTTPS.
+
+Customer source ZIP download remains paid-only. Customer GitHub publishing and
+guided payment/API integrations are separate gated delivery phases; a platform
+repository push does not imply that a customer's generated website has been
+pushed to that customer's GitHub account.
+
 ## Desktop release channels
 
 Windows artifacts are built on Windows runners and macOS artifacts on macOS
@@ -78,10 +108,11 @@ Certification Kit, listing, privacy, and support checks pass. See
 
 ## Current deployment status
 
-The hosted Web/Supabase authentication boundary was established and verified in
-Phase 14. The Phase 22 usage-control and Microsoft Store entitlement changes
-have passed local Production-build and browser checks but have not been deployed
-to that hosted environment.
+The hosted Web/Supabase authentication boundary, usage controls, Website Studio,
+platform publishing, wildcard customer-site hosting, and paid static ZIP export
+are deployed. The production project and aliases are healthy. Customer custom
+domains require the Phase 36 migration plus the server-only Vercel domain
+credentials before the claim control can be enabled.
 
 No Microsoft Store package has been submitted, certified, or connected to the
 entitlement endpoint, and no signed desktop release or GitHub Release has been

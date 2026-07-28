@@ -13,6 +13,7 @@ import { z } from 'zod';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
+import { normalizeCustomerHostname } from '@/lib/website-custom-domain';
 import { getWebsiteSpecVersion } from '@/lib/website-spec-server';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
@@ -186,6 +187,26 @@ export interface PublishedWebsite {
   readonly tenantId: string;
 }
 
+async function publishedWebsiteFromRow(
+  row: z.infer<typeof WebsitePublicationRowSchema>,
+): Promise<PublishedWebsite | undefined> {
+  const specResult = await createSupabaseAdminClient()
+    .from('website_specs')
+    .select('spec')
+    .eq('tenant_id', row.tenant_id)
+    .eq('project_id', row.project_id)
+    .eq('version_number', row.spec_version)
+    .maybeSingle();
+  const parsedSpec = z.object({ spec: WebsiteSpecSchema }).strict().safeParse(specResult.data);
+  if (specResult.error !== null || !parsedSpec.success) return undefined;
+  return {
+    projectId: row.project_id,
+    publication: publicationView(row),
+    spec: parsedSpec.data.spec,
+    tenantId: row.tenant_id,
+  };
+}
+
 export async function getPublishedWebsiteBySlug(
   slugValue: string,
 ): Promise<PublishedWebsite | undefined> {
@@ -218,19 +239,43 @@ export async function getPublishedWebsiteBySlug(
     .maybeSingle();
   if (publicationResult.error !== null || publicationResult.data === null) return undefined;
   const row = WebsitePublicationRowSchema.parse(publicationResult.data);
-  const specResult = await admin
-    .from('website_specs')
-    .select('spec')
-    .eq('tenant_id', row.tenant_id)
-    .eq('project_id', row.project_id)
-    .eq('version_number', row.spec_version)
+  return publishedWebsiteFromRow(row);
+}
+
+export async function getPublishedWebsiteByDomain(
+  hostnameValue: string,
+): Promise<PublishedWebsite | undefined> {
+  let hostname: string;
+  try {
+    hostname = normalizeCustomerHostname(hostnameValue);
+  } catch {
+    return undefined;
+  }
+  if (getEnvironment().mockMode) return undefined;
+  const admin = createSupabaseAdminClient();
+  const domainResult = await admin
+    .from('website_custom_domains')
+    .select('project_id, tenant_id')
+    .eq('hostname', hostname)
+    .eq('status', 'active')
+    .eq('ownership_verified', true)
+    .eq('routing_verified', true)
     .maybeSingle();
-  const parsedSpec = z.object({ spec: WebsiteSpecSchema }).strict().safeParse(specResult.data);
-  if (specResult.error !== null || !parsedSpec.success) return undefined;
-  return {
-    projectId: row.project_id,
-    publication: publicationView(row),
-    spec: parsedSpec.data.spec,
-    tenantId: row.tenant_id,
-  };
+  const domain = z
+    .object({
+      project_id: z.string().uuid(),
+      tenant_id: z.string().uuid(),
+    })
+    .strict()
+    .safeParse(domainResult.data);
+  if (domainResult.error !== null || !domain.success) return undefined;
+  const publicationResult = await admin
+    .from('website_publications')
+    .select('id, project_id, published_at, slug, spec_version, status, superseded_at, tenant_id')
+    .eq('tenant_id', domain.data.tenant_id)
+    .eq('project_id', domain.data.project_id)
+    .eq('status', 'active')
+    .maybeSingle();
+  if (publicationResult.error !== null || publicationResult.data === null) return undefined;
+  return publishedWebsiteFromRow(WebsitePublicationRowSchema.parse(publicationResult.data));
 }

@@ -48,6 +48,14 @@ test, and build checks and has been committed.
 | 30    | Prompt-to-site and publishing | Prompt, follow-up, Canvas, edits, and approved public releases pass all gates    | completed |
 | 31    | Prompt-to-workflow automation | Short prompts create validated, persisted, approval-aware workflow drafts        | completed |
 | 32    | Account-verified AI models    | Three providers route only to account-listed, tier-compatible text model IDs     | completed |
+| 33    | Production site acceptance    | Live prompt-to-site, editing, approval, and public routes pass                   | completed |
+| 34    | Wildcard subdomain hosting    | Every active publication receives a verified stable platform subdomain           | completed |
+| 35    | Portable static export        | Paid users can download a bounded, secret-free, verifiable website ZIP           | completed |
+| 36    | Customer custom domains       | Paid owners can verify and activate a customer-owned hostname safely             | blocked   |
+| 37    | AI-first website brief        | One direction prompt creates a rich inferred brief with bounded follow-ups       | pending   |
+| 38    | Paid GitHub site publishing   | Paid users can explicitly push an exact safe release through a GitHub App        | pending   |
+| 39    | Guided site integrations      | Allowlisted payment/API modules guide setup without exposing credentials         | pending   |
+| 40    | Website delivery acceptance   | Free/paid gates, pages, domains, ZIP, GitHub, and integrations pass end to end   | pending   |
 
 ## Phase 0 — Repository audit
 
@@ -404,3 +412,70 @@ keep certificates and DNS-provider credentials outside the application, and
 record only metadata-safe audit events. A custom domain must serve the same
 immutable active publication as its platform path and wildcard subdomain, with
 safe rollback to those platform URLs if verification or renewal fails.
+
+## Phase 37 — AI-first website brief
+
+Replace the six-step questionnaire as the default Website Studio entry with one
+prominent natural-language direction field. The user should be able to describe
+the desired business, audience, feeling, pages, and outcomes in ordinary words;
+AI must infer the purpose, target audience, information architecture, brand
+direction, content strategy, calls to action, page imagery, and safe interactive
+modules into the existing validated Website Brief and Website Spec contracts.
+
+If a safe, useful draft cannot be produced, ask only one to three material
+follow-up questions in the conversation. Do not require the user to complete
+every former questionnaire field. Keep the existing six-step editor under a
+collapsed optional `Advanced settings` section for precise overrides, and show a
+reviewable AI summary before generating the first Canvas version.
+
+The generated site must include purposeful per-page composition rather than
+duplicated placeholder layouts. Story, contact, services, and other requested
+pages should receive context-appropriate validated image assignments and
+registered smart modules such as FAQ, contact/lead capture, or appointment
+intent when the request calls for them. AI output remains schema-validated,
+quota-controlled, reversible, and unable to emit executable customer code.
+
+## Phase 38 — Paid GitHub site publishing
+
+Allow free members to continue creating, previewing, and publishing sites on the
+platform host, while reserving source ZIP download and customer GitHub publishing
+for an active paid subscription. Use a GitHub App installation or equivalent
+revocable least-privilege authorization; do not accept broad personal access
+tokens in the browser or place GitHub credentials in a generated website.
+
+An authenticated owner or admin must select the exact immutable Website Spec
+version, repository, and branch and explicitly confirm the external write.
+Generate the same bounded static source accepted by Phase 35, reject secret or
+path patterns before transfer, make retries idempotent, and record only
+repository identifiers, commit metadata, integrity digest, and outcome in the
+audit log. AI suggestions may prepare the release but may never push on their
+own.
+
+## Phase 39 — Guided site integrations
+
+Add a step-by-step integration workspace for allowlisted capabilities such as
+contact delivery, analytics, an approved payment provider, and selected APIs.
+Each module must declare its required server component, provider account,
+redirect/webhook URLs, test mode, secret names, data flow, privacy impact, and
+deployment prerequisites before it may be enabled.
+
+Generated source may include validated client configuration placeholders and a
+documented server contract, but never live secrets. Provider keys, webhook
+secrets, OAuth credentials, and payment credentials remain server-only in the
+chosen deployment platform. Static-only releases must clearly disable features
+that require a backend rather than presenting non-functional forms or checkout
+buttons. Enabling external writes or payment collection requires an
+authenticated explicit confirmation and provider-specific test acceptance.
+
+## Phase 40 — Website delivery acceptance
+
+Verify the complete website product with separate Free, paid member, workspace
+administrator, and platform administrator sessions. Cover creation, all
+generated page links, Canvas previews, conversational edits, version restore,
+image assets, platform publishing, custom domains, paid ZIP export, paid GitHub
+publishing, and every enabled integration in its provider test mode.
+
+Confirm quota settlement for AI-assisted website work, denial of paid delivery
+features to Free accounts, absence of secrets from browser bundles and exported
+source, idempotent external writes, and public availability of each accepted
+release before describing the website product as fully implemented.
