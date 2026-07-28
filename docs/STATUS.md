@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 37 — AI-first website brief (pending)
+Phase 37 — AI-first website brief (completed)
 
 ## Repository baseline
 
@@ -2804,3 +2804,79 @@ Status: completed
 ### Commit
 
 - `ca43162` — `feat(web): add customer-selected platform subdomains`
+
+## Phase 37 — AI-first website brief
+
+Status: completed
+
+### Implemented
+
+- Replaced the default six-step Website Studio entry with one prominent
+  natural-language request. Customers can describe the business, desired
+  feeling, pages, and outcomes in ordinary language before choosing a model and
+  allowed performance tier.
+- Added a schema-validated AI discovery contract that may infer conservative
+  non-material defaults and return at most three unique material follow-up
+  questions.
+- Added one batch answer submission for all pending questions. The experience no
+  longer forces the customer through a fixed six-question loop.
+- Added a reviewable AI summary for purpose, audience, brand direction, content,
+  pages, and calls to action before any Canvas generation or quota reservation.
+- Kept the full six-step editor as a collapsed optional advanced section for
+  customers who require precise overrides.
+- Preserved all existing Website Brief and Website Spec validation, Tenant
+  authorization, quota settlement, registered-component rendering, versioning,
+  and explicit publishing controls.
+- Updated the Website Studio copy and end-to-end acceptance to Phase 37 and the
+  current customer-selected wildcard URL.
+- Revoked the Vercel account token named
+  `AI Workflow Studio Custom Domain Production`. Platform-selected subdomains do
+  not need a Vercel access token or customer DNS automation.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 223 tests across 49 files
+- `pnpm build:web`: passed — 42 generated application pages
+- `pnpm security:scan-client`: passed — 34 client files scanned
+- `pnpm exec playwright test e2e/website-studio.spec.ts --workers=1`: passed —
+  2 tests
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Production acceptance
+
+- Git commit `788c9d8` was pushed to `codex/ai-workflow-platform`.
+- Vercel Production deployment `dpl_A4cbwhPrkuwcUNBcVJynczfEDBzb` is Ready and
+  aliased to `https://www.erin-aiworkflowstudio.com`,
+  `https://erin-aiworkflowstudio.com`,
+  `https://ai-workflow-studio-desktop.vercel.app`, and
+  `https://*.sites.erin-aiworkflowstudio.com`.
+- An authenticated production user entered one request for a fashionable,
+  professional Taiwanese handmade fragrance brand website with four named
+  pages. AI safely inferred the remaining purpose, audience, brand, content, and
+  calls to action without unnecessary questions.
+- The production review summary exposed all inferred decisions before
+  generation. The advanced six-step editor remained collapsed.
+- Explicit Canvas generation completed with Gemini in one validated attempt and
+  produced a four-page, 16-block Website Spec.
+- The production Canvas rendered the homepage and navigation for Home, Brand
+  Story, Product Features, and Contact. Visual editing, responsive device
+  controls, natural-language modification, image generation controls, version
+  history, and explicit publishing remained available.
+- The acceptance project is intentionally left as an unpublished draft named
+  `台灣手作香氛品牌網站`; no public customer site was changed or published.
+
+### Known limitations
+
+- Phase 38 customer GitHub publishing and Phase 39 guided payment/API
+  integrations remain intentionally unimplemented.
+- A full Playwright invocation also exercised unrelated suites against a reused
+  mock process; three unrelated tests observed accumulated mock state or
+  ambiguous locators. The isolated Phase 37 Website Studio suite passed 2/2,
+  and the complete Vitest suite passed 223/223.
+
+### Commit
+
+- `788c9d8` — `feat(web): add AI-first website brief`
