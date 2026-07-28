@@ -2,6 +2,7 @@ import 'server-only';
 
 import { AiGatewayError } from '@ai-workflow-studio/ai-gateway';
 
+import { GithubAppError } from '@/lib/github-app-client';
 import { UsageControlError, type UsageControlErrorCode } from '@/lib/usage-control-server';
 import { WebsiteStudioError } from '@/lib/website-studio-server';
 import { z } from 'zod';
@@ -53,6 +54,15 @@ export async function readWebsiteJson(request: Request): Promise<unknown> {
 }
 
 export function websiteApiError(error: unknown): Response {
+  if (error instanceof GithubAppError) {
+    return Response.json(
+      { error: { code: error.code, message: error.message } },
+      {
+        headers: { 'cache-control': 'no-store' },
+        status: error.status,
+      },
+    );
+  }
   if (error instanceof AiGatewayError) {
     return Response.json(
       { error: { code: error.code, message: error.message } },

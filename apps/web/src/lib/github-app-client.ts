@@ -284,7 +284,10 @@ export async function exchangeGithubOauthCode(code: string, verifier: string): P
       code,
       code_verifier: verifier,
     }),
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+    },
     method: 'POST',
   });
   return OAuthTokenSchema.parse(await response.json()).access_token;
