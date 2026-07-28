@@ -1,0 +1,44 @@
+{
+  "assets": [],
+  "entrypoint": "index.html",
+  "exportFormat": "ai-workflow-studio-static-site",
+  "integrity": "integrity.sha256",
+  "pages": [
+    {
+      "path": "index.html",
+      "sha256": "ec3fec32d62adc1db39a4cfe3f381888f6cde62479c57f64baf5e0d1e5362a45",
+      "slug": "index",
+      "title": "首頁"
+    },
+    {
+      "path": "page-story.html",
+      "sha256": "d049a89538de13b6b1b1accb01c6982fe3593f3cb2c0201c1ac80ac7adc29f14",
+      "slug": "story",
+      "title": "品牌故事"
+    },
+    {
+      "path": "page-features.html",
+      "sha256": "dfe68a1db453658353b97c222505c869168ab1dcc889cb9a32115176b1889057",
+      "slug": "features",
+      "title": "商品特色"
+    },
+    {
+      "path": "page-contact.html",
+      "sha256": "90e8da02698907f739ee27562a686765e688264b407e0af955afd7cf7823804a",
+      "slug": "contact",
+      "title": "聯絡頁"
+    }
+  ],
+  "project": {
+    "id": "a012151b-c1b5-4bdd-b278-b43f4bbeebb2",
+    "name": "台灣手作香氛品牌網站",
+    "slug": "site-e1741111"
+  },
+  "schemaVersion": 1,
+  "version": {
+    "createdAt": "2026-07-28T14:23:56.08843+00:00",
+    "name": "初始版本",
+    "number": 1,
+    "websiteSchemaVersion": 1
+  }
+}
