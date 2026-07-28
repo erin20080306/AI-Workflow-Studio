@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 36 — Customer-selected platform subdomains (in progress)
+Phase 37 — AI-first website brief (pending)
 
 ## Repository baseline
 
@@ -2735,7 +2735,7 @@ Status: completed
 
 ## Phase 36 — Customer-selected platform subdomains
 
-Status: in progress
+Status: completed
 
 ### Implemented
 
@@ -2776,11 +2776,22 @@ Status: in progress
 
 ### Production state
 
-- Production deployment `dpl_H32fMXciBNzBiWkXoLndFReU27Y4` is Ready and the
-  platform homepage plus an existing wildcard inner page returned `200`.
-- The three temporary external-domain environment variables are no longer
-  required and must be removed after the replacement build is deployed. Any
-  token created solely for that discarded scope should be revoked.
+- Git commit `ca43162` was pushed to `codex/ai-workflow-platform`.
+- Production deployment `dpl_6EB7E2b6qxi6aK4RzwbvP1fEr6Vk` is Ready and is
+  aliased to the platform apex, `www`, Vercel fallback, and
+  `*.sites.erin-aiworkflowstudio.com`.
+- Unauthenticated HTTPS returned `200` for the platform homepage, an existing
+  wildcard site homepage, and its `/story` inner page.
+- Authenticated production browser acceptance confirmed that
+  `erin-customer-demo-20260728` is reported available with the expected full
+  wildcard URL, the reserved `www` label is rejected, and the existing active
+  publication label remains available to its own project. The browser was
+  restored to the existing label without publishing or changing the live site.
+- Removed `VERCEL_CUSTOM_DOMAIN_TOKEN`,
+  `VERCEL_CUSTOM_DOMAIN_PROJECT_ID`, and `VERCEL_CUSTOM_DOMAIN_TEAM_ID` from the
+  Vercel project. The account-level token named
+  `AI Workflow Studio Custom Domain Production` is no longer referenced and
+  should be revoked after explicit account-deletion confirmation.
 - The default Website Studio brief is still the six-step questionnaire. The
   user-approved Phase 37 design replaces it with one natural-language direction
   prompt, bounded AI follow-ups, an inferred review summary, and the existing
@@ -2789,3 +2800,7 @@ Status: in progress
   and payment/API integration modules are not yet implemented. Those are the
   explicitly pending Phase 38 and Phase 39 scopes and must not be represented as
   available customer features.
+
+### Commit
+
+- `ca43162` — `feat(web): add customer-selected platform subdomains`
