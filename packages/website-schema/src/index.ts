@@ -21,6 +21,7 @@ export {
 } from './website';
 export {
   WEBSITE_BRIEF_ANALYSIS_PROVIDER_JSON_SCHEMA,
+  WebsiteBriefAnswerBatchInputSchema,
   WebsiteBriefAnswerInputSchema,
   WebsiteBriefConversationAnalysisSchema,
   WebsiteBriefMessageKindSchema,
@@ -29,6 +30,7 @@ export {
   WebsiteBriefQuestionSchema,
   WebsitePromptStartInputSchema,
   WebsitePromptStartResultSchema,
+  type WebsiteBriefAnswerBatchInput,
   type WebsiteBriefAnswerInput,
   type WebsiteBriefConversationAnalysis,
   type WebsiteBriefMessage,

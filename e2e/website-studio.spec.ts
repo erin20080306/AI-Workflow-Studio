@@ -13,12 +13,14 @@ test('creates, refines, previews, and explicitly publishes a website from one pr
   await expect(page.getByText('AI 需求追問')).toBeVisible();
   await expect(page.getByText('這個網站最主要要服務誰？希望幫他們解決什麼問題？')).toBeVisible();
   await page
-    .getByLabel('在這裡補充 AI 詢問的資訊…')
+    .getByLabel('這個網站最主要要服務誰？希望幫他們解決什麼問題？')
     .fill('需要建立專業網站、清楚介紹服務並取得詢問名單的台灣中小企業經營者。');
-  await page.getByRole('button', { name: '送出回答' }).click();
+  await page.getByRole('button', { name: '送出全部回答' }).click();
   await expect(
     page.getByText('需求已完整。你可以先檢查內容，或立即建立已驗證的 Canvas 預覽。'),
   ).toBeVisible();
+  await expect(page.getByRole('heading', { name: '已準備建立 Canvas' })).toBeVisible();
+  await expect(page.getByText('AI 需求摘要')).toBeVisible();
 
   await page.getByRole('button', { name: '建立 Canvas 預覽' }).click();
   await expect(page.getByRole('heading', { name: '網站預覽 Canvas' })).toBeVisible();
@@ -35,8 +37,13 @@ test('creates, refines, previews, and explicitly publishes a website from one pr
   const publicLink = page.getByRole('link', { name: '開啟公開網站' });
   await expect(publicLink).toBeVisible();
   const publicPath = await publicLink.getAttribute('href');
-  expect(publicPath).toMatch(/^\/s\/[a-z0-9-]+$/);
-  const publicResponse = await page.request.get(publicPath!);
+  expect(publicPath).toMatch(
+    /^(?:\/s\/[a-z0-9-]+|https:\/\/[a-z0-9-]+\.sites\.erin-aiworkflowstudio\.com)$/u,
+  );
+  const publicRequestPath = publicPath!.startsWith('/')
+    ? publicPath!
+    : `/s/${new URL(publicPath!).hostname.split('.')[0]}`;
+  const publicResponse = await page.request.get(publicRequestPath);
   expect(publicResponse.ok()).toBe(true);
   expect(await publicResponse.text()).toContain('index,follow');
 });
@@ -55,6 +62,7 @@ test('collects every guided decision before creating a locked website draft', as
   await page.getByLabel('專案名稱').fill(projectName);
   await page.getByRole('button', { name: '建立專案', exact: true }).click();
   await expect(page.getByRole('heading', { name: projectName })).toBeVisible();
+  await page.getByText('進階六步驟需求設定').click();
   await expect(page.getByRole('button', { name: '建立已驗證網站草稿' })).toBeDisabled();
   await expect(
     page.getByRole('button', { name: '建立 Canvas 版本後即可確認發布。' }),

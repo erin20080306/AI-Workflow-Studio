@@ -183,7 +183,7 @@ export function WebsiteStudioHome({
               </span>
               <div>
                 <p className="font-semibold">{text.quickCreate}</p>
-                <p className="mt-0.5 text-xs text-slate-500">Website Copilot · Phase 30</p>
+                <p className="mt-0.5 text-xs text-slate-500">Website Copilot · Phase 37</p>
               </div>
             </div>
             <label className="mt-5 block">

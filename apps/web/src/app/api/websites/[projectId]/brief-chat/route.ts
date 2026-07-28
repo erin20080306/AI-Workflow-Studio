@@ -1,12 +1,12 @@
-import { WebsiteBriefAnswerInputSchema } from '@ai-workflow-studio/website-schema';
+import { WebsiteBriefAnswerBatchInputSchema } from '@ai-workflow-studio/website-schema';
 import { z } from 'zod';
 
 import { requireWorkspaceContext } from '@/lib/auth/context';
 import { readWebsiteJson, websiteApiError } from '@/lib/website-studio-api';
-import { answerWebsiteBriefQuestion, listWebsiteBriefMessages } from '@/lib/website-prompt-server';
+import { answerWebsiteBriefQuestions, listWebsiteBriefMessages } from '@/lib/website-prompt-server';
 
 const ParamsSchema = z.object({ projectId: z.string().uuid() }).strict();
-const AnswerRouteInputSchema = WebsiteBriefAnswerInputSchema.extend({
+const AnswerRouteInputSchema = WebsiteBriefAnswerBatchInputSchema.extend({
   locale: z.enum(['en', 'zh-Hant']),
 }).strict();
 
@@ -35,10 +35,10 @@ export async function POST(
     const context = await requireWorkspaceContext();
     const input = AnswerRouteInputSchema.parse(await readWebsiteJson(request));
     return Response.json(
-      await answerWebsiteBriefQuestion(
+      await answerWebsiteBriefQuestions(
         context,
         params.projectId,
-        { answer: input.answer, step: input.step },
+        { answers: input.answers },
         input.locale,
       ),
       { headers: { 'cache-control': 'no-store' } },

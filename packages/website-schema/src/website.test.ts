@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  WebsiteBriefAnswerBatchInputSchema,
   WebsiteBriefConversationAnalysisSchema,
   WebsitePromptStartInputSchema,
 } from './conversation';
@@ -94,6 +95,25 @@ describe('Prompt-to-site conversation and publishing validation', () => {
         questions: [
           { body: 'Who is the primary audience?', step: 'audience' },
           { body: 'Which audience problem matters most?', step: 'audience' },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it('accepts one to three material answers and rejects duplicate answer steps', () => {
+    expect(
+      WebsiteBriefAnswerBatchInputSchema.parse({
+        answers: [
+          { answer: '台灣中小企業經營者', step: 'audience' },
+          { answer: '預約諮詢', step: 'callsToAction' },
+        ],
+      }).answers,
+    ).toHaveLength(2);
+    expect(() =>
+      WebsiteBriefAnswerBatchInputSchema.parse({
+        answers: [
+          { answer: '企業經營者', step: 'audience' },
+          { answer: '營運主管', step: 'audience' },
         ],
       }),
     ).toThrow();

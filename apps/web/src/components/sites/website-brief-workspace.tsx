@@ -52,9 +52,9 @@ const QuickBuildResponseSchema = z
 const copy = {
   en: {
     advanced: 'Advanced six-step brief',
-    answer: 'Send answer',
-    answerPlaceholder: 'Type the missing detail here…',
-    answering: 'Saving answer…',
+    answer: 'Send answers',
+    answerPlaceholder: 'Add the decision that would materially change this website…',
+    answering: 'Saving answers…',
     addPage: 'Add page',
     assistant: 'Guided website brief',
     back: 'All website projects',
@@ -68,7 +68,7 @@ const copy = {
     buildingCanvas: 'Creating the validated Canvas…',
     conversation: 'AI discovery conversation',
     conversationHelp:
-      'AI extracted the request and asks only for missing decisions. You can inspect or override every field in the advanced brief.',
+      'AI inferred a complete working direction and asks no more than three material questions. You can inspect or override every field in Advanced settings.',
     draft: 'Draft locked',
     draftHelp:
       'This phase creates a structured project draft only. It cannot publish, run code, or access credentials.',
@@ -79,10 +79,16 @@ const copy = {
     next: 'Save and continue',
     pageSlug: 'URL slug',
     pageTitle: 'Page title',
-    phase: 'Website Studio · Phase 30',
+    phase: 'Website Studio · Phase 37',
     progress: 'Brief progress',
     publish: 'Publishing appears after a Canvas version exists.',
+    questionGroupHelp:
+      'Answer these material decisions together. Everything else is already inferred and remains reviewable.',
     remove: 'Remove',
+    review: 'AI brief summary',
+    reviewHelp:
+      'Review the inferred direction before spending allowance on the first Canvas version. Advanced settings remain available below.',
+    reviewReady: 'Ready for Canvas review',
     save: 'Save step',
     saveFailed: 'This step is incomplete or could not be saved.',
     saved: 'Step saved safely.',
@@ -121,8 +127,8 @@ const copy = {
   },
   'zh-Hant': {
     advanced: '進階六步驟需求設定',
-    answer: '送出回答',
-    answerPlaceholder: '在這裡補充 AI 詢問的資訊…',
+    answer: '送出全部回答',
+    answerPlaceholder: '補充會真正影響網站方向的決策…',
     answering: '正在儲存回答…',
     addPage: '新增頁面',
     assistant: '網站需求引導',
@@ -137,7 +143,7 @@ const copy = {
     buildingCanvas: '正在建立已驗證 Canvas…',
     conversation: 'AI 需求追問',
     conversationHelp:
-      'AI 已整理你的一句話需求，只追問缺少的決策；所有欄位仍可在進階設定檢查與修改。',
+      'AI 已從一句話推論完整工作方向，最多只追問三個重要決策；所有欄位仍可在進階設定檢查與修改。',
     draft: '草稿已鎖定',
     draftHelp: '本階段只建立結構化專案草稿，不會發布網站、執行程式碼或讀取憑證。',
     goal: '頁面任務',
@@ -146,10 +152,14 @@ const copy = {
     next: '儲存並繼續',
     pageSlug: '網址代稱',
     pageTitle: '頁面名稱',
-    phase: '網站工作室 · Phase 30',
+    phase: '網站工作室 · Phase 37',
     progress: '需求完成度',
     publish: '建立 Canvas 版本後即可確認發布。',
+    questionGroupHelp: '請一次回答這些重要決策；其他內容已由 AI 推論，仍可在摘要與進階設定中檢查。',
     remove: '移除',
+    review: 'AI 需求摘要',
+    reviewHelp: '建立第一個 Canvas 版本前，先檢查 AI 推論方向；下方仍保留可展開的進階設定。',
+    reviewReady: '已準備建立 Canvas',
     save: '儲存此步驟',
     saveFailed: '這個步驟尚未完整，或目前無法儲存。',
     saved: '步驟已安全儲存。',
@@ -227,7 +237,7 @@ export function WebsiteBriefWorkspace({
   const [activeStep, setActiveStep] = useState<WebsiteBriefStep>(initialMissing ?? 'purpose');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>();
-  const [answer, setAnswer] = useState('');
+  const [answers, setAnswers] = useState<Partial<Record<WebsiteBriefStep, string>>>({});
   const [selectedModel, setSelectedModel] = useState<WebsiteGenerationSelection>(
     modelOptions[0]?.id ?? 'auto',
   );
@@ -237,7 +247,15 @@ export function WebsiteBriefWorkspace({
   const step = text.steps[activeStep];
   const locked = project.status === 'draft';
   const conversationStarted = messages.length > 0;
-  const latestQuestion = [...messages].reverse().find((item) => item.kind === 'question');
+  const answeredSteps = new Set(
+    messages
+      .filter((item) => item.kind === 'answer' && item.step !== undefined)
+      .map((item) => item.step),
+  );
+  const pendingQuestions = messages.filter(
+    (item): item is WebsiteBriefMessage & { readonly step: WebsiteBriefStep } =>
+      item.kind === 'question' && item.step !== undefined && !answeredSteps.has(item.step),
+  );
 
   function patchForStep(): WebsiteBriefPatch {
     switch (activeStep) {
@@ -307,16 +325,24 @@ export function WebsiteBriefWorkspace({
     }
   }
 
-  async function answerQuestion(): Promise<void> {
-    if (latestQuestion?.step === undefined || answer.trim().length < 2 || saving) return;
+  async function answerQuestions(): Promise<void> {
+    if (
+      saving ||
+      pendingQuestions.length === 0 ||
+      pendingQuestions.some((question) => (answers[question.step]?.trim().length ?? 0) < 2)
+    ) {
+      return;
+    }
     setSaving(true);
     setMessage(undefined);
     try {
       const response = await fetch(`/api/websites/${project.id}/brief-chat`, {
         body: JSON.stringify({
-          answer,
+          answers: pendingQuestions.map((question) => ({
+            answer: answers[question.step]?.trim() ?? '',
+            step: question.step,
+          })),
           locale,
-          step: latestQuestion.step,
         }),
         headers: { 'content-type': 'application/json' },
         method: 'POST',
@@ -328,7 +354,7 @@ export function WebsiteBriefWorkspace({
       setBrief(saved.project.brief);
       setCallsText(saved.project.brief.callsToAction.join('\n'));
       setMessages((current) => [...current, ...saved.messages]);
-      setAnswer('');
+      setAnswers({});
     } catch {
       setMessage(text.saveFailed);
     } finally {
@@ -559,36 +585,61 @@ export function WebsiteBriefWorkspace({
             </p>
           </div>
           <div className="space-y-3 p-5 sm:p-6">
-            {messages.map((item) => (
-              <div
-                className={`max-w-3xl rounded-2xl px-4 py-3 text-sm leading-6 ${
-                  item.role === 'user'
-                    ? 'ml-auto bg-indigo-600 text-white'
-                    : item.kind === 'ready'
-                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-950'
-                      : 'bg-slate-100 text-slate-800'
-                }`}
-                key={item.id}
-              >
-                {item.body}
-              </div>
-            ))}
+            {messages
+              .filter((item) => item.kind !== 'question')
+              .map((item) => (
+                <div
+                  className={`max-w-3xl rounded-2xl px-4 py-3 text-sm leading-6 ${
+                    item.role === 'user'
+                      ? 'ml-auto bg-indigo-600 text-white'
+                      : item.kind === 'ready'
+                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-950'
+                        : 'bg-slate-100 text-slate-800'
+                  }`}
+                  key={item.id}
+                >
+                  {item.body}
+                </div>
+              ))}
           </div>
           <div className="border-t border-slate-200 bg-slate-50 p-5 sm:p-6">
-            {!progress.complete && latestQuestion?.step !== undefined ? (
+            {!progress.complete && pendingQuestions.length > 0 ? (
               <>
-                <textarea
-                  aria-label={text.answerPlaceholder}
-                  className="min-h-28 w-full rounded-2xl border border-slate-300 bg-white p-4 text-sm leading-6 outline-none focus:border-indigo-500"
-                  maxLength={6_000}
-                  onChange={(event) => setAnswer(event.target.value)}
-                  placeholder={text.answerPlaceholder}
-                  value={answer}
-                />
+                <p className="mb-4 text-xs leading-6 text-slate-600">{text.questionGroupHelp}</p>
+                <div className="space-y-4">
+                  {pendingQuestions.map((question, index) => (
+                    <label className="block" key={question.id}>
+                      <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                        <span className="grid size-6 place-items-center rounded-full bg-indigo-100 text-xs text-indigo-700">
+                          {index + 1}
+                        </span>
+                        {question.body}
+                      </span>
+                      <textarea
+                        aria-label={question.body}
+                        className="min-h-24 w-full rounded-2xl border border-slate-300 bg-white p-4 text-sm leading-6 outline-none focus:border-indigo-500"
+                        maxLength={6_000}
+                        onChange={(event) =>
+                          setAnswers((current) => ({
+                            ...current,
+                            [question.step]: event.target.value,
+                          }))
+                        }
+                        placeholder={text.answerPlaceholder}
+                        value={answers[question.step] ?? ''}
+                      />
+                    </label>
+                  ))}
+                </div>
                 <button
                   className="mt-3 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-40"
-                  disabled={saving || answer.trim().length < 2}
-                  onClick={() => void answerQuestion()}
+                  disabled={
+                    saving ||
+                    pendingQuestions.some(
+                      (question) => (answers[question.step]?.trim().length ?? 0) < 2,
+                    )
+                  }
+                  onClick={() => void answerQuestions()}
                   type="button"
                 >
                   {saving ? text.answering : text.answer}
@@ -597,6 +648,61 @@ export function WebsiteBriefWorkspace({
               </>
             ) : (
               <>
+                {progress.complete ? (
+                  <section className="mb-5 rounded-3xl border border-emerald-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">
+                          {text.review}
+                        </p>
+                        <h3 className="mt-2 text-lg font-semibold text-slate-950">
+                          {text.reviewReady}
+                        </h3>
+                        <p className="mt-2 text-xs leading-6 text-slate-600">{text.reviewHelp}</p>
+                      </div>
+                      <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-emerald-100 text-emerald-800">
+                        <CheckIcon className="size-5" />
+                      </span>
+                    </div>
+                    <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+                      {(['purpose', 'audience', 'brandDirection', 'content'] as const).map(
+                        (stepName) => (
+                          <div
+                            className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                            key={stepName}
+                          >
+                            <dt className="text-xs font-bold text-slate-500">
+                              {text.steps[stepName].title}
+                            </dt>
+                            <dd className="mt-2 line-clamp-3 text-sm leading-6 text-slate-800">
+                              {project.brief[stepName]}
+                            </dd>
+                          </div>
+                        ),
+                      )}
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <dt className="text-xs font-bold text-slate-500">
+                          {text.steps.pages.title}
+                        </dt>
+                        <dd className="mt-2 text-sm leading-6 text-slate-800">
+                          {project.brief.pages.map((page) => page.title).join(' · ')}
+                        </dd>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <dt className="text-xs font-bold text-slate-500">
+                          {text.steps.callsToAction.title}
+                        </dt>
+                        <dd className="mt-2 text-sm leading-6 text-slate-800">
+                          {project.brief.callsToAction.join(' · ')}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+                ) : (
+                  <p className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-900">
+                    {text.draftHelp}
+                  </p>
+                )}
                 <WebsiteModelDropdowns
                   disabled={saving}
                   locale={locale}
@@ -609,7 +715,7 @@ export function WebsiteBriefWorkspace({
                 />
                 <button
                   className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-40"
-                  disabled={saving || modelOptions.length === 0}
+                  disabled={saving || !progress.complete || modelOptions.length === 0}
                   onClick={() => void buildCanvas()}
                   type="button"
                 >
@@ -631,7 +737,7 @@ export function WebsiteBriefWorkspace({
       ) : null}
 
       {!locked ? (
-        <details className="mt-6" open={!conversationStarted}>
+        <details className="mt-6">
           <summary className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-semibold text-slate-700 shadow-sm">
             {text.advanced}
           </summary>

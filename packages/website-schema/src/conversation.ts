@@ -105,6 +105,25 @@ export const WebsiteBriefAnswerInputSchema = z
   })
   .strict();
 
+export const WebsiteBriefAnswerBatchInputSchema = z
+  .object({
+    answers: z.array(WebsiteBriefAnswerInputSchema).min(1).max(3),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    const steps = new Set<string>();
+    input.answers.forEach((answer, index) => {
+      if (steps.has(answer.step)) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Follow-up answers must cover different brief steps.',
+          path: ['answers', index, 'step'],
+        });
+      }
+      steps.add(answer.step);
+    });
+  });
+
 export const WebsiteBriefMessageSchema = z
   .object({
     body: z.string().trim().min(1).max(6_000),
@@ -131,6 +150,7 @@ export interface WebsitePromptStartInput {
 }
 
 export type WebsiteBriefAnswerInput = z.infer<typeof WebsiteBriefAnswerInputSchema>;
+export type WebsiteBriefAnswerBatchInput = z.infer<typeof WebsiteBriefAnswerBatchInputSchema>;
 export type WebsiteBriefConversationAnalysis = z.infer<
   typeof WebsiteBriefConversationAnalysisSchema
 >;

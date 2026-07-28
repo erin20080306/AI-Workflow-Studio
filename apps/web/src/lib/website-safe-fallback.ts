@@ -124,7 +124,7 @@ function safeName(description: string, locale: 'en' | 'zh-Hant'): string {
 
 function inferredAudience(description: string, locale: 'en' | 'zh-Hant'): string {
   const chinese =
-    /(?:主要服務|目標(?:客群|受眾)|受眾(?:是|為)?|服務)[：:\s]*([^，。,.；;]{2,80})/iu.exec(
+    /(?:主要服務|目標(?:客群|受眾)|受眾(?:是|為)?|服務(?!價值|內容|項目|介紹|特色|功能))[：:\s]*([^，。,.；;]{2,80})/iu.exec(
       description,
     )?.[1];
   const english = /(?:for|serves?|audience(?:\s+is)?)[：:\s]+([^,.；;]{2,80})/iu.exec(
