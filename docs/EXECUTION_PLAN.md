@@ -44,7 +44,8 @@ test, and build checks and has been committed.
 | 26    | Responsive preview canvas     | Sandboxed desktop, tablet, and mobile previews remain isolated and deterministic | completed |
 | 27    | Visual editing and versions   | Natural-language and direct edits are reversible, versioned, and auditable       | completed |
 | 28    | AI website image generation   | Bounded provider images become private, validated, quota-controlled assets       | completed |
-| 29    | Website publishing            | Approved builds pass quality gates and deploy without exposing credentials       | pending   |
+| 29    | Unified AI workspace          | Exact models, chat images, and confirmed deletion remain quota and Tenant safe   | completed |
+| 30    | Website publishing            | Approved builds pass quality gates and deploy without exposing credentials       | pending   |
 
 ## Phase 0 — Repository audit
 
@@ -275,7 +276,20 @@ route actual image rendering through a configured image-capable provider.
 Preview and version history must remain reversible, auditable, and free of
 arbitrary model-provided URLs, code, data URIs, or client-visible credentials.
 
-## Phase 29 — Website publishing
+## Phase 29 — Unified AI workspace
+
+Replace the separate provider and tier-card presentation with one compact model
+selector grouped by Economy, Standard, Advanced, and Flagship. Keep every
+allowlisted exact model visible while disabling choices outside the current
+Microsoft Store entitlement or provider readiness. Add quota-controlled image
+generation directly to durable conversations using only configured server-side
+OpenAI or Gemini credentials. Store images privately and serve them only through
+Tenant-authorized routes. Add explicit, confirmed conversation deletion that
+atomically removes messages, sources, artifacts, and image metadata while
+retaining a content-free audit event. Website Studio remains a separate,
+available workspace.
+
+## Phase 30 — Website publishing
 
 Add explicit publish approval, production builds, SEO metadata, sitemap,
 robots, accessibility and link gates, domains, deployment history, rollback,

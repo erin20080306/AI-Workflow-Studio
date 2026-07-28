@@ -336,4 +336,144 @@ select tests.assert_true(
 );
 
 reset role;
+set local role service_role;
+
+insert into public.ai_image_artifacts (
+  id,
+  tenant_id,
+  conversation_id,
+  created_by,
+  provider,
+  model,
+  alt,
+  mime_type,
+  byte_size,
+  width,
+  height,
+  storage_path,
+  prompt_hash
+)
+values (
+  'b7000000-0000-4000-8000-000000000001',
+  'b2000000-0000-4000-8000-000000000001',
+  'b3000000-0000-4000-8000-000000000001',
+  'b1000000-0000-4000-8000-000000000001',
+  'mock',
+  'mock-image-v1',
+  'Safe generated preview',
+  'image/png',
+  67,
+  1,
+  1,
+  'b2000000-0000-4000-8000-000000000001/b3000000-0000-4000-8000-000000000001/b7000000-0000-4000-8000-000000000001.png',
+  repeat('f', 64)
+);
+
+select tests.assert_true(
+  exists (
+    select 1
+    from public.audit_logs
+    where action = 'assistant_image.generated'
+      and resource_id = 'b7000000-0000-4000-8000-000000000001'
+      and not metadata ? 'prompt'
+      and not metadata ? 'storagePath'
+  ),
+  'conversation images must produce metadata-only audit events'
+);
+
+reset role;
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  'b1000000-0000-4000-8000-000000000001',
+  true
+);
+
+select tests.assert_true(
+  (select count(*) from public.ai_image_artifacts) = 1
+  and not has_table_privilege('authenticated', 'public.ai_image_artifacts', 'insert')
+  and not has_table_privilege('authenticated', 'public.ai_image_artifacts', 'delete'),
+  'members may read their conversation image metadata but image writes remain server-only'
+);
+
+reset role;
+set local role service_role;
+
+do $$
+begin
+  begin
+    perform public.delete_ai_conversation(
+      'b1000000-0000-4000-8000-000000000001',
+      'b2000000-0000-4000-8000-000000000002',
+      'b3000000-0000-4000-8000-000000000002'
+    );
+    raise exception 'cross-tenant conversation deletion unexpectedly succeeded';
+  exception
+    when insufficient_privilege then null;
+  end;
+end;
+$$;
+
+create temporary table deleted_image_paths as
+select *
+from public.delete_ai_conversation(
+  'b1000000-0000-4000-8000-000000000001',
+  'b2000000-0000-4000-8000-000000000001',
+  'b3000000-0000-4000-8000-000000000001'
+);
+
+select tests.assert_true(
+  (select count(*) from deleted_image_paths) = 1
+  and not exists (
+    select 1 from public.ai_conversations
+    where id = 'b3000000-0000-4000-8000-000000000001'
+  )
+  and not exists (
+    select 1 from public.ai_messages
+    where conversation_id = 'b3000000-0000-4000-8000-000000000001'
+  )
+  and not exists (
+    select 1 from public.ai_attachments
+    where conversation_id = 'b3000000-0000-4000-8000-000000000001'
+  )
+  and not exists (
+    select 1 from public.ai_artifacts
+    where conversation_id = 'b3000000-0000-4000-8000-000000000001'
+  )
+  and not exists (
+    select 1 from public.ai_image_artifacts
+    where conversation_id = 'b3000000-0000-4000-8000-000000000001'
+  )
+  and exists (
+    select 1 from public.ai_conversations
+    where id = 'b3000000-0000-4000-8000-000000000002'
+  ),
+  'confirmed deletion must remove only the selected tenant conversation graph'
+);
+
+select tests.assert_true(
+  exists (
+    select 1
+    from public.audit_logs
+    where action = 'assistant_conversation.deleted'
+      and resource_id = 'b3000000-0000-4000-8000-000000000001'
+      and metadata ->> 'imageCount' = '1'
+      and metadata ->> 'artifactCount' = '1'
+  ),
+  'conversation deletion must preserve a metadata-only audit record'
+);
+
+select tests.assert_true(
+  exists (
+    select 1
+    from storage.buckets
+    where id = 'assistant-images'
+      and public is false
+      and file_size_limit = 8000000
+      and allowed_mime_types = array['image/png']::text[]
+  ),
+  'conversation images must use a private bounded PNG-only bucket'
+);
+
+reset role;
 rollback;

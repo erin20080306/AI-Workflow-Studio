@@ -6,6 +6,7 @@ import {
   MAX_ATTACHMENT_BYTES,
 } from '@ai-workflow-studio/tool-registry';
 import type { WorkflowRunView } from '@ai-workflow-studio/run-orchestrator';
+import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { z } from 'zod';
 
@@ -16,8 +17,8 @@ import {
   PlusIcon,
   ShieldIcon,
   SparkIcon,
+  TrashIcon,
 } from '@/components/icons';
-import { AiModelTierSelector } from '@/components/ai-model-tier-selector';
 import { useLanguage } from '@/components/language-provider';
 import {
   AssistantChatStreamEventSchema,
@@ -34,9 +35,12 @@ import {
   AssistantWorkflowRunCreateResponseSchema,
   type AssistantWorkflowDraftSummary,
 } from '@/lib/assistant-execution-schema';
+import { AssistantImageGenerationResponseSchema } from '@/lib/assistant-image-schema';
 import type { AssistantExecutionTarget } from '@/lib/assistant-execution-targets';
 import {
+  buildAssistantExactModelOptions,
   resolveAssistantProvider,
+  type AssistantExactModelOptionId,
   type AssistantModelId,
   type AssistantModelOption,
 } from '@/lib/assistant-models';
@@ -126,11 +130,20 @@ const copy = {
     attachmentTooLarge: 'The source must be 1 MB or smaller.',
     cancelled: 'Generation stopped. The partial response was kept for audit.',
     conversations: 'Conversations',
+    delete: 'Delete',
+    deleteCancel: 'Cancel',
+    deleteConfirm: 'Delete conversation',
+    deleteDescription:
+      'Messages, sources, generated files, and conversation images will be permanently removed.',
+    deleteFailed: 'The conversation could not be deleted.',
+    deleteTitle: 'Delete this conversation?',
+    deleting: 'Deleting…',
     draftOnly: 'Read-only AI',
     desktopAgent: 'Desktop Agent',
     desktopOffline: 'Offline · jobs will wait',
     desktopOnline: 'Online',
     emptyAsk: 'Ask a question, refine an idea, or explore a safe automation approach.',
+    emptyImage: 'Describe the image you want. It will be generated inside this conversation.',
     emptyPlan:
       'Describe the source, transformation rules, output, and timing. The model can only propose validated Workflow JSON.',
     emptyTitle: 'What would you like to work on?',
@@ -153,21 +166,29 @@ const copy = {
     level: 'Level',
     levelAuto: 'Auto',
     levelLocked: 'Locked',
+    modelAuto: 'Auto · task, allowance, and cost aware',
+    modelUnavailable: 'temporarily unavailable',
     newConversation: 'New conversation',
     noProvider: 'AI is unavailable. Please contact the platform administrator.',
     noDesktopAgent: 'Pair a Desktop Agent before creating an executable plan.',
     noSaved: 'No saved conversations yet',
     plan: 'Plan',
+    image: 'Image',
+    imageBody:
+      'Image mode creates a private, quota-controlled PNG and shows it directly in this conversation.',
     planCreated: 'Validated plan created',
     planEmpty: 'A validated Workflow plan will appear here in Plan mode.',
     planHeading: 'Plan review',
     placeholderAsk:
       'Ask how to design a safe workflow, compare approaches, or clarify requirements…',
+    placeholderImage: 'Describe the image, composition, style, lighting, and intended use…',
     placeholderPlan:
       'Example: Every weekday, consolidate Excel orders, remove duplicates, and prepare a report for review.',
     promptHelpAsk: 'Ask mode can read selected sources but never runs workflow actions.',
+    promptHelpImage: 'Use at least 10 characters. Image requests use your workspace AI allowance.',
     promptHelpPlan: 'Use at least 12 characters. The plan remains a draft.',
     promptShortAsk: 'Please enter at least 2 characters.',
+    promptShortImage: 'Please describe the image in at least 10 characters.',
     promptShortPlan: 'Please describe the plan in at least 12 characters.',
     requestRun: 'Create run request',
     run: 'Run',
@@ -178,9 +199,10 @@ const copy = {
       'Ask and Plan stay read-only. Only an explicit run request can enter approval, and only validated nodes are dispatched after every required approval.',
     safetyTitle: 'Review, request, approve',
     sendAsk: 'Send',
+    sendImage: 'Generate image',
     sendPlan: 'Create plan',
     sources: 'Sources',
-    stage: 'Phase 22 · Cost protected',
+    stage: 'Phase 29 · Multi-model chat and images',
     steps: 'steps',
     stop: 'Stop generating',
     streaming: 'Generating…',
@@ -200,11 +222,19 @@ const copy = {
     attachmentTooLarge: '來源檔案必須小於或等於 1 MB。',
     cancelled: '已停止產生；部分回應會保留以供稽核。',
     conversations: '對話紀錄',
+    delete: '刪除',
+    deleteCancel: '取消',
+    deleteConfirm: '刪除對話',
+    deleteDescription: '訊息、來源、產出檔案與對話圖片都會永久刪除。',
+    deleteFailed: '無法刪除此對話。',
+    deleteTitle: '確定刪除這個對話？',
+    deleting: '刪除中⋯',
     draftOnly: '唯讀 AI',
     desktopAgent: '桌面 Agent',
     desktopOffline: '離線 · 工作會等待連線',
     desktopOnline: '在線',
     emptyAsk: '提出問題、釐清想法，或一起探索安全的自動化做法。',
+    emptyImage: '描述你想要的圖片，產生結果會直接顯示在這個對話中。',
     emptyPlan: '描述資料來源、處理規則、輸出與時間；模型只能提出經驗證的 Workflow JSON。',
     emptyTitle: '今天想一起處理什麼？',
     error: '助理回應未能完成；沒有執行任何動作。',
@@ -224,19 +254,26 @@ const copy = {
     level: '等級',
     levelAuto: '自動',
     levelLocked: '未解鎖',
+    modelAuto: '自動 · 依任務、額度與成本選擇',
+    modelUnavailable: '暫不可用',
     newConversation: '新增對話',
     noProvider: 'AI 目前尚未開放，請聯絡平台管理者。',
     noDesktopAgent: '請先配對 Desktop Agent，才能建立可執行的規劃。',
     noSaved: '目前沒有已保存的對話',
     plan: '規劃',
+    image: '圖片',
+    imageBody: '圖片模式會產生私密、受額度控管的 PNG，並直接顯示在這個對話中。',
     planCreated: '已建立通過驗證的計畫',
     planEmpty: '切換到規劃模式後，通過驗證的 Workflow 計畫會顯示在這裡。',
     planHeading: '計畫檢視',
     placeholderAsk: '詢問如何設計安全工作流、比較做法，或協助釐清需求⋯',
+    placeholderImage: '描述圖片內容、構圖、風格、光線與使用情境⋯',
     placeholderPlan: '例如：每個工作日整合 Excel 訂單、移除重複資料，再產生一份供我檢查的報表。',
     promptHelpAsk: '詢問模式可讀取已選來源，但絕不執行工作流動作。',
+    promptHelpImage: '請至少輸入 10 個字；圖片生成會計入工作區 AI 額度。',
     promptHelpPlan: '至少輸入 12 個字；產生的計畫仍是草稿。',
     promptShortAsk: '請至少輸入 2 個字。',
+    promptShortImage: '請至少用 10 個字描述要產生的圖片。',
     promptShortPlan: '請至少用 12 個字完整描述規劃需求。',
     requestRun: '建立執行要求',
     run: '執行',
@@ -247,9 +284,10 @@ const copy = {
       '詢問與規劃保持唯讀。只有你明確建立執行要求，並通過所有必要核准後，才會派送已驗證的節點。',
     safetyTitle: '審閱、要求、核准三段式',
     sendAsk: '送出',
+    sendImage: '產生圖片',
     sendPlan: '建立計畫',
     sources: '參考來源',
-    stage: '第 22 階段 · 成本安全控管',
+    stage: '第 29 階段 · 多模型對話與圖片',
     steps: '個步驟',
     stop: '停止產生',
     streaming: '產生中⋯',
@@ -319,6 +357,9 @@ export function AssistantWorkspace({
   const [conversationId, setConversationId] = useState<string>();
   const [conversations, setConversations] = useState<readonly AssistantConversationSummary[]>([]);
   const [messages, setMessages] = useState<readonly AssistantConversationMessage[]>([]);
+  const [deleteCandidate, setDeleteCandidate] = useState<AssistantConversationSummary>();
+  const [deleteWorking, setDeleteWorking] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState<'error'>();
   const [attachments, setAttachments] = useState<readonly AssistantAttachmentSummary[]>([]);
   const [artifacts, setArtifacts] = useState<readonly AssistantArtifactSummary[]>([]);
   const [selectedAttachmentIds, setSelectedAttachmentIds] = useState<readonly string[]>([]);
@@ -332,6 +373,18 @@ export function AssistantWorkspace({
     () => resolveAssistantProvider(selectedModel, models),
     [models, selectedModel],
   );
+  const exactModelOptions = useMemo(
+    () => buildAssistantExactModelOptions(models, tiers),
+    [models, tiers],
+  );
+  const selectedExactModelId: AssistantExactModelOptionId =
+    selectedModel === 'auto'
+      ? 'auto'
+      : selectedModel === 'mock'
+        ? 'mock:auto'
+        : selectedTier === 'auto'
+          ? 'auto'
+          : `${selectedModel}:${selectedTier}`;
   const selectedExecutionTarget = useMemo(
     () => executionTargets.find((target) => target.deviceId === selectedDeviceId),
     [executionTargets, selectedDeviceId],
@@ -406,11 +459,14 @@ export function AssistantWorkspace({
       setConversationId(parsed.data.conversation.id);
       setMessages(parsed.data.conversation.messages);
       setMode(parsed.data.conversation.mode);
-      setSelectedModel(
-        models.some((model) => model.id === parsed.data.conversation.provider && model.configured)
-          ? parsed.data.conversation.provider
-          : 'auto',
+      const storedOption = exactModelOptions.find(
+        (option) =>
+          option.enabled &&
+          option.provider === parsed.data.conversation.provider &&
+          option.model === parsed.data.conversation.model,
       );
+      setSelectedModel(storedOption?.provider ?? 'auto');
+      setSelectedTier(storedOption?.tier ?? 'auto');
       const latestPlanMessage = [...parsed.data.conversation.messages]
         .reverse()
         .find((message) => message.plan !== undefined);
@@ -427,6 +483,41 @@ export function AssistantWorkspace({
       setPromptError('unavailable');
     } finally {
       setLoadingHistory(false);
+    }
+  }
+
+  async function deleteConversation(): Promise<void> {
+    if (deleteCandidate === undefined) return;
+    setDeleteWorking(true);
+    setDeleteStatus(undefined);
+    try {
+      const response = await fetch(
+        `/api/ai/conversations/${encodeURIComponent(deleteCandidate.id)}`,
+        { method: 'DELETE' },
+      );
+      if (!response.ok) {
+        throw new Error('Conversation delete failed');
+      }
+      setConversations((current) =>
+        current.filter((conversation) => conversation.id !== deleteCandidate.id),
+      );
+      if (conversationId === deleteCandidate.id) {
+        setConversationId(undefined);
+        setMessages([]);
+        setAttachments([]);
+        setArtifacts([]);
+        setSelectedAttachmentIds([]);
+        setPlan(undefined);
+        setPlanMessageId(undefined);
+        setExecutionDraft(undefined);
+        setExecutionRun(undefined);
+        setPrompt('');
+      }
+      setDeleteCandidate(undefined);
+    } catch {
+      setDeleteStatus('error');
+    } finally {
+      setDeleteWorking(false);
     }
   }
 
@@ -726,10 +817,40 @@ export function AssistantWorkspace({
     setExecutionStatus(undefined);
   }
 
+  async function sendImage(
+    requestPrompt: string,
+    optimisticUser: AssistantConversationMessage,
+  ): Promise<void> {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const response = await fetch('/api/ai/images', {
+      body: JSON.stringify({
+        ...(conversationId === undefined ? {} : { conversationId }),
+        locale,
+        prompt: requestPrompt,
+        provider: selectedModel,
+        tier: selectedTier,
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw await readAssistantRequestError(response);
+    }
+    const parsed = AssistantImageGenerationResponseSchema.safeParse(await response.json());
+    if (!parsed.success) {
+      throw new AssistantRequestError('AI_PROVIDER_RESPONSE_INVALID');
+    }
+    setConversationId(parsed.data.conversationId);
+    replaceOptimisticUser(optimisticUser.id, parsed.data.userMessage);
+    setMessages((current) => [...current, parsed.data.assistantMessage]);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const requestPrompt = prompt.trim();
-    const minimum = mode === 'ask' ? 2 : 12;
+    const minimum = mode === 'ask' ? 2 : mode === 'image' ? 10 : 12;
     if (requestPrompt.length < minimum) {
       setPromptError('short');
       return;
@@ -751,6 +872,8 @@ export function AssistantWorkspace({
     try {
       if (mode === 'ask') {
         await sendAsk(requestPrompt, optimisticUser);
+      } else if (mode === 'image') {
+        await sendImage(requestPrompt, optimisticUser);
       } else {
         await sendPlan(requestPrompt, optimisticUser);
       }
@@ -833,26 +956,47 @@ export function AssistantWorkspace({
             ) : (
               <div className="mt-2 space-y-1">
                 {conversations.slice(0, 12).map((conversation) => (
-                  <button
+                  <div
                     aria-current={conversation.id === conversationId ? 'page' : undefined}
-                    className={`flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition ${
+                    className={`group flex w-full items-start gap-1 rounded-xl px-2 py-2 text-left transition ${
                       conversation.id === conversationId ? 'bg-white/12' : 'hover:bg-white/7'
                     }`}
-                    disabled={pending}
                     key={conversation.id}
-                    onClick={() => void openConversation(conversation.id)}
-                    type="button"
                   >
-                    <ChatIcon className="mt-0.5 size-4 shrink-0 text-indigo-300" />
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-semibold text-white">
-                        {conversation.title}
+                    <button
+                      className="flex min-w-0 flex-1 items-start gap-3 rounded-lg px-1 py-1 text-left"
+                      disabled={pending || deleteWorking}
+                      onClick={() => void openConversation(conversation.id)}
+                      type="button"
+                    >
+                      <ChatIcon className="mt-0.5 size-4 shrink-0 text-indigo-300" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-semibold text-white">
+                          {conversation.title}
+                        </span>
+                        <span className="mt-1 block text-[10px] text-slate-500">
+                          {conversation.mode === 'ask'
+                            ? text.ask
+                            : conversation.mode === 'image'
+                              ? text.image
+                              : text.plan}
+                        </span>
                       </span>
-                      <span className="mt-1 block text-[10px] text-slate-500">
-                        {conversation.mode === 'ask' ? text.ask : text.plan}
-                      </span>
-                    </span>
-                  </button>
+                    </button>
+                    <button
+                      aria-label={`${text.delete}：${conversation.title}`}
+                      className="rounded-lg p-1.5 text-slate-600 opacity-0 transition hover:bg-rose-500/15 hover:text-rose-300 focus:opacity-100 group-hover:opacity-100"
+                      disabled={pending || deleteWorking}
+                      onClick={() => {
+                        setDeleteStatus(undefined);
+                        setDeleteCandidate(conversation);
+                      }}
+                      title={text.delete}
+                      type="button"
+                    >
+                      <TrashIcon className="size-3.5" />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -876,40 +1020,58 @@ export function AssistantWorkspace({
                 <span className="hidden sm:inline">{text.model}</span>
                 <select
                   aria-label={text.model}
-                  className="max-w-[260px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800"
+                  className="max-w-[460px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800"
                   disabled={pending}
                   onChange={(event) => {
-                    setSelectedModel(event.target.value as AssistantModelId);
+                    const option = exactModelOptions.find(
+                      (candidate) =>
+                        candidate.id === (event.target.value as AssistantExactModelOptionId),
+                    );
+                    if (option === undefined || !option.enabled) return;
+                    setSelectedModel(option.provider);
+                    setSelectedTier(option.tier);
                     setPromptError(undefined);
                   }}
-                  value={selectedModel}
+                  value={selectedExactModelId}
                 >
-                  {models.map((model) => (
-                    <option disabled={!model.configured} key={model.id} value={model.id}>
-                      {model.label}
-                    </option>
-                  ))}
+                  <option disabled={exactModelOptions[0]?.enabled !== true} value="auto">
+                    {text.modelAuto}
+                  </option>
+                  {tiers.map((tier) => {
+                    const tierLabel = locale === 'en' ? tier.label.en : tier.label.zhHant;
+                    const options = exactModelOptions.filter((option) => option.tier === tier.id);
+                    return (
+                      <optgroup key={tier.id} label={tierLabel}>
+                        {options.map((option) => (
+                          <option disabled={!option.enabled} key={option.id} value={option.id}>
+                            {tierLabel} · {option.providerLabel} · {option.model}
+                            {option.enabled ? '' : ` · ${text.levelLocked}`}
+                          </option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                  {exactModelOptions.some((option) => option.id === 'mock:auto') && (
+                    <optgroup label={locale === 'en' ? 'Development' : '開發測試'}>
+                      {exactModelOptions
+                        .filter((option) => option.id === 'mock:auto')
+                        .map((option) => (
+                          <option disabled={!option.enabled} key={option.id} value={option.id}>
+                            {option.providerLabel} · {locale === 'en' ? 'development' : '開發測試'}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
                 </select>
               </label>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                  {text.level}
-                </span>
-                <AiModelTierSelector
-                  autoLabel={text.levelAuto}
-                  disabled={pending}
-                  locale={locale}
-                  lockedLabel={text.levelLocked}
-                  onChange={(tier) => {
-                    setSelectedTier(tier);
-                    setPromptError(undefined);
-                  }}
-                  selected={selectedTier}
-                  tiers={tiers}
-                />
-              </div>
+              <p className="text-[10px] leading-4 text-slate-400">
+                {selectedExactModelId === 'auto'
+                  ? text.modelAuto
+                  : (exactModelOptions.find((option) => option.id === selectedExactModelId)
+                      ?.model ?? text.modelAuto)}
+              </p>
               <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-500">
                 <span>{text.desktopAgent}</span>
                 <select
@@ -948,7 +1110,11 @@ export function AssistantWorkspace({
                 </span>
                 <h2 className="mt-4 text-xl font-semibold text-slate-950">{text.emptyTitle}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {mode === 'ask' ? text.emptyAsk : text.emptyPlan}
+                  {mode === 'ask'
+                    ? text.emptyAsk
+                    : mode === 'image'
+                      ? text.emptyImage
+                      : text.emptyPlan}
                 </p>
               </div>
             )}
@@ -971,9 +1137,26 @@ export function AssistantWorkspace({
                   }`}
                 >
                   <p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p>
+                  {message.image !== undefined && (
+                    <a
+                      className="mt-3 block overflow-hidden rounded-xl border border-slate-200 bg-white"
+                      href={`/api/ai/images/${encodeURIComponent(message.image.id)}`}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <Image
+                        alt={message.image.alt}
+                        className="h-auto max-h-[560px] w-full object-contain"
+                        height={message.image.height}
+                        src={`/api/ai/images/${encodeURIComponent(message.image.id)}`}
+                        unoptimized
+                        width={message.image.width}
+                      />
+                    </a>
+                  )}
                   {message.role === 'assistant' && (
                     <>
-                      {message.status === 'completed' && (
+                      {message.status === 'completed' && message.image === undefined && (
                         <button
                           className="mt-2 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-indigo-700 transition hover:border-indigo-300"
                           disabled={pending}
@@ -1055,7 +1238,13 @@ export function AssistantWorkspace({
                   setPrompt(event.target.value);
                   setPromptError(undefined);
                 }}
-                placeholder={mode === 'ask' ? text.placeholderAsk : text.placeholderPlan}
+                placeholder={
+                  mode === 'ask'
+                    ? text.placeholderAsk
+                    : mode === 'image'
+                      ? text.placeholderImage
+                      : text.placeholderPlan
+                }
                 value={prompt}
               />
               <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
@@ -1069,7 +1258,9 @@ export function AssistantWorkspace({
                   />
                   <button
                     className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700 disabled:cursor-not-allowed disabled:text-slate-300"
-                    disabled={pending || uploading || resolvedProvider === undefined}
+                    disabled={
+                      pending || uploading || resolvedProvider === undefined || mode === 'image'
+                    }
                     onClick={() => fileInputRef.current?.click()}
                     type="button"
                   >
@@ -1092,7 +1283,11 @@ export function AssistantWorkspace({
                     disabled={resolvedProvider === undefined}
                     type="submit"
                   >
-                    {mode === 'ask' ? text.sendAsk : text.sendPlan}
+                    {mode === 'ask'
+                      ? text.sendAsk
+                      : mode === 'image'
+                        ? text.sendImage
+                        : text.sendPlan}
                     <ArrowRightIcon className="size-3.5" />
                   </button>
                 )}
@@ -1113,7 +1308,9 @@ export function AssistantWorkspace({
                   : promptError === 'short'
                     ? mode === 'ask'
                       ? text.promptShortAsk
-                      : text.promptShortPlan
+                      : mode === 'image'
+                        ? text.promptShortImage
+                        : text.promptShortPlan
                     : promptError === 'unavailable'
                       ? text.error
                       : promptError === 'authentication'
@@ -1126,7 +1323,9 @@ export function AssistantWorkspace({
                               ? text.errorTemporary
                               : mode === 'ask'
                                 ? text.promptHelpAsk
-                                : text.promptHelpPlan}
+                                : mode === 'image'
+                                  ? text.promptHelpImage
+                                  : text.promptHelpPlan}
               </p>
               {resourceStatus !== undefined && (
                 <p className="text-[10px] font-semibold text-indigo-700" role="status">
@@ -1149,6 +1348,26 @@ export function AssistantWorkspace({
                   type="button"
                 >
                   {text.ask}
+                </button>
+                <button
+                  aria-pressed={mode === 'image'}
+                  className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${
+                    mode === 'image'
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-slate-500 hover:bg-slate-100'
+                  }`}
+                  disabled={pending}
+                  onClick={() => {
+                    setMode('image');
+                    setPlan(undefined);
+                    setPlanMessageId(undefined);
+                    setExecutionDraft(undefined);
+                    setExecutionRun(undefined);
+                    setPromptError(undefined);
+                  }}
+                  type="button"
+                >
+                  {text.image}
                 </button>
                 <button
                   aria-pressed={mode === 'plan'}
@@ -1196,7 +1415,8 @@ export function AssistantWorkspace({
                 {text.planHeading}
               </p>
               <h2 className="mt-1 text-lg font-semibold text-slate-950">
-                {plan?.workflow.name ?? (mode === 'ask' ? text.ask : text.waiting)}
+                {plan?.workflow.name ??
+                  (mode === 'ask' ? text.ask : mode === 'image' ? text.image : text.waiting)}
               </h2>
             </div>
             {plan !== undefined && (
@@ -1210,10 +1430,14 @@ export function AssistantWorkspace({
             <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-5">
               <ShieldIcon className="size-5 text-indigo-600" />
               <h3 className="mt-3 text-sm font-semibold text-slate-950">
-                {mode === 'ask' ? text.safetyTitle : text.planEmpty}
+                {mode === 'ask' ? text.safetyTitle : mode === 'image' ? text.image : text.planEmpty}
               </h3>
               <p className="mt-2 text-xs leading-5 text-slate-500">
-                {mode === 'ask' ? text.askBody : text.safetyBody}
+                {mode === 'ask'
+                  ? text.askBody
+                  : mode === 'image'
+                    ? text.imageBody
+                    : text.safetyBody}
               </p>
             </div>
           ) : (
@@ -1359,6 +1583,53 @@ export function AssistantWorkspace({
           </div>
         </aside>
       </div>
+      {deleteCandidate !== undefined && (
+        <div
+          aria-labelledby="delete-conversation-title"
+          aria-modal="true"
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          role="dialog"
+        >
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <span className="grid size-11 place-items-center rounded-2xl bg-rose-50 text-rose-700">
+              <TrashIcon className="size-5" />
+            </span>
+            <h2
+              className="mt-4 text-xl font-semibold tracking-tight text-slate-950"
+              id="delete-conversation-title"
+            >
+              {text.deleteTitle}
+            </h2>
+            <p className="mt-2 truncate text-sm font-semibold text-slate-700">
+              {deleteCandidate.title}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">{text.deleteDescription}</p>
+            {deleteStatus === 'error' && (
+              <p className="mt-3 text-sm font-semibold text-rose-700" role="alert">
+                {text.deleteFailed}
+              </p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                disabled={deleteWorking}
+                onClick={() => setDeleteCandidate(undefined)}
+                type="button"
+              >
+                {text.deleteCancel}
+              </button>
+              <button
+                className="rounded-xl bg-rose-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-600 disabled:opacity-50"
+                disabled={deleteWorking}
+                onClick={() => void deleteConversation()}
+                type="button"
+              >
+                {deleteWorking ? text.deleting : text.deleteConfirm}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

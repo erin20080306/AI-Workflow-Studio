@@ -68,7 +68,7 @@ export const AssistantArtifactCreateRequestSchema = z
 
 export const AssistantConversationCreateRequestSchema = z
   .object({
-    mode: z.enum(['ask', 'plan']),
+    mode: z.enum(['ask', 'image', 'plan']),
     provider: AiModelSelectionSchema.shape.provider,
     tier: AiModelSelectionSchema.shape.tier.default('auto'),
     title: z.string().trim().min(1).max(160),

@@ -88,7 +88,7 @@ new Website Project.
 - Phase 26: isolated desktop, tablet, and mobile preview canvas.
 - Phase 27: validated direct and natural-language edits, undo/redo, versions,
   comparison, and restoration.
-- Phase 28: explicit publish approval, quality gates, deployment, domains,
+- Phase 30: explicit publish approval, quality gates, deployment, domains,
   history, and rollback.
 
 No model output may release executable JavaScript, Python, shell commands, build

@@ -1,8 +1,11 @@
 import type { AiProviderName } from '@ai-workflow-studio/ai-gateway';
 
+import type { AiModelTier, AiModelTierSelection, AiTierOption } from './ai-model-selection';
 import type { AppEnvironment } from './env-schema';
 
 export type AssistantModelId = 'auto' | AiProviderName;
+export type AssistantExactModelOptionId =
+  'auto' | 'mock:auto' | `${Exclude<AiProviderName, 'mock'>}:${AiModelTier}`;
 
 export interface AssistantModelOption {
   readonly configured: boolean;
@@ -13,6 +16,19 @@ export interface AssistantModelOption {
   readonly id: AssistantModelId;
   readonly label: string;
   readonly provider?: AiProviderName;
+}
+
+export interface AssistantExactModelOption {
+  readonly enabled: boolean;
+  readonly id: AssistantExactModelOptionId;
+  readonly model?: string;
+  readonly provider: AssistantModelId;
+  readonly providerLabel: string;
+  readonly tier: AiModelTierSelection;
+  readonly tierLabel?: {
+    readonly en: string;
+    readonly zhHant: string;
+  };
 }
 
 const providerPriority: readonly AiProviderName[] = ['openai', 'anthropic', 'gemini', 'mock'];
@@ -79,6 +95,55 @@ export function buildAssistantModelOptions(
       label: 'Auto',
     },
     ...providerOptions,
+  ];
+}
+
+export function buildAssistantExactModelOptions(
+  models: readonly AssistantModelOption[],
+  tiers: readonly AiTierOption[],
+): readonly AssistantExactModelOption[] {
+  const configured = new Map(
+    models
+      .filter(
+        (model): model is AssistantModelOption & { readonly provider: AiProviderName } =>
+          model.provider !== undefined,
+      )
+      .map((model) => [model.provider, model.configured] as const),
+  );
+  const auto = models.find((model) => model.id === 'auto');
+  const exact = tiers.flatMap((tier) =>
+    tier.models.map((model): AssistantExactModelOption => ({
+      enabled: tier.enabled && configured.get(model.provider) === true,
+      id: `${model.provider}:${tier.id}`,
+      model: model.model,
+      provider: model.provider,
+      providerLabel: model.providerLabel,
+      tier: tier.id,
+      tierLabel: tier.label,
+    })),
+  );
+  const mock = models.find((model) => model.id === 'mock');
+
+  return [
+    {
+      enabled: auto?.configured === true,
+      id: 'auto',
+      provider: 'auto',
+      providerLabel: 'Auto',
+      tier: 'auto',
+    },
+    ...exact,
+    ...(mock === undefined
+      ? []
+      : [
+          {
+            enabled: mock.configured,
+            id: 'mock:auto',
+            provider: 'mock',
+            providerLabel: mock.label,
+            tier: 'auto',
+          } satisfies AssistantExactModelOption,
+        ]),
   ];
 }
 

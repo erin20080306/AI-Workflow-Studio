@@ -3,10 +3,24 @@ import { z } from 'zod';
 
 import { AiProviderNameSchema } from '@ai-workflow-studio/ai-gateway';
 
-export const AssistantConversationModeSchema = z.enum(['ask', 'plan']);
+export const AssistantConversationModeSchema = z.enum(['ask', 'image', 'plan']);
 export type AssistantConversationMode = z.infer<typeof AssistantConversationModeSchema>;
 
 export const AssistantMessageStatusSchema = z.enum(['cancelled', 'completed', 'failed']);
+
+export const AssistantImageSummarySchema = z
+  .object({
+    alt: z.string().min(1).max(180),
+    byteSize: z.number().int().min(33).max(8_000_000),
+    height: z.number().int().min(1).max(4_096),
+    id: z.string().uuid(),
+    mimeType: z.literal('image/png'),
+    model: z.string().min(2).max(120),
+    provider: z.enum(['gemini', 'mock', 'openai']),
+    width: z.number().int().min(1).max(4_096),
+  })
+  .strict();
+export type AssistantImageSummary = z.infer<typeof AssistantImageSummarySchema>;
 
 export const AssistantConversationSummarySchema = z
   .object({
@@ -27,6 +41,7 @@ export const AssistantConversationMessageSchema = z
     body: z.string().min(1).max(80_000),
     createdAt: z.string().datetime({ offset: true }),
     id: z.string().uuid(),
+    image: AssistantImageSummarySchema.optional(),
     model: z.string().min(1).max(120).optional(),
     plan: AIPlannerOutputSchema.optional(),
     provider: AiProviderNameSchema.optional(),

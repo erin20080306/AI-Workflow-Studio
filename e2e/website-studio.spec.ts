@@ -14,7 +14,7 @@ test('collects every guided decision before creating a locked website draft', as
   await page.getByRole('button', { name: '建立專案', exact: true }).click();
   await expect(page.getByRole('heading', { name: projectName })).toBeVisible();
   await expect(page.getByRole('button', { name: '建立已驗證網站草稿' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '發布功能將於 Phase 29 開放' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '發布功能將於 Phase 30 開放' })).toBeDisabled();
 
   await page
     .getByLabel('這個網站最重要的目的為何？')

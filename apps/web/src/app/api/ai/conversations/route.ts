@@ -27,7 +27,7 @@ export async function POST(request: Request): Promise<Response> {
     const context = await requireWorkspaceContext();
     const environment = getEnvironment();
     const route = await resolveAiModelRoute(context, {
-      operation: input.mode === 'ask' ? 'chat' : 'workflow_plan',
+      operation: input.mode === 'plan' ? 'workflow_plan' : 'chat',
       provider: input.provider,
       tier: input.tier,
     });

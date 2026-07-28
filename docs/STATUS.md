@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 29 — Website publishing (pending)
+Phase 30 — Website publishing (pending)
 
 ## Repository baseline
 
@@ -2174,7 +2174,7 @@ Status: completed
   quota-controlled OpenAI/Gemini image generation and authenticated asset
   delivery begin in Phase 28.
 - Website publishing, domains, production builds, and rollback remain locked
-  until Phase 29 and still require explicit authenticated approval.
+  until Phase 30 and still require explicit authenticated approval.
 
 ## Phase 28 — AI website image generation
 
@@ -2233,5 +2233,64 @@ Status: completed
 - Generated images are PNG-only and currently target one 16:9 website visual
   per request. Image editing, masks, uploaded reference images, responsive
   variants, and automatic focal-point crops are future work.
-- Website publishing remains locked until Phase 29. A generated image or
+- Website publishing remains locked until Phase 30. A generated image or
   validated Canvas version is not itself a public website deployment.
+
+## Phase 29 — Unified AI workspace
+
+Status: completed
+
+### Implemented
+
+- Replaced the ordinary member model controls with one compact top selector.
+  Exact OpenAI, Claude, and Gemini names are grouped under Economy, Standard,
+  Advanced, and Flagship; Auto remains cost- and allowance-aware. Locked Store
+  tiers remain visible but disabled, and the large lower model-card grid is no
+  longer shown.
+- Added an Image mode directly to durable AI conversations. It uses the same
+  server-only OpenAI/Gemini image adapters, plan ceilings, monthly budget,
+  request-rate limits, PNG validation, and 8 MB/4096-pixel bounds as Website
+  Studio while leaving Website Studio available as a separate workspace.
+- Added private `assistant-images` Storage and Tenant-scoped
+  `ai_image_artifacts`. Conversation messages contain only validated image
+  metadata and fetch bytes through an authenticated, authorization-checked
+  route; prompts remain represented only by SHA-256 hashes.
+- Added per-conversation delete controls with an explicit confirmation dialog.
+  The server rechecks Tenant membership, deletes the selected message/source/
+  Markdown/image graph in dependency order, and preserves only a content-free
+  deletion audit event. Cross-Tenant deletion is rejected.
+- Restoring a saved conversation now restores its exact model and tier when the
+  choice remains available.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 171 tests across 40 files
+- `pnpm db:test`: passed — fresh migration, private assistant image bucket,
+  metadata-only audits, confirmed graph deletion, and cross-Tenant rejection
+- `pnpm exec playwright test e2e/assistant-workspace.spec.ts`: passed — 4
+  scenarios including exact-model grouping, image-in-chat, durable history,
+  execution review, artifacts, and confirmed deletion
+- `pnpm build:web`: passed — 41 generated pages plus authenticated private
+  image generation, image retrieval, and conversation deletion routes
+- `pnpm security:scan-client`: passed — 34 built client files inspected; no
+  configured provider or platform secret was found
+- `pnpm test:e2e`: passed — all 9 Chromium scenarios, including the preserved
+  Website Studio guided draft and the unified Assistant image/delete flow
+- `pnpm exec supabase migration list --linked`: passed — local and hosted
+  migrations are aligned through `202607280007`
+
+### Known limitations
+
+- Claude can refine a visual request but cannot render pixels; Claude or Auto
+  image requests safely route to a configured OpenAI or Gemini image model.
+- Deleting a conversation is permanent. The confirmation dialog is therefore
+  required and no model response can invoke the deletion endpoint.
+- Website publishing remains a separate Phase 30 gate and still requires final
+  authenticated approval.
+
+### Commit
+
+- `feat(web): unify AI workspace models and images` (this phase commit)

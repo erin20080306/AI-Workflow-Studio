@@ -14,12 +14,15 @@ import {
   AssistantConversationModeSchema,
   AssistantConversationSchema,
   AssistantConversationSummarySchema,
+  AssistantImageSummarySchema,
   AssistantMessageStatusSchema,
   type AssistantConversation,
   type AssistantConversationMessage,
   type AssistantConversationMode,
   type AssistantConversationSummary,
+  type AssistantImageSummary,
 } from '@/lib/assistant-conversation-schema';
+import { deleteMemoryAssistantImages } from '@/lib/assistant-image-server';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
@@ -121,10 +124,12 @@ function conversationSummary(row: z.infer<typeof ConversationRowSchema>) {
 
 function messageView(row: z.infer<typeof MessageRowSchema>): AssistantConversationMessage {
   const plan = AIPlannerOutputSchema.safeParse(row.metadata.plan);
+  const image = AssistantImageSummarySchema.safeParse(row.metadata.image);
   return AssistantConversationMessageSchema.parse({
     body: row.body,
     createdAt: row.created_at,
     id: row.id,
+    ...(image.success ? { image: image.data } : {}),
     ...(row.model === null ? {} : { model: row.model }),
     ...(plan.success ? { plan: plan.data } : {}),
     ...(row.provider === null ? {} : { provider: row.provider }),
@@ -258,6 +263,7 @@ export async function appendAssistantMessage(
     readonly body: string;
     readonly conversationId: string;
     readonly inputUnits?: number;
+    readonly image?: AssistantImageSummary;
     readonly model?: string;
     readonly outputUnits?: number;
     readonly plan?: AIPlannerOutput;
@@ -274,6 +280,7 @@ export async function appendAssistantMessage(
       body: input.body,
       createdAt: now,
       id: crypto.randomUUID(),
+      ...(input.image === undefined ? {} : { image: input.image }),
       ...(input.model === undefined ? {} : { model: input.model }),
       ...(input.plan === undefined ? {} : { plan: input.plan }),
       ...(input.provider === undefined ? {} : { provider: input.provider }),
@@ -293,7 +300,10 @@ export async function appendAssistantMessage(
       conversation_id: input.conversationId,
       ...(input.role === 'user' ? { created_by: context.actor.userId } : {}),
       input_units: input.inputUnits ?? 0,
-      metadata: input.plan === undefined ? {} : { plan: input.plan },
+      metadata: {
+        ...(input.image === undefined ? {} : { image: input.image }),
+        ...(input.plan === undefined ? {} : { plan: input.plan }),
+      },
       ...(input.model === undefined ? {} : { model: input.model }),
       output_units: input.outputUnits ?? 0,
       ...(input.provider === undefined ? {} : { provider: input.provider }),
@@ -397,6 +407,50 @@ export async function getAssistantConversation(
     ...conversationSummary(conversation.data),
     messages: messages.data.map(messageView),
   });
+}
+
+export async function deleteAssistantConversation(
+  context: WorkspaceContext,
+  conversationId: string,
+): Promise<void> {
+  if (getEnvironment().mockMode) {
+    requireMemoryConversation(context, conversationId);
+    deleteMemoryAssistantImages(context.actor.tenantId, conversationId);
+    memoryState().conversations.delete(conversationId);
+    return;
+  }
+
+  const result = await createSupabaseAdminClient().rpc('delete_ai_conversation', {
+    actor_id: context.actor.userId,
+    target_conversation_id: conversationId,
+    target_tenant_id: context.actor.tenantId,
+  });
+  const paths = z
+    .array(z.object({ storage_path: z.string().min(10).max(300) }))
+    .safeParse(result.data);
+  if (result.error !== null) {
+    if (result.error.message.includes('ASSISTANT_CONVERSATION_NOT_FOUND')) {
+      throw new AssistantPersistenceError(
+        'ASSISTANT_CONVERSATION_NOT_FOUND',
+        'The AI conversation was not found.',
+      );
+    }
+    throw new AssistantPersistenceError(
+      'ASSISTANT_PERSISTENCE_FAILED',
+      'The AI conversation could not be deleted.',
+    );
+  }
+  if (!paths.success) {
+    throw new AssistantPersistenceError(
+      'ASSISTANT_PERSISTENCE_FAILED',
+      'The AI conversation deletion result is invalid.',
+    );
+  }
+  if (paths.data.length > 0) {
+    await createSupabaseAdminClient()
+      .storage.from('assistant-images')
+      .remove(paths.data.map((row) => row.storage_path));
+  }
 }
 
 export function createAssistantUsageSink(

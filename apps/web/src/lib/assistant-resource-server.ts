@@ -74,6 +74,21 @@ function memoryResources(): MemoryResources {
   return resourcesGlobal.__aiWorkflowAssistantResources;
 }
 
+export function deleteMemoryAssistantResources(tenantId: string, conversationId: string): void {
+  const state = memoryResources();
+  for (const [id, row] of state.attachments) {
+    if (row.tenant_id === tenantId && row.conversation_id === conversationId) {
+      state.attachments.delete(id);
+    }
+  }
+  for (const [id, row] of state.artifacts) {
+    if (row.tenant_id === tenantId && row.conversation_id === conversationId) {
+      state.artifacts.delete(id);
+      state.messageSources.delete(row.message_id);
+    }
+  }
+}
+
 export type AssistantResourceErrorCode =
   | 'ASSISTANT_RESOURCE_FAILED'
   | 'ASSISTANT_RESOURCE_INVALID'
