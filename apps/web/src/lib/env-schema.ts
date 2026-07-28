@@ -57,6 +57,26 @@ const environmentSchema = z.object({
   CRON_SECRET: optionalSecret,
   GEMINI_API_KEY: optionalSecret,
   GEMINI_MODEL: optionalModel,
+  GITHUB_APP_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().min(10).max(160).optional()),
+  GITHUB_APP_CLIENT_SECRET: optionalSecret,
+  GITHUB_APP_ID: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^[1-9][0-9]{0,19}$/)
+      .optional(),
+  ),
+  GITHUB_APP_PRIVATE_KEY_BASE64: z.preprocess(
+    emptyToUndefined,
+    z.string().min(256).max(16_000).optional(),
+  ),
+  GITHUB_APP_SLUG: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
+  ),
   GOOGLE_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   GOOGLE_CLIENT_SECRET: optionalSecret,
   GOOGLE_REDIRECT_URI: optionalUrl,
@@ -80,6 +100,10 @@ const environmentSchema = z.object({
 export interface AppEnvironment {
   readonly appUrl?: string;
   readonly googleConfigured: boolean;
+  readonly github: {
+    readonly appSlug?: string;
+    readonly configured: boolean;
+  };
   readonly mockMode: boolean;
   readonly microsoftStore: {
     readonly configured: boolean;
@@ -124,6 +148,13 @@ export function parseEnvironment(input: Record<string, string | undefined>): App
     parsed.data.MICROSOFT_STORE_CLIENT_SECRET &&
     parsed.data.MICROSOFT_STORE_PLAN_MAPPINGS?.length,
   );
+  const githubConfigured = Boolean(
+    parsed.data.GITHUB_APP_ID &&
+    parsed.data.GITHUB_APP_CLIENT_ID &&
+    parsed.data.GITHUB_APP_CLIENT_SECRET &&
+    parsed.data.GITHUB_APP_PRIVATE_KEY_BASE64 &&
+    parsed.data.GITHUB_APP_SLUG,
+  );
 
   return {
     ...(parsed.data.NEXT_PUBLIC_APP_URL ? { appUrl: parsed.data.NEXT_PUBLIC_APP_URL } : {}),
@@ -133,6 +164,10 @@ export function parseEnvironment(input: Record<string, string | undefined>): App
       parsed.data.GOOGLE_REDIRECT_URI &&
       parsed.data.APP_ENCRYPTION_KEY,
     ),
+    github: {
+      ...(parsed.data.GITHUB_APP_SLUG ? { appSlug: parsed.data.GITHUB_APP_SLUG } : {}),
+      configured: githubConfigured,
+    },
     mockMode: parsed.data.NEXT_PUBLIC_MOCK_MODE === 'true' || !supabaseConfigured,
     microsoftStore: {
       configured: microsoftStoreConfigured,

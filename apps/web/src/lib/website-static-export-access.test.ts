@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { canDownloadWebsiteExport } from './website-static-export-access';
+import {
+  canDownloadWebsiteExport,
+  canPublishWebsiteToGithub,
+} from './website-static-export-access';
 
 describe('website static export access', () => {
   it('allows active and grace-period paid subscriptions', () => {
@@ -52,5 +55,31 @@ describe('website static export access', () => {
         subscription: { plan: 'free', status: 'active' },
       }),
     ).toBe(true);
+  });
+});
+
+describe('GitHub website publishing entitlement', () => {
+  it('requires both a paid entitlement and an owner or administrator role', () => {
+    expect(
+      canPublishWebsiteToGithub({
+        actor: { role: 'owner' },
+        platformAdmin: false,
+        subscription: { plan: 'team', status: 'active' },
+      }),
+    ).toBe(true);
+    expect(
+      canPublishWebsiteToGithub({
+        actor: { role: 'editor' },
+        platformAdmin: false,
+        subscription: { plan: 'team', status: 'active' },
+      }),
+    ).toBe(false);
+    expect(
+      canPublishWebsiteToGithub({
+        actor: { role: 'owner' },
+        platformAdmin: false,
+        subscription: { plan: 'free', status: 'active' },
+      }),
+    ).toBe(false);
   });
 });

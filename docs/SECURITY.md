@@ -195,12 +195,20 @@ transaction fails without superseding the current release when another project
 already owns that label. Customers never receive Vercel, DNS, or TLS
 credentials.
 
-Portable source and future GitHub releases reuse the registered-component static
-renderer. They must not include provider keys, OAuth tokens, payment secrets,
+Portable source and paid GitHub delivery reuse the registered-component static
+renderer. They cannot include provider keys, OAuth tokens, payment secrets,
 webhook secrets, local paths, prompts, private version history, arbitrary
-scripts, or executable model output. Future integration modules may expose only
-validated public configuration and secret-name placeholders; all functional
-provider credentials remain in a server-side deployment boundary.
+scripts, or executable model output. GitHub delivery accepts only a revocable
+GitHub App installation, one selected repository, one exact immutable Website
+Spec version, a platform-managed branch, and a separate human confirmation.
+Repository-scoped installation tokens are short lived and never persisted;
+temporary GitHub user tokens are revoked after installation ownership is
+verified. Retries are idempotent and audit only identifiers, integrity digests,
+commit metadata, and bounded outcome codes.
+
+Future integration modules may expose only validated public configuration and
+secret-name placeholders; all functional provider credentials remain in a
+server-side deployment boundary.
 
 ## Security review gates
 

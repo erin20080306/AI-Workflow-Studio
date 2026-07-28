@@ -10,12 +10,16 @@ test('creates, refines, previews, and explicitly publishes a website from one pr
   await page.getByLabel('用幾句話描述想建立的網站').fill(description);
   await page.getByRole('button', { name: '讓 AI 開始追問' }).click();
 
-  await expect(page.getByText('AI 需求追問')).toBeVisible();
-  await expect(page.getByText('這個網站最主要要服務誰？希望幫他們解決什麼問題？')).toBeVisible();
-  await page
-    .getByLabel('這個網站最主要要服務誰？希望幫他們解決什麼問題？')
-    .fill('需要建立專業網站、清楚介紹服務並取得詢問名單的台灣中小企業經營者。');
-  await page.getByRole('button', { name: '送出全部回答' }).click();
+  await expect(page.getByText(/AI 需求追問|需求已完整。你可以先檢查內容/).first()).toBeVisible();
+  if (!(await page.getByText('需求已完整。你可以先檢查內容').isVisible())) {
+    const questions = await page.locator('textarea').all();
+    for (const question of questions) {
+      if (await question.isVisible()) {
+        await question.fill('需要建立專業網站、清楚介紹服務並取得詢問名單的台灣中小企業經營者。');
+      }
+    }
+    await page.getByRole('button', { name: '送出全部回答' }).click();
+  }
   await expect(
     page.getByText('需求已完整。你可以先檢查內容，或立即建立已驗證的 Canvas 預覽。'),
   ).toBeVisible();
@@ -46,6 +50,17 @@ test('creates, refines, previews, and explicitly publishes a website from one pr
   const publicResponse = await page.request.get(publicRequestPath);
   expect(publicResponse.ok()).toBe(true);
   expect(await publicResponse.text()).toContain('index,follow');
+
+  await expect(page.getByRole('heading', { name: '將網站程式碼推送到你的 GitHub' })).toBeVisible();
+  await expect(page.getByText('virtual-automation-team · Organization')).toBeVisible();
+  await expect(page.getByLabel('GitHub 儲存庫')).toContainText(
+    'virtual-automation-team/operations-showcase',
+  );
+  await page.getByLabel('不可變更的網站版本').selectOption('2');
+  await page.getByText('我同意將這個確切網站版本寫入所選的儲存庫。').click();
+  await page.getByRole('button', { name: '將確切版本推送到 GitHub' }).click();
+  await expect(page.getByText(/網站程式碼已推送 · v2/)).toBeVisible();
+  await expect(page.getByText('確定性來源 SHA-256')).toBeVisible();
 });
 
 test('collects every guided decision before creating a locked website draft', async ({ page }) => {

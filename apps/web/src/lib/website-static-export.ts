@@ -39,6 +39,19 @@ export interface WebsiteStaticExport {
   readonly uncompressedBytes: number;
 }
 
+export interface WebsiteStaticSourceFile {
+  readonly bytes: Uint8Array;
+  readonly path: string;
+  readonly sha256: string;
+}
+
+export interface WebsiteStaticSource {
+  readonly fileCount: number;
+  readonly files: readonly WebsiteStaticSourceFile[];
+  readonly sourceSha256: string;
+  readonly uncompressedBytes: number;
+}
+
 interface ExportFile {
   readonly bytes: Uint8Array;
   readonly path: string;
@@ -80,7 +93,7 @@ function addFile(files: Map<string, Uint8Array>, file: ExportFile): void {
   files.set(file.path, file.bytes);
 }
 
-export function createWebsiteStaticExport(input: {
+export function createWebsiteStaticSource(input: {
   readonly assets: readonly WebsiteStaticExportAsset[];
   readonly generation: WebsiteSpecGeneration;
   readonly project: {
@@ -88,7 +101,7 @@ export function createWebsiteStaticExport(input: {
     readonly name: string;
     readonly slug: string;
   };
-}): WebsiteStaticExport {
+}): WebsiteStaticSource {
   const project = ExportProjectSchema.parse(input.project);
   const generation = WebsiteSpecGenerationSchema.parse(input.generation);
   const assetBytes = new Map(input.assets.map((asset) => [asset.id, asset.bytes] as const));
@@ -195,12 +208,31 @@ export function createWebsiteStaticExport(input: {
     throw new Error('Website export exceeds the uncompressed byte limit.');
   }
 
+  const sourceFiles = [...files.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([path, bytes]) => ({ bytes, path, sha256: sha256(bytes) }));
+  return {
+    fileCount: sourceFiles.length,
+    files: sourceFiles,
+    sourceSha256: sha256(integrity),
+    uncompressedBytes,
+  };
+}
+
+export function createWebsiteStaticExport(input: {
+  readonly assets: readonly WebsiteStaticExportAsset[];
+  readonly generation: WebsiteSpecGeneration;
+  readonly project: {
+    readonly id: string;
+    readonly name: string;
+    readonly slug: string;
+  };
+}): WebsiteStaticExport {
+  const source = createWebsiteStaticSource(input);
   const zipInput: Zippable = {};
-  for (const [path, bytes] of [...files.entries()].sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
-    zipInput[path] = [
-      bytes,
+  for (const file of source.files) {
+    zipInput[file.path] = [
+      file.bytes,
       {
         attrs: 0o644 << 16,
         level: 9,
@@ -216,8 +248,8 @@ export function createWebsiteStaticExport(input: {
   return {
     archiveSha256: sha256(bytes),
     bytes,
-    fileCount: files.size,
-    filename: `${project.slug}-v${generation.version}.zip`,
-    uncompressedBytes,
+    fileCount: source.fileCount,
+    filename: `${input.project.slug}-v${input.generation.version}.zip`,
+    uncompressedBytes: source.uncompressedBytes,
   };
 }

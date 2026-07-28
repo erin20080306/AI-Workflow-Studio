@@ -6,8 +6,19 @@ import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { getPublishedWebsiteAsset } from '@/lib/website-asset-server';
 import { getWebsiteSpecVersion } from '@/lib/website-spec-server';
 import { canDownloadWebsiteExport } from '@/lib/website-static-export-access';
-import { createWebsiteStaticExport, type WebsiteStaticExport } from '@/lib/website-static-export';
+import {
+  createWebsiteStaticExport,
+  createWebsiteStaticSource,
+  type WebsiteStaticExport,
+  type WebsiteStaticSource,
+} from '@/lib/website-static-export';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
+
+export interface PreparedWebsiteStaticSource {
+  readonly generation: NonNullable<Awaited<ReturnType<typeof getWebsiteSpecVersion>>>;
+  readonly project: Awaited<ReturnType<typeof getWebsiteProject>>;
+  readonly source: WebsiteStaticSource;
+}
 
 async function recordWebsiteExportAudit(
   context: WorkspaceContext,
@@ -52,6 +63,50 @@ export async function exportWebsiteVersion(
       'Portable website downloads require an active paid subscription.',
     );
   }
+  const prepared = await prepareWebsiteStaticSource(context, projectId, version);
+  try {
+    const result = createWebsiteStaticExport({
+      assets: prepared.source.files
+        .filter((file) => file.path.startsWith('assets/') && file.path.endsWith('.png'))
+        .map((file) => ({
+          bytes: file.bytes,
+          id: file.path.slice('assets/'.length, -'.png'.length),
+        })),
+      generation: prepared.generation,
+      project: {
+        id: prepared.project.id,
+        name: prepared.project.name,
+        slug: prepared.project.slug,
+      },
+    });
+    await recordWebsiteExportAudit(
+      context,
+      prepared.project.id,
+      prepared.generation.version,
+      result,
+    );
+    return result;
+  } catch (error) {
+    if (error instanceof WebsiteStudioError) throw error;
+    throw new WebsiteStudioError(
+      'WEBSITE_STATE_CONFLICT',
+      'The portable website archive could not be created.',
+      { cause: error },
+    );
+  }
+}
+
+export async function prepareWebsiteStaticSource(
+  context: WorkspaceContext,
+  projectId: string,
+  version: number,
+): Promise<PreparedWebsiteStaticSource> {
+  if (!canDownloadWebsiteExport(context)) {
+    throw new WebsiteStudioError(
+      'WEBSITE_FORBIDDEN',
+      'GitHub website publishing requires an active paid subscription.',
+    );
+  }
   const project = await getWebsiteProject(context, projectId);
   const generation = await getWebsiteSpecVersion(context, project.id, version);
   if (generation === undefined) {
@@ -71,7 +126,7 @@ export async function exportWebsiteVersion(
     }),
   );
   try {
-    const result = createWebsiteStaticExport({
+    const source = createWebsiteStaticSource({
       assets,
       generation,
       project: {
@@ -80,13 +135,12 @@ export async function exportWebsiteVersion(
         slug: project.slug,
       },
     });
-    await recordWebsiteExportAudit(context, project.id, generation.version, result);
-    return result;
+    return { generation, project, source };
   } catch (error) {
     if (error instanceof WebsiteStudioError) throw error;
     throw new WebsiteStudioError(
       'WEBSITE_STATE_CONFLICT',
-      'The portable website archive could not be created.',
+      'The portable website source could not be created.',
       { cause: error },
     );
   }

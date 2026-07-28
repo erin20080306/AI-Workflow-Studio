@@ -15,6 +15,7 @@ import { WebsiteModelDropdowns } from '@/components/sites/website-model-dropdown
 import { WebsiteSpecEditor } from '@/components/sites/website-spec-editor';
 import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
+import type { WebsiteGithubState } from '@/lib/website-github-schema';
 
 const GenerationResponseSchema = z.object({
   generation: WebsiteSpecClientGenerationSchema,
@@ -59,6 +60,8 @@ const copy = {
 
 export function WebsiteSpecGenerator({
   canExportWebsite,
+  canPublishGithub,
+  githubState,
   initialGeneration,
   initialPublication,
   initialVersions,
@@ -68,6 +71,8 @@ export function WebsiteSpecGenerator({
   tierOptions,
 }: Readonly<{
   canExportWebsite: boolean;
+  canPublishGithub: boolean;
+  githubState: WebsiteGithubState;
   initialGeneration: WebsiteSpecClientGeneration | undefined;
   initialPublication: WebsitePublication | undefined;
   initialVersions: readonly WebsiteSpecClientGeneration[];
@@ -183,6 +188,8 @@ export function WebsiteSpecGenerator({
           </dl>
           <WebsiteSpecEditor
             canExportWebsite={canExportWebsite}
+            canPublishGithub={canPublishGithub}
+            githubState={githubState}
             initialGeneration={generation}
             initialPublication={initialPublication}
             initialVersions={initialVersions.length === 0 ? [generation] : initialVersions}

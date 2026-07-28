@@ -8,6 +8,8 @@ import { buildAiTierOptions } from '@/lib/ai-model-selection';
 import { requireWorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { buildWebsiteGenerationModelOptions } from '@/lib/website-generation-models';
+import { getWebsiteGithubState } from '@/lib/website-github-server';
+import type { WebsiteGithubState } from '@/lib/website-github-schema';
 import { listWebsiteBriefMessages } from '@/lib/website-prompt-server';
 import { getActiveWebsitePublication } from '@/lib/website-publication-server';
 import {
@@ -15,7 +17,10 @@ import {
   listWebsiteSpecGenerations,
   websiteSpecClientView,
 } from '@/lib/website-spec-server';
-import { canDownloadWebsiteExport } from '@/lib/website-static-export-access';
+import {
+  canDownloadWebsiteExport,
+  canPublishWebsiteToGithub,
+} from '@/lib/website-static-export-access';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
 export const metadata: Metadata = {
@@ -34,6 +39,8 @@ export default async function WebsiteBriefPage({
   const context = await requireWorkspaceContext();
   try {
     const project = await getWebsiteProject(context, parsed.data.projectId);
+    const canPublishGithub = canPublishWebsiteToGithub(context);
+    const environment = getEnvironment();
     const [generation, versions, mappings, messages, publication] = await Promise.all([
       getWebsiteSpecGeneration(context, project.id),
       listWebsiteSpecGenerations(context, project.id),
@@ -41,15 +48,20 @@ export default async function WebsiteBriefPage({
       listWebsiteBriefMessages(context, project.id),
       getActiveWebsitePublication(context, project.id),
     ]);
+    const githubState: WebsiteGithubState = canPublishGithub
+      ? await getWebsiteGithubState(context)
+      : { configured: environment.mockMode || environment.github.configured };
     return (
       <WebsiteBriefWorkspace
         canExportWebsite={canDownloadWebsiteExport(context)}
+        canPublishGithub={canPublishGithub}
+        githubState={githubState}
         initialGeneration={generation === undefined ? undefined : websiteSpecClientView(generation)}
         initialMessages={messages}
         initialPublication={publication}
         initialProject={project}
         initialVersions={versions.map(websiteSpecClientView)}
-        modelOptions={buildWebsiteGenerationModelOptions(getEnvironment())}
+        modelOptions={buildWebsiteGenerationModelOptions(environment)}
         tierOptions={buildAiTierOptions(context.subscription.plan, mappings)}
       />
     );

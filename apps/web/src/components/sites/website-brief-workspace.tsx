@@ -34,6 +34,7 @@ import { WebsiteSpecGenerator } from '@/components/sites/website-spec-generator'
 import { WebsiteModelDropdowns } from '@/components/sites/website-model-dropdowns';
 import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
+import type { WebsiteGithubState } from '@/lib/website-github-schema';
 
 const ProjectResponseSchema = z.object({ project: WebsiteProjectSchema });
 const ConversationResponseSchema = z
@@ -209,6 +210,8 @@ function updatePageField(
 
 export function WebsiteBriefWorkspace({
   canExportWebsite,
+  canPublishGithub,
+  githubState,
   initialGeneration,
   initialMessages,
   initialPublication,
@@ -218,6 +221,8 @@ export function WebsiteBriefWorkspace({
   tierOptions,
 }: Readonly<{
   canExportWebsite: boolean;
+  canPublishGithub: boolean;
+  githubState: WebsiteGithubState;
   initialGeneration: WebsiteSpecClientGeneration | undefined;
   initialMessages: readonly WebsiteBriefMessage[];
   initialPublication: WebsitePublication | undefined;
@@ -882,6 +887,8 @@ export function WebsiteBriefWorkspace({
         <div className="mt-5">
           <WebsiteSpecGenerator
             canExportWebsite={canExportWebsite}
+            canPublishGithub={canPublishGithub}
+            githubState={githubState}
             initialGeneration={generation}
             initialPublication={initialPublication}
             initialVersions={initialVersions}

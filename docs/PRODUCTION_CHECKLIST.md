@@ -89,6 +89,9 @@ must never be substituted for the service-role key.
 - [ ] OpenAI: `OPENAI_API_KEY` and `OPENAI_MODEL`
 - [ ] Anthropic: `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL`
 - [ ] Gemini: `GEMINI_API_KEY` and `GEMINI_MODEL`
+- [ ] GitHub App: `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`,
+      `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY_BASE64`, and
+      `GITHUB_APP_SLUG`
 - [ ] Microsoft Store: `MICROSOFT_STORE_TENANT_ID`,
       `MICROSOFT_STORE_CLIENT_ID`, `MICROSOFT_STORE_CLIENT_SECRET`, and exact
       `MICROSOFT_STORE_PLAN_MAPPINGS`
@@ -105,6 +108,13 @@ logs, screenshots, or support tickets.
 ## OAuth and external services
 
 - [ ] Register the exact production HTTPS Google callback.
+- [ ] Register the exact GitHub App setup and OAuth callback URLs; grant only
+      Metadata read and Contents read/write repository permissions.
+- [ ] Verify selected-repository installation, repository listing, explicit
+      exact-version push, idempotent retry, managed-branch ownership rejection,
+      local disconnect, and revoked-installation behavior in staging.
+- [ ] Confirm no personal access token, GitHub OAuth user token, or installation
+      token is persisted or returned to the browser.
 - [ ] Keep Google consent scopes limited to spreadsheet access and read-only
       Drive metadata.
 - [ ] Verify token refresh, explicit revoke, disabled-client, and expired-token

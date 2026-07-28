@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 37 — AI-first website brief (completed)
+Phase 38 — Paid GitHub site publishing (completed)
 
 ## Repository baseline
 
@@ -2880,3 +2880,70 @@ Status: completed
 ### Commit
 
 - `788c9d8` — `feat(web): add AI-first website brief`
+
+## Phase 38 — Paid GitHub site publishing
+
+Status: completed
+
+### Implemented
+
+- Added a paid-only GitHub delivery panel to Website Studio. Free members may
+  still create, preview, edit, and publish on the platform wildcard, but only an
+  active paid Tenant owner or admin can transfer source to GitHub.
+- Added a revocable least-privilege GitHub App flow with an installation setup
+  URL, OAuth callback with state and PKCE protection, exact installation-owner
+  validation, short-lived repository-scoped installation tokens, and immediate
+  revocation of the temporary GitHub user token.
+- Added exact repository, immutable Website Spec version, and
+  `ai-workflow-studio/` managed-branch selection. A separate confirmation is
+  required before every new external write.
+- Reused the deterministic Phase 35 static source builder and added a transfer
+  scan that rejects unsafe paths, private keys, credential-like values, local
+  absolute paths, and executable model output before GitHub receives any file.
+- Added root-tree Git commits that do not rewrite the repository default branch.
+  Existing managed branches can be updated only when their `manifest.json`
+  identifies the same Website Project.
+- Added idempotent publication attempts and server-only GitHub connection/
+  publication tables. Stored and audited metadata is limited to identifiers,
+  bounded state/error codes, integrity digests, and commit metadata; source,
+  prompts, customer content, OAuth tokens, and installation tokens are not
+  persisted.
+- Added bilingual configuration, locked, connection, repository, confirmation,
+  progress, failure, and success states without exposing provider configuration
+  or credentials to ordinary users.
+- Documented the GitHub App permissions, production callback/setup URLs,
+  server-only Vercel variables, revocation boundary, and acceptance checklist.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 229 tests across 51 files
+- `pnpm db:test`: passed — fresh migrations, RLS/privilege assertions,
+  cross-Tenant checks, and seed validation
+- `pnpm build:web`: passed — 47 generated application pages and the five new
+  GitHub App/source-delivery server routes
+- `pnpm security:scan-client`: passed — 34 client files scanned
+- `pnpm exec playwright test e2e/website-studio.spec.ts --workers=1`: passed —
+  2 tests, including exact version/repository selection, explicit confirmation,
+  deterministic source digest, and successful idempotent Mock GitHub delivery
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Production acceptance
+
+- Pending the Phase 38 feature commit, production migration, GitHub App
+  configuration, Vercel deployment, and authenticated live selected-repository
+  acceptance. No live repository write is claimed in this status entry.
+
+### Known limitations
+
+- A production GitHub App must be created and its five server-only values added
+  to Vercel before the live connection button is enabled.
+- Phase 39 guided payment/API integrations remain intentionally unimplemented.
+- GitHub delivery writes generated static site source to a managed branch; it
+  does not deploy that repository or change its default branch.
+
+### Commit
+
+- `feat(web): add paid GitHub website publishing` (this phase commit)

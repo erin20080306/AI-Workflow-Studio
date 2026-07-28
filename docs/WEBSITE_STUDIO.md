@@ -45,6 +45,13 @@ conversation message kind/step, publication slug, and validation-attempt count.
 They do not copy the brief, generated content, credentials, prompts, answers,
 provider response bodies, or unpublished customer material.
 
+`website_github_connections` stores only the Tenant, connecting actor, GitHub
+App installation/account identifiers, account label/type, state, and timestamps.
+`website_github_publications` records an exact immutable Website Spec version,
+repository identifier/name, platform-managed branch, deterministic source/tree/
+commit digests, idempotency key, and bounded outcome metadata. Browser roles
+receive no privileges on either table.
+
 ## Validation and limits
 
 - Project names: 2–120 characters.
@@ -97,6 +104,31 @@ true` request for one exact existing version.
 - Restrictive CSP, frame, content-type, and referrer headers are attached to
   public HTML and asset responses.
 
+## Paid GitHub delivery boundary
+
+- Free members may create, preview, edit, and publish on the platform wildcard,
+  but cannot download source or write it to GitHub.
+- A paid Tenant owner or admin connects a revocable GitHub App installation.
+  The browser never accepts a personal access token and never receives a GitHub
+  App private key, client secret, installation token, or user access token.
+- The user must select one repository, one exact immutable Website Spec version,
+  and a branch below `ai-workflow-studio/`, then check a separate confirmation
+  before the server performs the external write.
+- The server regenerates the same registered-component static source used by
+  paid ZIP export. It rejects unsafe paths, credential-like values, private-key
+  material, local absolute paths, and executable model output before transfer.
+- Each attempt uses a deterministic idempotency key. A successful retry returns
+  the existing recorded commit rather than creating another external write.
+- Installation access tokens are repository-scoped and short lived. The
+  platform stores installation metadata only; the temporary OAuth user token is
+  revoked after the installation is verified.
+- A pre-existing managed branch is updated only when its `manifest.json`
+  identifies the same Website Project. The source branch does not rewrite the
+  repository's default branch.
+- Audit and publication records contain identifiers, integrity digests, commit
+  metadata, and bounded error codes only. They never contain source files,
+  prompts, customer content, or credentials.
+
 ## Model and credential boundary
 
 - Auto safely routes to the first verified provider and mapped model.
@@ -111,7 +143,6 @@ true` request for one exact existing version.
 
 ## Follow-on hosting work
 
-- Customer-selected labels on the verified platform wildcard.
 - Per-site independent deployment projects where commercially required.
 - Generated sitemap/robots indexes for multi-page sites.
 - Publication-history and rollback controls in the member UI.

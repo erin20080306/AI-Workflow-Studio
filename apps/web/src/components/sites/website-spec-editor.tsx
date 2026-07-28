@@ -18,10 +18,12 @@ import { z } from 'zod';
 import { CheckIcon, SaveIcon, SparkIcon } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
 import { WebsiteModelDropdowns } from '@/components/sites/website-model-dropdowns';
+import { WebsiteGithubPublishPanel } from '@/components/sites/website-github-publish-panel';
 import { WebsitePreviewCanvas } from '@/components/sites/website-preview-canvas';
 import { WebsitePublishPanel } from '@/components/sites/website-publish-panel';
 import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
+import type { WebsiteGithubState } from '@/lib/website-github-schema';
 import { websiteImageModelLabel } from '@/lib/website-image-models';
 
 type WebsiteTheme = z.infer<typeof WebsiteThemeSchema>;
@@ -201,6 +203,8 @@ function sectionFieldValue(section: WebsiteSection | undefined, field: EditableF
 
 export function WebsiteSpecEditor({
   canExportWebsite,
+  canPublishGithub,
+  githubState,
   initialGeneration,
   initialPublication,
   initialVersions,
@@ -210,6 +214,8 @@ export function WebsiteSpecEditor({
   tierOptions,
 }: Readonly<{
   canExportWebsite: boolean;
+  canPublishGithub: boolean;
+  githubState: WebsiteGithubState;
   initialGeneration: WebsiteSpecClientGeneration;
   initialPublication: WebsitePublication | undefined;
   initialVersions: readonly WebsiteSpecClientGeneration[];
@@ -820,6 +826,13 @@ export function WebsiteSpecEditor({
         initialPublication={initialPublication}
         projectId={projectId}
         suggestedSiteSlug={suggestedSiteSlug}
+      />
+      <WebsiteGithubPublishPanel
+        canPublish={canPublishGithub}
+        initialState={githubState}
+        projectId={projectId}
+        suggestedSiteSlug={suggestedSiteSlug}
+        versions={versions}
       />
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_1.2fr]">

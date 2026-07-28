@@ -9,3 +9,11 @@ export function canDownloadWebsiteExport(context: WebsiteExportAccessContext): b
     ['active', 'past_due'].includes(context.subscription.status)
   );
 }
+
+export function canPublishWebsiteToGithub(
+  context: WebsiteExportAccessContext & {
+    readonly actor: { readonly role: 'admin' | 'editor' | 'owner' | 'viewer' };
+  },
+): boolean {
+  return ['owner', 'admin'].includes(context.actor.role) && canDownloadWebsiteExport(context);
+}

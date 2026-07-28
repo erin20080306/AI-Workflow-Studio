@@ -6,6 +6,9 @@ describe('parseEnvironment', () => {
   it('uses safe mock mode when external credentials are absent', () => {
     expect(parseEnvironment({})).toMatchObject({
       googleConfigured: false,
+      github: {
+        configured: false,
+      },
       mockMode: true,
       microsoftStore: {
         configured: false,
@@ -23,6 +26,33 @@ describe('parseEnvironment', () => {
         openai: 'gpt-5.6-sol',
       },
       supabaseConfigured: false,
+    });
+  });
+
+  it('enables the GitHub App only when every server credential is present', () => {
+    const privateKey = Buffer.from('-----BEGIN PRIVATE KEY-----\n'.padEnd(300, 'A')).toString(
+      'base64',
+    );
+    expect(
+      parseEnvironment({
+        GITHUB_APP_CLIENT_ID: 'Iv1.example-client',
+        GITHUB_APP_CLIENT_SECRET: 'github-client-secret-long-enough',
+        GITHUB_APP_ID: '123456',
+        GITHUB_APP_PRIVATE_KEY_BASE64: privateKey,
+        GITHUB_APP_SLUG: 'ai-workflow-studio-publisher',
+      }).github,
+    ).toEqual({
+      appSlug: 'ai-workflow-studio-publisher',
+      configured: true,
+    });
+
+    expect(
+      parseEnvironment({
+        GITHUB_APP_SLUG: 'ai-workflow-studio-publisher',
+      }).github,
+    ).toEqual({
+      appSlug: 'ai-workflow-studio-publisher',
+      configured: false,
     });
   });
 

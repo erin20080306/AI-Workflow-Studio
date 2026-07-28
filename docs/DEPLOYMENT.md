@@ -70,10 +70,37 @@ Production setup order:
 5. Test `/` and every generated inner-page link through the resulting wildcard
    URL over unauthenticated HTTPS.
 
-Customer source ZIP download remains paid-only. Customer GitHub publishing and
-guided payment/API integrations are separate gated delivery phases; a platform
-repository push does not imply that a customer's generated website has been
-pushed to that customer's GitHub account.
+Customer source ZIP download and GitHub publishing remain paid-only. Guided
+payment/API integrations are a separate gated delivery phase.
+
+### GitHub App for paid source delivery
+
+Create a dedicated GitHub App rather than accepting personal access tokens.
+Configure:
+
+| GitHub App setting     | Production value                                                         |
+| ---------------------- | ------------------------------------------------------------------------ |
+| Homepage URL           | `https://www.erin-aiworkflowstudio.com`                                  |
+| Setup URL              | `https://www.erin-aiworkflowstudio.com/api/integrations/github/setup`    |
+| Callback URL           | `https://www.erin-aiworkflowstudio.com/api/integrations/github/callback` |
+| Repository permissions | Metadata: read; Contents: read and write                                 |
+| Installation scope     | Only on this account; users choose selected repositories                 |
+
+Store the resulting values as server-only Vercel Production variables:
+
+- `GITHUB_APP_ID`
+- `GITHUB_APP_CLIENT_ID`
+- `GITHUB_APP_CLIENT_SECRET`
+- `GITHUB_APP_PRIVATE_KEY_BASE64`
+- `GITHUB_APP_SLUG`
+
+Encode the complete PEM private-key file as one padded base64 value before
+setting `GITHUB_APP_PRIVATE_KEY_BASE64`. Never prefix these variables with
+`NEXT_PUBLIC_`, paste them into generated source, or expose them in screenshots
+or support tickets. Apply the paid GitHub publishing migration before enabling
+the feature. Revoking an installation immediately prevents new repository
+writes; removing the local connection clears the platform association without
+storing a long-lived GitHub credential.
 
 ## Desktop release channels
 
@@ -101,7 +128,9 @@ Certification Kit, listing, privacy, and support checks pass. See
 The hosted Web/Supabase authentication boundary, usage controls, Website Studio,
 platform publishing, wildcard customer-site hosting, and paid static ZIP export
 are deployed. The production project and aliases are healthy. Platform
-subdomain publishing does not require a per-customer Vercel credential.
+subdomain publishing does not require a per-customer Vercel credential. Paid
+GitHub delivery becomes available only after its migration, matching GitHub App,
+and five server-only variables are present.
 
 No Microsoft Store package has been submitted, certified, or connected to the
 entitlement endpoint, and no signed desktop release or GitHub Release has been

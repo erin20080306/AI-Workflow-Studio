@@ -52,8 +52,8 @@ test, and build checks and has been committed.
 | 34    | Wildcard subdomain hosting    | Every active publication receives a verified stable platform subdomain           | completed |
 | 35    | Portable static export        | Paid users can download a bounded, secret-free, verifiable website ZIP           | completed |
 | 36    | Customer-selected subdomains  | Each site can reserve a safe unique label on the platform wildcard               | completed |
-| 37    | AI-first website brief        | One direction prompt creates a rich inferred brief with bounded follow-ups       | pending   |
-| 38    | Paid GitHub site publishing   | Paid users can explicitly push an exact safe release through a GitHub App        | pending   |
+| 37    | AI-first website brief        | One direction prompt creates a rich inferred brief with bounded follow-ups       | completed |
+| 38    | Paid GitHub site publishing   | Paid users can explicitly push an exact safe release through a GitHub App        | completed |
 | 39    | Guided site integrations      | Allowlisted payment/API modules guide setup without exposing credentials         | pending   |
 | 40    | Website delivery acceptance   | Free/paid gates, pages, domains, ZIP, GitHub, and integrations pass end to end   | pending   |
 

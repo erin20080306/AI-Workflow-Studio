@@ -619,6 +619,66 @@ select tests.assert_true(
   'customer website hostnames must be globally unique'
 );
 
+insert into public.website_github_connections (
+  id,
+  tenant_id,
+  installation_id,
+  account_login,
+  account_type,
+  connected_by
+)
+values (
+  'e9000000-0000-4000-8000-000000000001',
+  'e2000000-0000-4000-8000-000000000001',
+  987654,
+  'tenant-a-demo',
+  'Organization',
+  'e1000000-0000-4000-8000-000000000001'
+);
+
+insert into public.website_github_publications (
+  tenant_id,
+  project_id,
+  spec_version,
+  connection_id,
+  repository_id,
+  repository_full_name,
+  branch,
+  idempotency_key,
+  status,
+  source_sha256,
+  tree_sha,
+  commit_sha,
+  started_by,
+  completed_at
+)
+values (
+  'e2000000-0000-4000-8000-000000000001',
+  'e3000000-0000-4000-8000-000000000003',
+  2,
+  'e9000000-0000-4000-8000-000000000001',
+  123456,
+  'tenant-a-demo/generated-site',
+  'ai-workflow-studio/validated-draft',
+  'e9000000-0000-4000-8000-000000000002',
+  'succeeded',
+  repeat('a', 64),
+  repeat('b', 40),
+  repeat('c', 40),
+  'e1000000-0000-4000-8000-000000000001',
+  now()
+);
+
+select tests.assert_true(
+  (
+    select count(*) = 1
+      and max(status) = 'succeeded'
+    from public.website_github_publications
+    where tenant_id = 'e2000000-0000-4000-8000-000000000001'
+  ),
+  'an exact website version GitHub push must remain metadata-auditable'
+);
+
 reset role;
 set local role authenticated;
 select set_config(
@@ -641,6 +701,14 @@ select tests.assert_true(
   and not has_table_privilege('authenticated', 'public.website_custom_domains', 'update')
   and not has_table_privilege('authenticated', 'public.website_custom_domains', 'delete'),
   'customer domain mutations must remain behind authenticated server routes'
+);
+
+select tests.assert_true(
+  not has_table_privilege('authenticated', 'public.website_github_connections', 'select')
+  and not has_table_privilege('authenticated', 'public.website_github_connections', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_github_publications', 'select')
+  and not has_table_privilege('authenticated', 'public.website_github_publications', 'insert'),
+  'GitHub installation and push metadata must remain server-only'
 );
 
 reset role;
