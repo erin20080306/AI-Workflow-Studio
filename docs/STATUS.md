@@ -2919,11 +2919,13 @@ Status: completed
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
 - `pnpm typecheck`: passed
-- `pnpm test`: passed — 229 tests across 51 files
+- `pnpm test`: passed — 235 tests across 52 files
 - `pnpm db:test`: passed — fresh migrations, RLS/privilege assertions,
   cross-Tenant checks, and seed validation
 - `pnpm build:web`: passed — 47 generated application pages and the five new
-  GitHub App/source-delivery server routes
+  GitHub App/source-delivery server routes. The sandboxed attempt could not bind
+  a Turbopack worker port; the same build passed on the permitted unrestricted
+  retry and in Vercel Production.
 - `pnpm security:scan-client`: passed — 34 client files scanned
 - `pnpm exec playwright test e2e/website-studio.spec.ts --workers=1`: passed —
   2 tests, including exact version/repository selection, explicit confirmation,
@@ -2932,18 +2934,39 @@ Status: completed
 
 ### Production acceptance
 
-- Pending the Phase 38 feature commit, production migration, GitHub App
-  configuration, Vercel deployment, and authenticated live selected-repository
-  acceptance. No live repository write is claimed in this status entry.
+- Applied `202607280012_paid_github_site_publishing.sql` to the linked
+  production database and configured the GitHub App exclusively through five
+  protected Vercel Production variables.
+- The GitHub App is configured for Metadata read and Contents read/write, OAuth
+  during installation, repository selection by the installing customer, no
+  webhook delivery, and a production callback on the platform domain.
+- Git commits `1ecbd0b`, `59b51a9`, `6be57e2`, `dc6802b`, `6db3531`,
+  `a2f8e0f`, and `eb6f33c` were pushed to
+  `codex/ai-workflow-platform`. The final account-normalization fix accepts the
+  additional public fields in real GitHub installation responses but stores
+  only the validated login and account type.
+- Vercel Production deployment `dpl_Fm9zHKjUBHYDtuq4B2RpEtvj3MtU` is Ready.
+  Authenticated acceptance through `https://www.erin-aiworkflowstudio.com`
+  completed the state/PKCE OAuth flow and returned to the Website Studio project
+  with a saved, revocable GitHub App connection.
+- The live repository picker exposed only the repository selected during App
+  installation. The exact immutable website v1 source was explicitly confirmed
+  and pushed to `ai-workflow-studio/site-e1741111`; the repository default
+  branch was not modified.
+- GitHub returned commit
+  `9f4719ce8f372388ae9b4a5257fae1a1e600f277`. Connector-backed readback verified
+  `index.html`, three inner pages, `manifest.json`, `integrity.sha256`, and
+  `README.txt` on the managed branch. The manifest identifies four pages and
+  every file digest listed by the integrity document matches the deterministic
+  source package metadata.
 
 ### Known limitations
 
-- A production GitHub App must be created and its five server-only values added
-  to Vercel before the live connection button is enabled.
 - Phase 39 guided payment/API integrations remain intentionally unimplemented.
 - GitHub delivery writes generated static site source to a managed branch; it
   does not deploy that repository or change its default branch.
 
 ### Commit
 
-- `feat(web): add paid GitHub website publishing` (this phase commit)
+- `1ecbd0b` — `feat(web): add paid GitHub website publishing`
+- `eb6f33c` — final live-response compatibility fix
