@@ -194,6 +194,40 @@ describe('provider adapters', () => {
     expect(JSON.stringify(error)).not.toContain('Sensitive provider message');
   });
 
+  it('classifies provider schema failures without retaining the upstream message', async () => {
+    const fetchTransport: FetchTransport = async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 400,
+            message:
+              'The provided response schema is too complex and exceeds the allowed complexity.',
+          },
+        }),
+        {
+          headers: { 'content-type': 'application/json' },
+          status: 400,
+        },
+      );
+
+    const error = await new GeminiAdapter({
+      apiKey: API_KEY,
+      fetchTransport,
+    })
+      .complete(websiteCompletionRequest)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      code: 'AI_PROVIDER_REQUEST_FAILED',
+      details: {
+        providerCode: 400,
+        providerReason: 'schema_too_complex',
+        status: 400,
+      },
+    });
+    expect(JSON.stringify(error)).not.toContain('provided response schema');
+  });
+
   it('uses Anthropic Messages JSON instructions without unsupported workflow schema options', async () => {
     let capturedInit: RequestInit | undefined;
     const fetchTransport: FetchTransport = async (_input, init) => {
@@ -249,6 +283,7 @@ describe('provider adapters', () => {
     const body = JSON.parse(String(capturedInit?.body)) as {
       readonly generationConfig: {
         readonly responseMimeType: string;
+        readonly responseJsonSchema?: unknown;
         readonly responseSchema?: unknown;
       };
     };
@@ -257,6 +292,7 @@ describe('provider adapters', () => {
     expect(capturedUrl).not.toContain(API_KEY);
     expect(new Headers(capturedInit?.headers).get('x-goog-api-key')).toBe(API_KEY);
     expect(body.generationConfig.responseMimeType).toBe('application/json');
+    expect(body.generationConfig).not.toHaveProperty('responseJsonSchema');
     expect(body.generationConfig).not.toHaveProperty('responseSchema');
     expect(completion.usage.totalTokens).toBe(13);
   });
@@ -311,10 +347,41 @@ describe('provider adapters', () => {
       {
         generationConfig: {
           responseMimeType: 'application/json',
-          responseSchema: completionRequest.jsonSchema,
+          responseJsonSchema: completionRequest.jsonSchema,
         },
       },
     ]);
+  });
+
+  it('uses prompt-guided JSON for compact website blueprints to avoid provider schema rejection', async () => {
+    let capturedInit: RequestInit | undefined;
+    const fetchTransport: FetchTransport = async (_input, init) => {
+      capturedInit = init;
+      return jsonResponse({
+        candidates: [{ content: { parts: [{ text: '{"ok":true}' }] }, finishReason: 'STOP' }],
+      });
+    };
+
+    await new GeminiAdapter({ apiKey: API_KEY, fetchTransport }).complete({
+      ...websiteCompletionRequest,
+      jsonSchema: {
+        additionalProperties: false,
+        properties: { name: { type: 'string' }, pages: { items: {}, type: 'array' } },
+        required: ['name', 'pages'],
+        type: 'object',
+      },
+      schemaName: 'website_blueprint_v1',
+    });
+    const body = JSON.parse(String(capturedInit?.body)) as {
+      readonly contents: readonly {
+        readonly parts: readonly { readonly text: string }[];
+      }[];
+      readonly generationConfig: Readonly<Record<string, unknown>>;
+    };
+
+    expect(body.generationConfig).not.toHaveProperty('responseJsonSchema');
+    expect(body.generationConfig.responseMimeType).toBe('application/json');
+    expect(body.contents[0]?.parts[0]?.text).toContain('"required":["name","pages"]');
   });
 
   it('rejects a truncated Gemini structured response', async () => {

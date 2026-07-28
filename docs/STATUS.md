@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 32 — Account-verified AI model routing (completed)
+Phase 33 — Production prompt-to-site acceptance (completed)
 
 ## Repository baseline
 
@@ -2513,3 +2513,67 @@ Status: completed
 ### Commit
 
 - `feat(web): route account-verified AI models` (this phase commit)
+
+## Phase 33 — Production prompt-to-site acceptance
+
+Status: completed
+
+### Implemented
+
+- Added a compact, schema-validated Website Blueprint contract for live model
+  output and a deterministic server compiler that expands it into the existing
+  registered-component Website Spec without accepting HTML, JavaScript, shell
+  commands, credentials, arbitrary URLs, or unregistered components.
+- Added bounded, server-constructed fallback briefs and Website Specs for
+  safely recoverable provider and structured-output failures. Every fallback
+  remains inside the existing Tenant allowance, usage settlement, immutable
+  version, and validation boundaries.
+- Added Gemini structured-output support that preserves prompt guidance while
+  requesting JSON output, plus safer provider-response and error
+  classification for production Website Studio operations.
+- Hardened CTA normalization so an omitted title or body is derived only from
+  existing validated brief content and cannot produce an invalid empty block.
+- Repaired the production publication response path. The atomic Supabase RPC
+  performs the release, then the server re-reads and verifies the active
+  publication before returning success; a completed release can no longer be
+  misreported as failed because of a provider-specific composite-row response
+  shape.
+- Deployed Vercel Production deployment
+  `dpl_DuiUyQ3Eh3ZM9Rmpc3LCwpV9jdiE` and aliased it to
+  `https://www.erin-aiworkflowstudio.com`.
+
+### Production acceptance
+
+- Gemini `gemini-3.5-flash-lite` created the validated Website Studio edit
+  `v5 · Gemini 正式發布驗證` for the four-page city-florist project.
+- Explicit authenticated publication confirmation completed without an error
+  state, and the editor reported `目前公開版本 · v5`.
+- An unauthenticated HTTP request to
+  `https://www.erin-aiworkflowstudio.com/s/site-a45676dc-89ac69a7` returned
+  `200 OK`, the public renderer CSP disabled scripts, forms, external
+  connections, media, and embedding, and no dashboard authentication redirect
+  occurred.
+- Browser checks loaded both the public homepage and
+  `/s/site-a45676dc-89ac69a7/services`, including their validated navigation,
+  content, CTA, and footer.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 206 tests across 46 files
+- `pnpm build:web`: passed — 42 generated application pages
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- Published sites still use the platform path `/s/{siteSlug}`. Tenant wildcard
+  subdomains, portable ZIP export, and customer-owned domains are the next
+  isolated hosting phases.
+- Customer-authored scripts, forms, executable code, arbitrary external assets,
+  and model-supplied deployment configuration remain intentionally unsupported.
+
+### Commit
+
+- `feat(web): prove production prompt-to-site acceptance` (this phase commit)

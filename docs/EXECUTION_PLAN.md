@@ -347,3 +347,60 @@ Deploy the verified source to Vercel Production and repeat authenticated
 end-to-end checks for exact-model selection, Claude and Gemini chat, OpenAI
 provider status, safe workflow planning, review-draft persistence, administrator
 inventory visibility, and all primary workspace routes.
+
+## Phase 33 — Production prompt-to-site acceptance
+
+Repair and prove the complete production Website Studio path from one natural
+language request through bounded questions, validated Canvas generation,
+conversation-based edits, explicit publish confirmation, and the public release
+route. Live account-verified models remain the first choice.
+
+When a provider returns malformed structured output or a transient provider
+failure, use only a server-constructed, schema-validated fallback brief or
+registered-component Website Spec. The fallback must be visibly auditable in
+version metadata, must never bypass Tenant usage limits, and must not accept
+HTML, scripts, commands, credentials, arbitrary code, or unregistered
+components. Provider, quota, and validation errors that are not safely
+recoverable must reach the member as classified responses rather than an opaque
+state conflict.
+
+## Phase 34 — Tenant wildcard subdomain hosting
+
+Add a stable platform-hosted subdomain for every active publication, using the
+shape `{siteSlug}.sites.erin-aiworkflowstudio.com`. Resolve only normalized
+hostnames to an active publication, rewrite internally to the existing safe
+public renderer, and preserve page paths, asset authorization, immutable release
+selection, CSP, and Tenant isolation.
+
+The platform wildcard must be configured and verified through Vercel without
+exposing dashboard sessions to customer-site hosts. Existing `/s/{siteSlug}`
+routes remain compatible fallbacks. Do not claim wildcard availability until an
+unauthenticated request to a real generated subdomain and at least one inner
+page both return the expected publication.
+
+## Phase 35 — Portable static website export
+
+Add an authenticated, audited ZIP export for an exact validated Website Spec
+version. The archive may contain only deterministic static HTML, local CSS,
+referenced validated assets, a manifest, and integrity metadata. It must not
+contain provider credentials, platform secrets, prompts, private version
+history, unpublished assets, absolute local paths, server code, arbitrary
+scripts, or executable commands.
+
+Generate archives on demand with bounded file counts and byte limits, validate
+every archive path against traversal, and stream the result without persisting
+secret-bearing temporary state. Verify the downloaded ZIP can be extracted and
+opened as a portable multi-page site.
+
+## Phase 36 — Customer custom domains
+
+Add an authenticated domain-claim flow for an active Website Studio
+publication. Store normalized hostnames, issue verification records, show the
+exact DNS instructions, and activate routing only after ownership and Vercel
+domain status are independently verified.
+
+Prevent duplicate or cross-Tenant claims, reject platform and reserved domains,
+keep certificates and DNS-provider credentials outside the application, and
+record only metadata-safe audit events. A custom domain must serve the same
+immutable active publication as its platform path and wildcard subdomain, with
+safe rollback to those platform URLs if verification or renewal fails.

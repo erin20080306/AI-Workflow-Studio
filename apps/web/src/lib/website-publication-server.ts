@@ -169,7 +169,14 @@ export async function publishWebsite(
       'The website could not be published safely.',
     );
   }
-  return publicationView(WebsitePublicationRowSchema.parse(result.data));
+  const publication = await getActiveWebsitePublication(context, project.id);
+  if (publication === undefined || publication.version !== input.version) {
+    throw new WebsiteStudioError(
+      'WEBSITE_STATE_CONFLICT',
+      'The published website version could not be verified.',
+    );
+  }
+  return publication;
 }
 
 export interface PublishedWebsite {

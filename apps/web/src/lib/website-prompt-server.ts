@@ -34,6 +34,10 @@ import {
   updateWebsiteBrief,
   WebsiteStudioError,
 } from '@/lib/website-studio-server';
+import {
+  createSafeWebsitePromptAnalysis,
+  isSafeWebsiteProviderFallback,
+} from '@/lib/website-safe-fallback';
 
 const WebsiteBriefMessageRowSchema = z
   .object({
@@ -100,51 +104,6 @@ const questionCopy: Readonly<
     zhHant: '這個網站最重要的商業目標是什麼？怎樣才算成功？',
   },
 };
-
-function safeName(description: string, locale: 'en' | 'zh-Hant'): string {
-  const normalized = description
-    .replaceAll(/https?:\/\/\S+/giu, '')
-    .replaceAll(/[<>{}`]/g, '')
-    .replaceAll(/\s+/g, ' ')
-    .trim()
-    .slice(0, 42);
-  if (normalized.length >= 2) return normalized;
-  return locale === 'en' ? 'New website' : '新網站';
-}
-
-function mockAnalysis(input: WebsitePromptStartInput): WebsiteBriefConversationAnalysis {
-  const description = input.description.trim();
-  const locale = input.locale;
-  return WebsiteBriefConversationAnalysisSchema.parse({
-    brief: {
-      audience: '',
-      brandDirection:
-        locale === 'en'
-          ? 'Clear, professional, trustworthy, and modern with an accessible visual hierarchy.'
-          : '專業、清楚、可信任且現代，並維持容易閱讀的視覺層級。',
-      callsToAction: [locale === 'en' ? 'Contact us' : '聯絡我們'],
-      content: description,
-      pages: [
-        {
-          goal:
-            locale === 'en'
-              ? 'Explain the main value and guide visitors to the primary action.'
-              : '說明主要價值，並引導訪客採取最重要的行動。',
-          slug: 'home',
-          title: locale === 'en' ? 'Home' : '首頁',
-        },
-      ],
-      purpose: description,
-    },
-    name: safeName(description, locale),
-    questions: [
-      {
-        body: locale === 'en' ? questionCopy.audience.en : questionCopy.audience.zhHant,
-        step: 'audience',
-      },
-    ],
-  });
-}
 
 function systemPrompt(locale: 'en' | 'zh-Hant'): string {
   return `You are the website discovery assistant for AI Workflow Studio.
@@ -236,28 +195,43 @@ async function analyzePrompt(
       operation: 'website_generation',
       provider: route.provider,
     });
-    const result = await createServerStructuredOutputGateway(
-      route.provider,
-      createUsageSink(context, correlationId, reservation),
-      {
+    try {
+      const result = await createServerStructuredOutputGateway(
+        route.provider,
+        createUsageSink(context, correlationId, reservation),
+        {
+          model: route.model,
+          ...(route.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: route.reasoningEffort }),
+        },
+      ).generate(
+        {
+          jsonSchema: WEBSITE_BRIEF_ANALYSIS_PROVIDER_JSON_SCHEMA,
+          maxOutputTokens: 2_500,
+          maxRepairAttempts: 1,
+          ...(route.provider === 'mock'
+            ? { mockOutput: createSafeWebsitePromptAnalysis(input) }
+            : {}),
+          operation: 'website_generation',
+          outputSchema: WebsiteBriefConversationAnalysisSchema,
+          schemaName: 'website_brief_analysis_v1',
+          systemPrompt: systemPrompt(input.locale),
+          userPrompt: prompt,
+        },
+        signal,
+      );
+      return normalizeAnalysis(result.output, input.locale);
+    } catch (error) {
+      if (!isSafeWebsiteProviderFallback(error)) throw error;
+      console.error('Website brief AI used the safe bounded fallback.', {
+        code: error.code,
+        details: error.details,
         model: route.model,
-        ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
-      },
-    ).generate(
-      {
-        jsonSchema: WEBSITE_BRIEF_ANALYSIS_PROVIDER_JSON_SCHEMA,
-        maxOutputTokens: 2_500,
-        maxRepairAttempts: 1,
-        ...(route.provider === 'mock' ? { mockOutput: mockAnalysis(input) } : {}),
-        operation: 'website_generation',
-        outputSchema: WebsiteBriefConversationAnalysisSchema,
-        schemaName: 'website_brief_analysis_v1',
-        systemPrompt: systemPrompt(input.locale),
-        userPrompt: prompt,
-      },
-      signal,
-    );
-    return normalizeAnalysis(result.output, input.locale);
+        provider: route.provider,
+      });
+      return normalizeAnalysis(createSafeWebsitePromptAnalysis(input), input.locale);
+    }
   } finally {
     try {
       await reservation?.release();

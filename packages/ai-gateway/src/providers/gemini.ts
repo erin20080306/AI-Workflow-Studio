@@ -153,16 +153,25 @@ export class GeminiAdapter implements AiProviderAdapter, AiChatAdapter {
   }
 
   async complete(request: ProviderCompletionRequest): Promise<ProviderCompletion> {
+    const usePromptedPortableSchema = request.schemaName.startsWith('website_blueprint_');
     const generationConfig = {
       maxOutputTokens: request.maxOutputTokens,
       responseMimeType: 'application/json',
-      ...(request.operation === 'website_generation' ? { responseSchema: request.jsonSchema } : {}),
+      ...(request.operation === 'website_generation' && !usePromptedPortableSchema
+        ? { responseJsonSchema: request.jsonSchema }
+        : {}),
     };
+    const userPrompt = usePromptedPortableSchema
+      ? `${request.userPrompt}
+
+Return one JSON object matching this compact schema. Every required field must be present and valid; unknown properties are ignored by the safe server compiler:
+${JSON.stringify(request.jsonSchema)}`
+      : request.userPrompt;
     const raw = await postJson({
       body: {
         contents: [
           {
-            parts: [{ text: request.userPrompt }],
+            parts: [{ text: userPrompt }],
             role: 'user',
           },
         ],

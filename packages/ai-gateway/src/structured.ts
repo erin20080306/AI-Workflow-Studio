@@ -63,20 +63,25 @@ function validationPaths(error: z.ZodError): readonly string[] {
 function parseStrictOutput<T>(
   text: string,
   outputSchema: z.ZodType<T>,
-): { readonly output?: T; readonly paths: readonly string[]; readonly success: boolean } {
+): {
+  readonly output?: T;
+  readonly paths: readonly string[];
+  readonly reason: 'fenced_or_too_large' | 'invalid_json' | 'schema';
+  readonly success: boolean;
+} {
   if (new TextEncoder().encode(text).byteLength > 1_000_000 || text.trimStart().startsWith('```')) {
-    return { paths: ['$'], success: false };
+    return { paths: ['$'], reason: 'fenced_or_too_large', success: false };
   }
   let value: unknown;
   try {
     value = JSON.parse(text) as unknown;
   } catch {
-    return { paths: ['$'], success: false };
+    return { paths: ['$'], reason: 'invalid_json', success: false };
   }
   const parsed = outputSchema.safeParse(value);
   return parsed.success
-    ? { output: parsed.data, paths: [], success: true }
-    : { paths: validationPaths(parsed.error), success: false };
+    ? { output: parsed.data, paths: [], reason: 'schema', success: true }
+    : { paths: validationPaths(parsed.error), reason: 'schema', success: false };
 }
 
 function repairPrompt(originalPrompt: string, paths: readonly string[]): string {
@@ -118,6 +123,7 @@ export class StructuredOutputGateway {
       totalTokens: 0,
     };
     let priorPaths: readonly string[] = [];
+    let priorReason: 'fenced_or_too_large' | 'invalid_json' | 'schema' = 'schema';
     const maxAttempts = request.data.maxRepairAttempts + 1;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -156,6 +162,7 @@ export class StructuredOutputGateway {
       aggregateUsage = addUsage(aggregateUsage, completion.usage);
       const validation = parseStrictOutput(completion.text, input.outputSchema);
       priorPaths = validation.paths;
+      priorReason = validation.reason;
       await this.record({
         attempt,
         durationMs: Math.max(0, Date.now() - startedAt),
@@ -185,6 +192,8 @@ export class StructuredOutputGateway {
       {
         details: {
           attempts: maxAttempts,
+          paths: priorPaths,
+          validationReason: priorReason,
           validationCodes: ['WEBSITE_SPEC_SCHEMA_INVALID'],
         },
       },

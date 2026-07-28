@@ -24,6 +24,9 @@ import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selectio
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
 
 const ProjectResponseSchema = z.object({ project: WebsiteProjectSchema });
+const ErrorResponseSchema = z.object({
+  error: z.object({ message: z.string().min(1).max(500) }),
+});
 
 const copy = {
   en: {
@@ -119,11 +122,14 @@ export function WebsiteStudioHome({
         method: 'POST',
       });
       const payload: unknown = await response.json();
-      if (!response.ok) throw new Error('create failed');
+      if (!response.ok) {
+        const failure = ErrorResponseSchema.safeParse(payload);
+        throw new Error(failure.success ? failure.data.error.message : text.createFailed);
+      }
       const project = ProjectResponseSchema.parse(payload).project;
       router.push(`/dashboard/sites/${project.id}`);
-    } catch {
-      setMessage(text.createFailed);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : text.createFailed);
       setCreating(false);
     }
   }
@@ -144,11 +150,14 @@ export function WebsiteStudioHome({
         method: 'POST',
       });
       const payload: unknown = await response.json();
-      if (!response.ok) throw new Error('quick start failed');
+      if (!response.ok) {
+        const failure = ErrorResponseSchema.safeParse(payload);
+        throw new Error(failure.success ? failure.data.error.message : text.createFailed);
+      }
       const project = ProjectResponseSchema.parse(payload).project;
       router.push(`/dashboard/sites/${project.id}`);
-    } catch {
-      setMessage(text.createFailed);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : text.createFailed);
       setCreating(false);
     }
   }

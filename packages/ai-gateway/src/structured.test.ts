@@ -82,6 +82,8 @@ describe('StructuredOutputGateway', () => {
       code: 'AI_OUTPUT_INVALID',
       details: {
         attempts: 1,
+        paths: ['$'],
+        validationReason: 'fenced_or_too_large',
         validationCodes: ['WEBSITE_SPEC_SCHEMA_INVALID'],
       },
     });

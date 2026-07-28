@@ -19,12 +19,36 @@ const ProviderErrorEnvelopeSchema = z
     error: z
       .object({
         code: z.union([z.number(), z.string()]).nullish(),
+        message: z.string().max(20_000).nullish(),
         param: z.string().nullish(),
         type: z.string().nullish(),
       })
       .passthrough(),
   })
   .passthrough();
+
+function classifyProviderMessage(message: string): string | undefined {
+  if (/schema.{0,80}(?:too complex|complexity|exceeds|too large)/iu.test(message)) {
+    return 'schema_too_complex';
+  }
+  if (
+    /(?:responseJsonSchema|response_json_schema|responseSchema).{0,120}(?:unknown|unsupported|not supported)/iu.test(
+      message,
+    )
+  ) {
+    return 'structured_output_unsupported';
+  }
+  if (/max(?:imum)?OutputTokens|max_output_tokens/iu.test(message)) {
+    return 'max_output_tokens_invalid';
+  }
+  if (/Invalid JSON payload|invalid.{0,40}(?:schema|argument)/iu.test(message)) {
+    return 'structured_request_invalid';
+  }
+  if (/model.{0,80}(?:not found|unsupported|not supported)/iu.test(message)) {
+    return 'model_unsupported';
+  }
+  return undefined;
+}
 
 async function providerErrorDetails(
   response: Response,
@@ -56,6 +80,10 @@ async function providerErrorDetails(
     }
     if (providerError.type !== null && providerError.type !== undefined) {
       details.providerType = providerError.type;
+    }
+    if (providerError.message !== null && providerError.message !== undefined) {
+      const providerReason = classifyProviderMessage(providerError.message);
+      if (providerReason !== undefined) details.providerReason = providerReason;
     }
   } catch {
     return details;
