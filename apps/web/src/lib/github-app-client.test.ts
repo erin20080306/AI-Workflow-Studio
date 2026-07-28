@@ -1,3 +1,5 @@
+import { generateKeyPairSync } from 'node:crypto';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -10,13 +12,14 @@ import {
 } from './github-app-client';
 
 function stubGithubConfiguration(): void {
-  const privateKey = Buffer.from(
-    '-----BEGIN PRIVATE KEY-----\n' + 'A'.repeat(300) + '\n-----END PRIVATE KEY-----',
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const encodedPrivateKey = Buffer.from(
+    privateKey.export({ format: 'pem', type: 'pkcs8' }),
   ).toString('base64');
   vi.stubEnv('GITHUB_APP_CLIENT_ID', 'Iv1.example-client');
   vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'github-client-secret-long-enough');
   vi.stubEnv('GITHUB_APP_ID', '123456');
-  vi.stubEnv('GITHUB_APP_PRIVATE_KEY_BASE64', privateKey);
+  vi.stubEnv('GITHUB_APP_PRIVATE_KEY_BASE64', encodedPrivateKey);
   vi.stubEnv('GITHUB_APP_SLUG', 'ai-workflow-studio-publisher');
 }
 
@@ -98,6 +101,40 @@ describe('getGithubAppConfiguration', () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           authorization: 'Bearer github-user-token-long-enough',
+        }),
+        method: 'GET',
+      }),
+    );
+  });
+
+  it('confirms a newly installed personal account with the App identity fallback', async () => {
+    stubGithubConfiguration();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ installations: [] }))
+      .mockResolvedValueOnce(Response.json({ login: 'workflow-owner', type: 'User' }))
+      .mockResolvedValueOnce(
+        Response.json({
+          account: { login: 'workflow-owner', type: 'User' },
+          id: 987_654,
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      validateGithubInstallationForUser('github-user-token-long-enough', '987654'),
+    ).resolves.toEqual({
+      login: 'workflow-owner',
+      type: 'User',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'https://api.github.com/app/installations/987654',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: expect.stringMatching(/^Bearer [^.]+\.[^.]+\.[^.]+$/),
         }),
         method: 'GET',
       }),

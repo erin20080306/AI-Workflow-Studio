@@ -37,6 +37,13 @@ const UserInstallationsSchema = z
   })
   .passthrough();
 
+const GithubUserSchema = z
+  .object({
+    login: z.string().min(1).max(100),
+    type: z.literal('User'),
+  })
+  .passthrough();
+
 const InstallationTokenSchema = z
   .object({
     token: z.string().min(20),
@@ -317,6 +324,25 @@ export async function validateGithubInstallationForUser(
       return WebsiteGithubAccountSchema.parse(installation.account);
     }
     if (rows.length < 100) break;
+  }
+  const configuration = getGithubAppConfiguration();
+  const [userResponse, installationResponse] = await Promise.all([
+    githubRequest('https://api.github.com/user', {
+      headers: { authorization: `Bearer ${accessToken}` },
+      method: 'GET',
+    }),
+    githubRequest(`https://api.github.com/app/installations/${installationId}`, {
+      headers: { authorization: `Bearer ${appJwt(configuration)}` },
+      method: 'GET',
+    }),
+  ]);
+  const user = GithubUserSchema.parse(await userResponse.json());
+  const installation = InstallationSchema.parse(await installationResponse.json());
+  if (
+    installation.account.type === 'User' &&
+    installation.account.login.toLowerCase() === user.login.toLowerCase()
+  ) {
+    return WebsiteGithubAccountSchema.parse(installation.account);
   }
   throw new GithubAppError(
     'GITHUB_INSTALLATION_FORBIDDEN',
