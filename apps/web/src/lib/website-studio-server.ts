@@ -403,7 +403,7 @@ export async function createWebsiteDraft(
     metadata: {
       briefVersion: 1,
       completedSteps: 6,
-      publishEnabled: false,
+      publishRequiresConfirmation: true,
     },
     projectId: existing.id,
   });

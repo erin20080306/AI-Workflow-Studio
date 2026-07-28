@@ -1,12 +1,13 @@
 # Website Studio
 
-## Phase 24 boundary
+## Product boundary
 
 Website Studio is a separate authenticated workspace for planning a website
-before publishing is allowed. Phase 24 creates Tenant-isolated Website Projects,
-validates the brief, and lets Auto, OpenAI, Claude, Gemini, or development Mock
-produce a versioned Website Spec. It does not execute, preview, deploy, or
-publish website code.
+and publishing an explicitly approved Canvas version. Phase 30 makes a
+natural-language request the primary entry point, asks only for missing
+decisions, produces a validated versioned Website Spec, and serves the exact
+confirmed version from a stable platform URL. It never executes model-generated
+website code.
 
 The six required decisions are:
 
@@ -17,15 +18,19 @@ The six required decisions are:
 5. Content
 6. Calls to action
 
-Every decision is saved through an authenticated server route. A project cannot
-become a `draft` until the complete brief passes the shared Zod schema.
+Every decision is saved through an authenticated server route. The conversational
+entry and optional advanced editor share the same schema. A project cannot
+become a `draft` or create a Canvas version until the complete brief passes the
+shared Zod schema.
 
 ## Data model and authorization
 
 `website_projects` stores the project name, tenant slug, status, bounded brief
-JSON, completion count, and timestamps. `website_specs` stores immutable
+JSON, completion count, and timestamps. `website_brief_messages` stores bounded
+prompt/question/answer/ready messages. `website_specs` stores immutable
 versioned specifications, provider/model audit metadata, validation attempts,
-and timestamps. Both tables have RLS enabled.
+and timestamps. `website_publications` freezes the approved spec version and
+keeps superseded release history. All tables have RLS enabled.
 Authenticated members may read only their Tenant rows. Browser roles receive no
 insert, update, or delete privilege; mutations use the existing server-only
 Supabase administrator client after deriving the actor and Tenant from the
@@ -36,9 +41,9 @@ Tenant identifier. Cross-Tenant project identifiers are returned as not found.
 
 Audit events record only the project identifier, action, completed-step count,
 names of changed fields, provider, model, schema version, specification version,
-and validation-attempt count. They do not copy the brief, generated content,
-credentials, prompts, provider response bodies, or unpublished customer
-material.
+conversation message kind/step, publication slug, and validation-attempt count.
+They do not copy the brief, generated content, credentials, prompts, answers,
+provider response bodies, or unpublished customer material.
 
 ## Validation and limits
 
@@ -61,15 +66,36 @@ The database additionally constrains status/progress/timestamp combinations. A
 stored `draft` must have all six steps, a completion timestamp, and a draft
 timestamp.
 
-## Draft lifecycle
+## Prompt, Canvas, and draft lifecycle
 
-`briefing` projects may be updated step by step. Creating a draft is idempotent
-and requires all six validated decisions. Phase 23 then locks the draft to avoid
-silent unversioned changes.
+The first prompt passes through structured AI output validation. It may fill only
+known brief fields and return bounded follow-up questions. Each answer updates
+one named missing step; the server calculates the next question from the
+validated brief rather than trusting a model-supplied workflow.
 
-Phase 24 creates specification version 1 idempotently. Phase 26 introduces
-reversible versioned editing. Until then, a changed brief should be created as a
-new Website Project.
+`briefing` projects may also be updated with the advanced six-step editor.
+Creating a draft is idempotent and requires all six validated decisions. The
+first Canvas build locks the brief and creates specification version 1.
+Conversational and direct changes create new immutable versions; comparison,
+restore, Undo, and Redo never rewrite an existing version.
+
+## Publication boundary
+
+- Publishing requires an authenticated non-viewer and an explicit `confirmed:
+true` request for one exact existing version.
+- A model response cannot call or satisfy the confirmation endpoint.
+- The database RPC locks the project, verifies Tenant membership and the exact
+  spec version, supersedes the old active release, inserts an immutable release,
+  and writes a content-free audit record.
+- Only one active release and one active public slug may exist per project.
+  Superseded rows remain available for audit and future rollback work.
+- `/s/{siteSlug}` renders the stored Website Spec on the server. It does not
+  compile or execute customer HTML, CSS, JavaScript, Python, or shell content.
+- Public asset requests resolve an ID already referenced by the approved spec
+  and proxy project-owned private storage. They do not accept storage paths from
+  the URL.
+- Restrictive CSP, frame, content-type, and referrer headers are attached to
+  public HTML and asset responses.
 
 ## Model and credential boundary
 
@@ -83,13 +109,13 @@ new Website Project.
 - Usage is conservatively reserved before provider access and recorded against
   the Tenant's `website_generation` budget.
 
-## Future gated phases
+## Follow-on hosting work
 
-- Phase 26: isolated desktop, tablet, and mobile preview canvas.
-- Phase 27: validated direct and natural-language edits, undo/redo, versions,
-  comparison, and restoration.
-- Phase 30: explicit publish approval, quality gates, deployment, domains,
-  history, and rollback.
+- Customer custom-domain verification and routing.
+- Per-site independent deployment projects where commercially required.
+- Generated sitemap/robots indexes for multi-page sites.
+- Publication-history and rollback controls in the member UI.
+- Expanded accessibility, broken-link, and SEO quality reports before approval.
 
 No model output may release executable JavaScript, Python, shell commands, build
 scripts, HTML/CSS source, or unbounded URLs.

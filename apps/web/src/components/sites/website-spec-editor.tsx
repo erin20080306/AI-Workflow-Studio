@@ -2,6 +2,7 @@
 
 import {
   WebsiteGeneratedAssetSchema,
+  type WebsitePublication,
   WebsiteSpecClientGenerationSchema,
   WebsiteThemeSchema,
   compareWebsiteSpecs,
@@ -18,6 +19,7 @@ import { CheckIcon, SaveIcon, SparkIcon } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
 import { WebsiteModelDropdowns } from '@/components/sites/website-model-dropdowns';
 import { WebsitePreviewCanvas } from '@/components/sites/website-preview-canvas';
+import { WebsitePublishPanel } from '@/components/sites/website-publish-panel';
 import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
 import { websiteImageModelLabel } from '@/lib/website-image-models';
@@ -189,12 +191,14 @@ function sectionFieldValue(section: WebsiteSection | undefined, field: EditableF
 
 export function WebsiteSpecEditor({
   initialGeneration,
+  initialPublication,
   initialVersions,
   modelOptions,
   projectId,
   tierOptions,
 }: Readonly<{
   initialGeneration: WebsiteSpecClientGeneration;
+  initialPublication: WebsitePublication | undefined;
   initialVersions: readonly WebsiteSpecClientGeneration[];
   modelOptions: readonly WebsiteGenerationModelOption[];
   projectId: string;
@@ -797,6 +801,11 @@ export function WebsiteSpecEditor({
       ) : null}
 
       <WebsitePreviewCanvas generation={generation} projectId={projectId} />
+      <WebsitePublishPanel
+        generation={generation}
+        initialPublication={initialPublication}
+        projectId={projectId}
+      />
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_1.2fr]">
         <article className="rounded-2xl border border-slate-200 p-4 sm:p-5">

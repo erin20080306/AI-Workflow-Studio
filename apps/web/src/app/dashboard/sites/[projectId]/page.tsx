@@ -8,6 +8,8 @@ import { buildAiTierOptions } from '@/lib/ai-model-selection';
 import { requireWorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { buildWebsiteGenerationModelOptions } from '@/lib/website-generation-models';
+import { listWebsiteBriefMessages } from '@/lib/website-prompt-server';
+import { getActiveWebsitePublication } from '@/lib/website-publication-server';
 import {
   getWebsiteSpecGeneration,
   listWebsiteSpecGenerations,
@@ -31,14 +33,18 @@ export default async function WebsiteBriefPage({
   const context = await requireWorkspaceContext();
   try {
     const project = await getWebsiteProject(context, parsed.data.projectId);
-    const [generation, versions, mappings] = await Promise.all([
+    const [generation, versions, mappings, messages, publication] = await Promise.all([
       getWebsiteSpecGeneration(context, project.id),
       listWebsiteSpecGenerations(context, project.id),
       listAiModelMappings(),
+      listWebsiteBriefMessages(context, project.id),
+      getActiveWebsitePublication(context, project.id),
     ]);
     return (
       <WebsiteBriefWorkspace
         initialGeneration={generation === undefined ? undefined : websiteSpecClientView(generation)}
+        initialMessages={messages}
+        initialPublication={publication}
         initialProject={project}
         initialVersions={versions.map(websiteSpecClientView)}
         modelOptions={buildWebsiteGenerationModelOptions(getEnvironment())}

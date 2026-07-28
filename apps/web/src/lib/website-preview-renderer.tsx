@@ -63,13 +63,38 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-function actionMarkup(action: WebsiteAction, secondary = false): string {
-  return `<span class="action${secondary ? ' secondary' : ''}" role="button">${escapeHtml(action.label)}</span>`;
+interface PublishedRenderOptions {
+  readonly siteSlug: string;
+}
+
+function actionHref(action: WebsiteAction, published: PublishedRenderOptions): string {
+  switch (action.target.kind) {
+    case 'contact':
+      return '#contact';
+    case 'page':
+      return `/s/${published.siteSlug}/${action.target.pageSlug}`;
+    case 'section':
+      return `#${action.target.sectionId}`;
+  }
+}
+
+function actionMarkup(
+  action: WebsiteAction,
+  secondary = false,
+  published?: PublishedRenderOptions,
+): string {
+  const className = `action${secondary ? ' secondary' : ''}`;
+  return published === undefined
+    ? `<span class="${className}" role="button">${escapeHtml(action.label)}</span>`
+    : `<a class="${className}" href="${escapeHtml(actionHref(action, published))}">${escapeHtml(
+        action.label,
+      )}</a>`;
 }
 
 function safeAssetUrl(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   if (value.startsWith('data:image/png;base64,')) return value;
+  if (/^\/api\/public-sites\/[a-z0-9-]+\/assets\/[a-z][a-z0-9-]*$/u.test(value)) return value;
   try {
     const parsed = new URL(value);
     return parsed.protocol === 'https:' && parsed.hostname.endsWith('.supabase.co')
@@ -100,6 +125,7 @@ function sectionMarkup(
   section: WebsiteSection,
   spec: WebsiteSpec,
   assetUrls: ReadonlyMap<string, string>,
+  published?: PublishedRenderOptions,
 ): string {
   const id = escapeHtml(section.id);
   switch (section.type) {
@@ -112,8 +138,10 @@ function sectionMarkup(
           : `<div class="eyebrow">${escapeHtml(section.eyebrow)}</div>`
       }<h1 class="section-title">${escapeHtml(section.title)}</h1><p class="section-body">${escapeHtml(
         section.body,
-      )}</p><div class="actions">${actionMarkup(section.primaryAction)}${
-        section.secondaryAction === undefined ? '' : actionMarkup(section.secondaryAction, true)
+      )}</p><div class="actions">${actionMarkup(section.primaryAction, false, published)}${
+        section.secondaryAction === undefined
+          ? ''
+          : actionMarkup(section.secondaryAction, true, published)
       }</div></div>${
         section.layout === 'split' ? assetMarkup(section.assetId, spec, assetUrls) : ''
       }</div></section>`;
@@ -161,7 +189,11 @@ function sectionMarkup(
               plan.description,
             )}</p><ul class="features">${plan.features
               .map((feature) => `<li>${escapeHtml(feature)}</li>`)
-              .join('')}</ul><div class="actions">${actionMarkup(plan.action)}</div></article>`,
+              .join('')}</ul><div class="actions">${actionMarkup(
+              plan.action,
+              false,
+              published,
+            )}</div></article>`,
         )
         .join('')}</div></div></section>`;
     case 'faq':
@@ -180,8 +212,10 @@ function sectionMarkup(
         section.title,
       )}</h2><p class="section-body">${escapeHtml(
         section.body,
-      )}</p><div class="actions">${actionMarkup(section.action)}${
-        section.secondaryAction === undefined ? '' : actionMarkup(section.secondaryAction, true)
+      )}</p><div class="actions">${actionMarkup(section.action, false, published)}${
+        section.secondaryAction === undefined
+          ? ''
+          : actionMarkup(section.secondaryAction, true, published)
       }</div></div></section>`;
     case 'content':
       return `<section class="section" id="${id}"><div class="section-inner content-grid ${
@@ -195,15 +229,22 @@ function sectionMarkup(
       return `<footer class="site-footer" id="${id}"><div class="footer-inner"><div class="copyright">${escapeHtml(
         section.copyright,
       )}</div><div class="footer-links">${section.links
-        .map((link) => `<span class="footer-link">${escapeHtml(link.label)}</span>`)
+        .map((link) =>
+          published === undefined
+            ? `<span class="footer-link">${escapeHtml(link.label)}</span>`
+            : `<a class="footer-link" href="${escapeHtml(
+                actionHref(link, published),
+              )}">${escapeHtml(link.label)}</a>`,
+        )
         .join('')}</div></div></footer>`;
   }
 }
 
-export function renderWebsitePreviewDocument(
+function renderWebsiteDocument(
   specValue: WebsiteSpec,
   pageSlug: string,
-  assetUrls: ReadonlyMap<string, string> = new Map(),
+  assetUrls: ReadonlyMap<string, string>,
+  published?: PublishedRenderOptions,
 ): string {
   const spec = WebsiteSpecSchema.parse(specValue);
   const page = spec.pages.find((item) => item.slug === pageSlug);
@@ -222,13 +263,46 @@ export function renderWebsitePreviewDocument(
     spec.locale,
   )}"><head><meta charset="utf-8"><meta content="${escapeHtml(
     page.metaDescription,
-  )}" name="description"><meta content="noindex,nofollow,noarchive" name="robots"><meta content="width=device-width,initial-scale=1" name="viewport"><title>${escapeHtml(
+  )}" name="description"><meta content="${
+    published === undefined ? 'noindex,nofollow,noarchive' : 'index,follow'
+  }" name="robots"><meta content="width=device-width,initial-scale=1" name="viewport"><title>${escapeHtml(
     page.title,
   )} · ${escapeHtml(spec.name)}</title><style>${PREVIEW_STYLES}</style></head><body><div class="shell"><header class="site-header"><div class="brand">${escapeHtml(
     spec.navigation.brandLabel,
   )}</div><nav aria-label="Website preview navigation" class="nav">${spec.navigation.items
-    .map((item) => `<span class="nav-item">${escapeHtml(item.label)}</span>`)
+    .map((item) =>
+      published === undefined
+        ? `<span class="nav-item">${escapeHtml(item.label)}</span>`
+        : `<a class="nav-item" href="/s/${escapeHtml(published.siteSlug)}/${escapeHtml(
+            item.pageSlug,
+          )}">${escapeHtml(item.label)}</a>`,
+    )
     .join('')}</nav></header><main>${page.sections
-    .map((section) => sectionMarkup(section, spec, assetUrls))
+    .map((section) => sectionMarkup(section, spec, assetUrls, published))
     .join('')}</main></div></body></html>`;
+}
+
+export function renderWebsitePreviewDocument(
+  specValue: WebsiteSpec,
+  pageSlug: string,
+  assetUrls: ReadonlyMap<string, string> = new Map(),
+): string {
+  return renderWebsiteDocument(specValue, pageSlug, assetUrls);
+}
+
+export function renderWebsitePublishedDocument(
+  specValue: WebsiteSpec,
+  pageSlug: string,
+  siteSlug: string,
+  assetUrls: ReadonlyMap<string, string> = new Map(),
+): string {
+  const published = zSiteSlug(siteSlug);
+  return renderWebsiteDocument(specValue, pageSlug, assetUrls, { siteSlug: published });
+}
+
+function zSiteSlug(value: string): string {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(value) || value.length > 96) {
+    throw new Error('Published website slug is invalid.');
+  }
+  return value;
 }

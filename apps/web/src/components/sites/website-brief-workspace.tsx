@@ -2,13 +2,18 @@
 
 import {
   WEBSITE_BRIEF_STEPS,
+  WebsiteBriefMessageSchema,
   WebsiteProjectSchema,
+  WebsiteSpecClientGenerationSchema,
   websiteBriefProgress,
+  type WebsiteBriefMessage,
   type WebsiteBriefDraft,
   type WebsiteBriefPatch,
   type WebsiteBriefStep,
   type WebsitePage,
+  type WebsitePublication,
   type WebsiteProject,
+  type WebsiteGenerationSelection,
   type WebsiteSpecClientGeneration,
 } from '@ai-workflow-studio/website-schema';
 import Link from 'next/link';
@@ -26,13 +31,30 @@ import {
 } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
 import { WebsiteSpecGenerator } from '@/components/sites/website-spec-generator';
-import type { AiTierOption } from '@/lib/ai-model-selection';
+import { WebsiteModelDropdowns } from '@/components/sites/website-model-dropdowns';
+import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
 
 const ProjectResponseSchema = z.object({ project: WebsiteProjectSchema });
+const ConversationResponseSchema = z
+  .object({
+    messages: z.array(WebsiteBriefMessageSchema),
+    project: WebsiteProjectSchema,
+  })
+  .strict();
+const QuickBuildResponseSchema = z
+  .object({
+    generation: WebsiteSpecClientGenerationSchema,
+    project: WebsiteProjectSchema,
+  })
+  .strict();
 
 const copy = {
   en: {
+    advanced: 'Advanced six-step brief',
+    answer: 'Send answer',
+    answerPlaceholder: 'Type the missing detail here…',
+    answering: 'Saving answer…',
     addPage: 'Add page',
     assistant: 'Guided website brief',
     back: 'All website projects',
@@ -41,7 +63,12 @@ const copy = {
     complete: 'All required decisions are complete.',
     createDraft: 'Create validated site draft',
     createFailed: 'The validated draft could not be created.',
-    created: 'Validated website draft created. Publishing remains locked.',
+    created: 'Validated website draft created.',
+    buildCanvas: 'Create Canvas preview',
+    buildingCanvas: 'Creating the validated Canvas…',
+    conversation: 'AI discovery conversation',
+    conversationHelp:
+      'AI extracted the request and asks only for missing decisions. You can inspect or override every field in the advanced brief.',
     draft: 'Draft locked',
     draftHelp:
       'This phase creates a structured project draft only. It cannot publish, run code, or access credentials.',
@@ -52,9 +79,9 @@ const copy = {
     next: 'Save and continue',
     pageSlug: 'URL slug',
     pageTitle: 'Page title',
-    phase: 'Website Studio · Phase 24',
+    phase: 'Website Studio · Phase 30',
     progress: 'Brief progress',
-    publish: 'Publishing unavailable until Phase 30',
+    publish: 'Publishing appears after a Canvas version exists.',
     remove: 'Remove',
     save: 'Save step',
     saveFailed: 'This step is incomplete or could not be saved.',
@@ -93,6 +120,10 @@ const copy = {
     },
   },
   'zh-Hant': {
+    advanced: '進階六步驟需求設定',
+    answer: '送出回答',
+    answerPlaceholder: '在這裡補充 AI 詢問的資訊…',
+    answering: '正在儲存回答…',
     addPage: '新增頁面',
     assistant: '網站需求引導',
     back: '返回網站專案',
@@ -101,7 +132,12 @@ const copy = {
     complete: '六項必要決策已完整。',
     createDraft: '建立已驗證網站草稿',
     createFailed: '無法建立網站草稿，請確認所有需求皆已完成。',
-    created: '已建立通過驗證的網站草稿；發布功能仍維持鎖定。',
+    created: '已建立通過驗證的網站草稿。',
+    buildCanvas: '建立 Canvas 預覽',
+    buildingCanvas: '正在建立已驗證 Canvas…',
+    conversation: 'AI 需求追問',
+    conversationHelp:
+      'AI 已整理你的一句話需求，只追問缺少的決策；所有欄位仍可在進階設定檢查與修改。',
     draft: '草稿已鎖定',
     draftHelp: '本階段只建立結構化專案草稿，不會發布網站、執行程式碼或讀取憑證。',
     goal: '頁面任務',
@@ -110,9 +146,9 @@ const copy = {
     next: '儲存並繼續',
     pageSlug: '網址代稱',
     pageTitle: '頁面名稱',
-    phase: '網站工作室 · Phase 24',
+    phase: '網站工作室 · Phase 30',
     progress: '需求完成度',
-    publish: '發布功能將於 Phase 30 開放',
+    publish: '建立 Canvas 版本後即可確認發布。',
     remove: '移除',
     save: '儲存此步驟',
     saveFailed: '這個步驟尚未完整，或目前無法儲存。',
@@ -163,12 +199,16 @@ function updatePageField(
 
 export function WebsiteBriefWorkspace({
   initialGeneration,
+  initialMessages,
+  initialPublication,
   initialProject,
   initialVersions,
   modelOptions,
   tierOptions,
 }: Readonly<{
   initialGeneration: WebsiteSpecClientGeneration | undefined;
+  initialMessages: readonly WebsiteBriefMessage[];
+  initialPublication: WebsitePublication | undefined;
   initialProject: WebsiteProject;
   initialVersions: readonly WebsiteSpecClientGeneration[];
   modelOptions: readonly WebsiteGenerationModelOption[];
@@ -178,15 +218,24 @@ export function WebsiteBriefWorkspace({
   const text = copy[locale];
   const initialMissing = websiteBriefProgress(initialProject.brief).missingSteps[0];
   const [project, setProject] = useState(initialProject);
+  const [generation, setGeneration] = useState(initialGeneration);
+  const [messages, setMessages] = useState<readonly WebsiteBriefMessage[]>(initialMessages);
   const [brief, setBrief] = useState<WebsiteBriefDraft>(initialProject.brief);
   const [callsText, setCallsText] = useState(initialProject.brief.callsToAction.join('\n'));
   const [activeStep, setActiveStep] = useState<WebsiteBriefStep>(initialMissing ?? 'purpose');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [answer, setAnswer] = useState('');
+  const [selectedModel, setSelectedModel] = useState<WebsiteGenerationSelection>(
+    modelOptions[0]?.id ?? 'auto',
+  );
+  const [selectedTier, setSelectedTier] = useState<AiModelTierSelection>('auto');
   const progress = websiteBriefProgress(project.brief);
   const stepIndex = WEBSITE_BRIEF_STEPS.indexOf(activeStep);
   const step = text.steps[activeStep];
   const locked = project.status === 'draft';
+  const conversationStarted = messages.length > 0;
+  const latestQuestion = [...messages].reverse().find((item) => item.kind === 'question');
 
   function patchForStep(): WebsiteBriefPatch {
     switch (activeStep) {
@@ -248,6 +297,58 @@ export function WebsiteBriefWorkspace({
       if (!response.ok) throw new Error('draft failed');
       const saved = ProjectResponseSchema.parse(payload).project;
       setProject(saved);
+      setMessage(text.created);
+    } catch {
+      setMessage(text.createFailed);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function answerQuestion(): Promise<void> {
+    if (latestQuestion?.step === undefined || answer.trim().length < 2 || saving) return;
+    setSaving(true);
+    setMessage(undefined);
+    try {
+      const response = await fetch(`/api/websites/${project.id}/brief-chat`, {
+        body: JSON.stringify({
+          answer,
+          locale,
+          step: latestQuestion.step,
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) throw new Error('answer failed');
+      const saved = ConversationResponseSchema.parse(payload);
+      setProject(saved.project);
+      setBrief(saved.project.brief);
+      setCallsText(saved.project.brief.callsToAction.join('\n'));
+      setMessages((current) => [...current, ...saved.messages]);
+      setAnswer('');
+    } catch {
+      setMessage(text.saveFailed);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function buildCanvas(): Promise<void> {
+    if (!progress.complete || saving || generation !== undefined) return;
+    setSaving(true);
+    setMessage(undefined);
+    try {
+      const response = await fetch(`/api/websites/${project.id}/quick-build`, {
+        body: JSON.stringify({ locale, model: selectedModel, tier: selectedTier }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) throw new Error('build failed');
+      const saved = QuickBuildResponseSchema.parse(payload);
+      setProject(saved.project);
+      setGeneration(saved.generation);
       setMessage(text.created);
     } catch {
       setMessage(text.createFailed);
@@ -435,139 +536,245 @@ export function WebsiteBriefWorkspace({
         </span>
       </div>
 
-      <div className="mt-6 grid gap-5 xl:grid-cols-[230px_minmax(0,1fr)_340px]">
-        <nav
-          aria-label={text.progress}
-          className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm"
+      {locked && message !== undefined ? (
+        <p
+          aria-live="polite"
+          className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-900"
         >
-          {WEBSITE_BRIEF_STEPS.map((stepName, index) => {
-            const done = !progress.missingSteps.includes(stepName);
-            const active = stepName === activeStep;
-            return (
-              <button
-                aria-current={active ? 'step' : undefined}
-                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
-                  active ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50'
-                }`}
-                key={stepName}
-                onClick={() => setActiveStep(stepName)}
-                type="button"
-              >
-                <span
-                  className={`grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
-                    done
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : active
-                        ? 'bg-white/15 text-white'
-                        : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {done ? '✓' : index + 1}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-xs font-semibold">
-                  {text.steps[stepName].title}
-                </span>
-                <ChevronRightIcon className="size-3.5 opacity-50" />
-              </button>
-            );
-          })}
-        </nav>
+          {message}
+        </p>
+      ) : null}
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-          <div className="flex items-start gap-3">
-            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-indigo-50 text-indigo-700">
-              <SiteIcon className="size-5" />
-            </span>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-600">
-                0{stepIndex + 1} · {step.title}
-              </p>
-              <h2 className="mt-2 text-xl font-semibold tracking-[-0.02em] text-slate-950">
-                {step.label}
-              </h2>
-              <p className="mt-2 text-xs leading-6 text-slate-500">{step.help}</p>
-            </div>
+      {conversationStarted && !locked ? (
+        <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-950 p-5 text-white sm:p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-300">
+              {text.conversation}
+            </p>
+            <h2 className="mt-2 text-xl font-semibold">{project.name}</h2>
+            <p className="mt-2 max-w-3xl text-xs leading-6 text-slate-300">
+              {text.conversationHelp}
+            </p>
           </div>
-
-          <div className="mt-6">{stepEditor()}</div>
-
-          {!locked ? (
-            <button
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={saving}
-              onClick={() => void saveStep()}
-              type="button"
-            >
-              {stepIndex === WEBSITE_BRIEF_STEPS.length - 1 ? text.save : text.next}
-              <ArrowRightIcon className="size-4" />
-            </button>
-          ) : (
-            <p className="mt-5 rounded-2xl bg-emerald-50 p-4 text-sm font-medium text-emerald-900">
-              {text.locked}
-            </p>
-          )}
-
-          {message !== undefined ? (
-            <p
-              aria-live="polite"
-              className="mt-4 rounded-xl bg-indigo-50 px-3 py-2.5 text-xs font-semibold text-indigo-800"
-            >
-              {message}
-            </p>
-          ) : null}
-        </section>
-
-        <aside className="space-y-4">
-          <section className="rounded-3xl bg-slate-950 p-5 text-white shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-bold uppercase tracking-[0.15em] text-emerald-300">
-                {text.progress}
-              </p>
-              <span className="text-sm font-semibold">{project.completedSteps} / 6</span>
-            </div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+          <div className="space-y-3 p-5 sm:p-6">
+            {messages.map((item) => (
               <div
-                className="h-full rounded-full bg-emerald-400 transition-all"
-                style={{ width: `${(project.completedSteps / 6) * 100}%` }}
-              />
-            </div>
-            <p className="mt-4 text-xs leading-6 text-slate-300">
-              {progress.complete ? text.complete : text.draftHelp}
-            </p>
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-slate-300">
-              <ShieldIcon className="mb-2 size-5 text-emerald-300" />
-              {text.modelLater}
-            </div>
-            {!locked ? (
-              <button
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={!progress.complete || saving}
-                onClick={() => void createDraft()}
-                type="button"
+                className={`max-w-3xl rounded-2xl px-4 py-3 text-sm leading-6 ${
+                  item.role === 'user'
+                    ? 'ml-auto bg-indigo-600 text-white'
+                    : item.kind === 'ready'
+                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-950'
+                      : 'bg-slate-100 text-slate-800'
+                }`}
+                key={item.id}
               >
-                <CheckIcon className="size-4" />
-                {text.createDraft}
-              </button>
+                {item.body}
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-slate-200 bg-slate-50 p-5 sm:p-6">
+            {!progress.complete && latestQuestion?.step !== undefined ? (
+              <>
+                <textarea
+                  aria-label={text.answerPlaceholder}
+                  className="min-h-28 w-full rounded-2xl border border-slate-300 bg-white p-4 text-sm leading-6 outline-none focus:border-indigo-500"
+                  maxLength={6_000}
+                  onChange={(event) => setAnswer(event.target.value)}
+                  placeholder={text.answerPlaceholder}
+                  value={answer}
+                />
+                <button
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-40"
+                  disabled={saving || answer.trim().length < 2}
+                  onClick={() => void answerQuestion()}
+                  type="button"
+                >
+                  {saving ? text.answering : text.answer}
+                  <ArrowRightIcon className="size-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <WebsiteModelDropdowns
+                  disabled={saving}
+                  locale={locale}
+                  modelOptions={modelOptions}
+                  onModelChange={setSelectedModel}
+                  onTierChange={setSelectedTier}
+                  selectedModel={selectedModel}
+                  selectedTier={selectedTier}
+                  tierOptions={tierOptions}
+                />
+                <button
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-40"
+                  disabled={saving || modelOptions.length === 0}
+                  onClick={() => void buildCanvas()}
+                  type="button"
+                >
+                  <SparkIcon className="size-4" />
+                  {saving ? text.buildingCanvas : text.buildCanvas}
+                </button>
+              </>
+            )}
+            {message !== undefined ? (
+              <p
+                aria-live="polite"
+                className="mt-3 rounded-xl bg-indigo-50 px-3 py-2.5 text-xs font-semibold text-indigo-800"
+              >
+                {message}
+              </p>
             ) : null}
-          </section>
+          </div>
+        </section>
+      ) : null}
 
-          <section className="rounded-3xl border border-dashed border-slate-300 bg-white p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Publish</p>
-            <button
-              className="mt-3 w-full cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-400"
-              disabled
-              type="button"
+      {!locked ? (
+        <details className="mt-6" open={!conversationStarted}>
+          <summary className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-semibold text-slate-700 shadow-sm">
+            {text.advanced}
+          </summary>
+          <div className="mt-5 grid gap-5 xl:grid-cols-[230px_minmax(0,1fr)_340px]">
+            <nav
+              aria-label={text.progress}
+              className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm"
             >
-              {text.publish}
-            </button>
-          </section>
-        </aside>
-      </div>
+              {WEBSITE_BRIEF_STEPS.map((stepName, index) => {
+                const done = !progress.missingSteps.includes(stepName);
+                const active = stepName === activeStep;
+                return (
+                  <button
+                    aria-current={active ? 'step' : undefined}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
+                      active ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                    key={stepName}
+                    onClick={() => setActiveStep(stepName)}
+                    type="button"
+                  >
+                    <span
+                      className={`grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-bold ${
+                        done
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : active
+                            ? 'bg-white/15 text-white'
+                            : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {done ? '✓' : index + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold">
+                      {text.steps[stepName].title}
+                    </span>
+                    <ChevronRightIcon className="size-3.5 opacity-50" />
+                  </button>
+                );
+              })}
+            </nav>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+              <div className="flex items-start gap-3">
+                <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-indigo-50 text-indigo-700">
+                  <SiteIcon className="size-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-600">
+                    0{stepIndex + 1} · {step.title}
+                  </p>
+                  <h2 className="mt-2 text-xl font-semibold tracking-[-0.02em] text-slate-950">
+                    {step.label}
+                  </h2>
+                  <p className="mt-2 text-xs leading-6 text-slate-500">{step.help}</p>
+                </div>
+              </div>
+
+              <div className="mt-6">{stepEditor()}</div>
+
+              {!locked ? (
+                <button
+                  className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={saving}
+                  onClick={() => void saveStep()}
+                  type="button"
+                >
+                  {stepIndex === WEBSITE_BRIEF_STEPS.length - 1 ? text.save : text.next}
+                  <ArrowRightIcon className="size-4" />
+                </button>
+              ) : (
+                <p className="mt-5 rounded-2xl bg-emerald-50 p-4 text-sm font-medium text-emerald-900">
+                  {text.locked}
+                </p>
+              )}
+
+              {message !== undefined ? (
+                <p
+                  aria-live="polite"
+                  className="mt-4 rounded-xl bg-indigo-50 px-3 py-2.5 text-xs font-semibold text-indigo-800"
+                >
+                  {message}
+                </p>
+              ) : null}
+            </section>
+
+            <aside className="space-y-4">
+              <section className="rounded-3xl bg-slate-950 p-5 text-white shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-emerald-300">
+                    {text.progress}
+                  </p>
+                  <span className="text-sm font-semibold">{project.completedSteps} / 6</span>
+                </div>
+                <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-emerald-400 transition-all"
+                    style={{ width: `${(project.completedSteps / 6) * 100}%` }}
+                  />
+                </div>
+                <p className="mt-4 text-xs leading-6 text-slate-300">
+                  {progress.complete ? text.complete : text.draftHelp}
+                </p>
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-slate-300">
+                  <ShieldIcon className="mb-2 size-5 text-emerald-300" />
+                  {text.modelLater}
+                </div>
+                {!locked ? (
+                  <button
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={!progress.complete || saving}
+                    onClick={() => void createDraft()}
+                    type="button"
+                  >
+                    <CheckIcon className="size-4" />
+                    {text.createDraft}
+                  </button>
+                ) : null}
+              </section>
+
+              <section className="rounded-3xl border border-dashed border-slate-300 bg-white p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                  Publish
+                </p>
+                <button
+                  className="mt-3 w-full cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-400"
+                  disabled
+                  type="button"
+                >
+                  {text.publish}
+                </button>
+              </section>
+            </aside>
+          </div>
+        </details>
+      ) : (
+        <p className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-900">
+          {text.locked}
+        </p>
+      )}
 
       {locked ? (
         <div className="mt-5">
           <WebsiteSpecGenerator
-            initialGeneration={initialGeneration}
+            initialGeneration={generation}
+            initialPublication={initialPublication}
             initialVersions={initialVersions}
             modelOptions={modelOptions}
             projectId={project.id}

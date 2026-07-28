@@ -2,11 +2,15 @@ import { WebsiteSpecSchema } from '@ai-workflow-studio/website-schema';
 import { describe, expect, it } from 'vitest';
 
 import {
+  WEBSITE_PUBLIC_HEADERS,
   WEBSITE_PREVIEW_HEADERS,
   WEBSITE_PREVIEW_VIEWPORTS,
   websitePreviewUrl,
 } from './website-preview-contract';
-import { renderWebsitePreviewDocument } from './website-preview-renderer';
+import {
+  renderWebsitePreviewDocument,
+  renderWebsitePublishedDocument,
+} from './website-preview-renderer';
 
 const spec = WebsiteSpecSchema.parse({
   assets: [],
@@ -74,6 +78,16 @@ describe('website preview', () => {
     expect(html).toContain('Safe website preview');
     expect(html).not.toContain('<script');
     expect(html).not.toContain('<form');
+  });
+
+  it('renders published navigation as internal links without enabling scripts or forms', () => {
+    const html = renderWebsitePublishedDocument(spec, 'home', 'product-site-a1000000');
+    expect(html).toContain('content="index,follow"');
+    expect(html).toContain('href="/s/product-site-a1000000/home"');
+    expect(html).not.toContain('<script');
+    expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("script-src 'none'");
+    expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("form-action 'none'");
+    expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("frame-ancestors 'none'");
   });
 
   it('renders deterministically and keeps asset references inside registered markup', () => {

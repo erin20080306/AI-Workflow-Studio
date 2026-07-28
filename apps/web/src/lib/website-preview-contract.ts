@@ -51,3 +51,25 @@ export const WEBSITE_PREVIEW_HEADERS = {
   'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff',
 } as const;
+
+export const WEBSITE_PUBLIC_HEADERS = {
+  'cache-control': 'public, max-age=60, stale-while-revalidate=300',
+  'content-security-policy': [
+    "default-src 'none'",
+    "style-src 'unsafe-inline'",
+    "img-src 'self'",
+    "font-src 'none'",
+    "script-src 'none'",
+    "connect-src 'none'",
+    "media-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+  ].join('; '),
+  'content-type': 'text/html; charset=utf-8',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+} as const;

@@ -78,6 +78,35 @@ values
     '{"purpose":"Tenant B private purpose"}'
   );
 
+insert into public.website_brief_messages (
+  tenant_id,
+  project_id,
+  role,
+  kind,
+  step,
+  body,
+  created_by
+)
+values
+  (
+    'e2000000-0000-4000-8000-000000000001',
+    'e3000000-0000-4000-8000-000000000001',
+    'user',
+    'prompt',
+    null,
+    'Tenant A private website prompt',
+    'e1000000-0000-4000-8000-000000000001'
+  ),
+  (
+    'e2000000-0000-4000-8000-000000000002',
+    'e3000000-0000-4000-8000-000000000002',
+    'assistant',
+    'question',
+    'audience',
+    'Tenant B private follow-up question',
+    'e1000000-0000-4000-8000-000000000002'
+  );
+
 insert into public.website_specs (
   tenant_id,
   project_id,
@@ -265,6 +294,18 @@ select tests.assert_true(
 select tests.assert_true(
   exists (
     select 1
+    from public.audit_logs
+    where action = 'website_brief.prompt'
+      and resource_id = 'e3000000-0000-4000-8000-000000000001'
+      and metadata ->> 'kind' = 'prompt'
+      and not metadata ? 'body'
+  ),
+  'website brief conversations must audit metadata without prompt or answer bodies'
+);
+
+select tests.assert_true(
+  exists (
+    select 1
     from storage.buckets
     where id = 'website-assets'
       and public is false
@@ -295,6 +336,11 @@ select tests.assert_true(
 select tests.assert_true(
   (select count(*) from public.website_assets) = 1,
   'a member must only see generated website assets from their tenant'
+);
+
+select tests.assert_true(
+  (select count(*) from public.website_brief_messages) = 1,
+  'a member must only see website discovery messages from their tenant'
 );
 
 select tests.assert_true(
@@ -345,10 +391,30 @@ select tests.assert_true(
   'website asset mutations must remain behind authenticated server routes'
 );
 
+select tests.assert_true(
+  not has_table_privilege('authenticated', 'public.website_brief_messages', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_brief_messages', 'update')
+  and not has_table_privilege('authenticated', 'public.website_brief_messages', 'delete'),
+  'website conversation mutations must remain behind authenticated server routes'
+);
+
+select tests.assert_true(
+  not has_table_privilege('authenticated', 'public.website_publications', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_publications', 'update')
+  and not has_table_privilege('authenticated', 'public.website_publications', 'delete')
+  and not has_function_privilege(
+    'authenticated',
+    'public.publish_website(uuid,uuid,uuid,integer)',
+    'execute'
+  ),
+  'website publishing must require the authenticated server service'
+);
+
 reset role;
 set local role service_role;
 
 insert into public.website_projects (
+  id,
   tenant_id,
   created_by,
   name,
@@ -360,6 +426,7 @@ insert into public.website_projects (
   draft_created_at
 )
 values (
+  'e3000000-0000-4000-8000-000000000003',
   'e2000000-0000-4000-8000-000000000001',
   'e1000000-0000-4000-8000-000000000001',
   'Validated Draft',
@@ -385,6 +452,97 @@ select tests.assert_true(
     where slug = 'validated-draft'
   ),
   'a completed website brief may be stored as a draft'
+);
+
+insert into public.website_specs (
+  tenant_id,
+  project_id,
+  version_number,
+  schema_version,
+  provider,
+  model,
+  attempts,
+  spec,
+  created_by,
+  version_name,
+  change_summary,
+  source
+)
+values
+  (
+    'e2000000-0000-4000-8000-000000000001',
+    'e3000000-0000-4000-8000-000000000003',
+    1,
+    1,
+    'mock',
+    'mock-planner-v1',
+    1,
+    '{"schemaVersion":1,"name":"Published v1"}',
+    'e1000000-0000-4000-8000-000000000001',
+    'Initial release',
+    'Initial validated release.',
+    'generated'
+  ),
+  (
+    'e2000000-0000-4000-8000-000000000001',
+    'e3000000-0000-4000-8000-000000000003',
+    2,
+    1,
+    'mock',
+    'mock-planner-v1',
+    1,
+    '{"schemaVersion":1,"name":"Published v2"}',
+    'e1000000-0000-4000-8000-000000000001',
+    'Second release',
+    'Second validated release.',
+    'direct'
+  );
+
+select public.publish_website(
+  'e1000000-0000-4000-8000-000000000001',
+  'e2000000-0000-4000-8000-000000000001',
+  'e3000000-0000-4000-8000-000000000003',
+  1
+);
+
+select public.publish_website(
+  'e1000000-0000-4000-8000-000000000001',
+  'e2000000-0000-4000-8000-000000000001',
+  'e3000000-0000-4000-8000-000000000003',
+  2
+);
+
+select tests.assert_true(
+  (
+    select count(*) = 1
+      and max(spec_version) = 2
+    from public.website_publications
+    where project_id = 'e3000000-0000-4000-8000-000000000003'
+      and status = 'active'
+  ),
+  'publishing a new immutable release must supersede the prior active release'
+);
+
+select tests.assert_true(
+  (
+    select count(*) = 1
+    from public.website_publications
+    where project_id = 'e3000000-0000-4000-8000-000000000003'
+      and status = 'superseded'
+      and superseded_at is not null
+  ),
+  'the previous public release must remain auditable as superseded'
+);
+
+select tests.assert_true(
+  exists (
+    select 1
+    from public.audit_logs
+    where action = 'website_publication.published'
+      and correlation_id = 'e3000000-0000-4000-8000-000000000003'
+      and metadata ->> 'version' = '2'
+  ),
+  'approved website publishing must create a metadata-only audit event'
 );
 
 reset role;

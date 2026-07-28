@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 30 — Website publishing (pending)
+Phase 30 — Prompt-to-site and confirmed publishing (completed)
 
 ## Repository baseline
 
@@ -2294,3 +2294,75 @@ Status: completed
 ### Commit
 
 - `feat(web): unify AI workspace models and images` (this phase commit)
+
+## Phase 30 — Prompt-to-site and confirmed publishing
+
+Status: completed
+
+### Implemented
+
+- Made a bounded natural-language prompt the primary Website Studio entry
+  point. The server derives only a strict brief patch, stores a Tenant-scoped
+  conversation, and asks the next missing question instead of inventing
+  unresolved business decisions.
+- Preserved the original six-step brief as an optional advanced editor. Both
+  entry paths converge on the same validated `WebsiteProject` and immutable
+  `WebsiteSpec` model.
+- Added a one-click Canvas build after all six decisions validate. Auto,
+  OpenAI, Claude, Gemini, and entitled cost tiers still pass through the
+  existing provider health, Store-plan, allowance, request-rate, and
+  conservative cost-reservation controls.
+- Continued conversational changes through the existing strict full-spec
+  validation and immutable version history. Model output cannot add arbitrary
+  HTML, CSS, JavaScript, URLs, forms, scripts, or executable commands.
+- Added an explicit publication review panel. Publishing is disabled until an
+  exact Canvas version exists and the authenticated editor checks a confirmation
+  for that version.
+- Added immutable `website_publications` releases. Publishing a newer version
+  supersedes—but does not delete—the previous release while preserving one
+  stable active public slug and a metadata-only audit event.
+- Added a public server renderer at `/s/{siteSlug}`. It serves only registered
+  components and the exact approved Website Spec, applies restrictive public
+  CSP headers, exposes no provider credentials, and proxies only referenced
+  project-owned assets.
+- Added Tenant-scoped brief-message reads, service-only mutations, member
+  authorization checks, viewer rejection, cross-Tenant RLS tests, publication
+  history tests, and a full browser journey from one sentence to the live
+  public route.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 174 tests across 40 files
+- `pnpm build:web`: passed — 42 generated pages including prompt, brief chat,
+  quick Canvas, confirmed publishing, public assets, and public site routes
+- `pnpm db:test`: passed — fresh migrations, Tenant isolation, service-role
+  restrictions, metadata-only audits, stable active slug, and immutable
+  superseded releases
+- `pnpm exec playwright test e2e/website-studio.spec.ts`: passed — one-sentence
+  prompt, AI follow-up, Canvas generation, conversational edit, exact-version
+  confirmation, public retrieval, and preserved advanced six-step flow
+- `pnpm test:e2e`: passed — all 10 Chromium scenarios across Agent, Assistant,
+  Workflow, Schedule, Usage, and both Website Studio entry paths
+- `pnpm security:scan-client`: passed — 34 built client files inspected; no
+  configured provider or platform secret was found
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- A published site currently lives on the platform host under `/s/{siteSlug}`.
+  Customer custom domains, per-site independent Vercel projects, sitemap
+  generation, domain verification, release rollback UI, and deployment-history
+  operations are follow-on hosting work.
+- The public renderer intentionally provides registered presentation
+  components and internal navigation only. Arbitrary customer scripts, forms,
+  executable code, and unbounded external links remain unsupported.
+- Real AI discovery and generation require a healthy server-only provider,
+  billing/quota, and an entitled model tier. Mock mode remains deterministic
+  for local and browser tests.
+
+### Commit
+
+- `feat(web): add prompt-to-site publishing` (this phase commit)

@@ -174,11 +174,19 @@ actor; a request cannot select its own Tenant, and viewers cannot mutate.
 Website briefs pass the shared strict schema before persistence, and all six
 bounded decisions must validate before draft creation.
 
-Phase 23 accepts no executable code, model response, arbitrary URL, deployment
-configuration, domain mutation, or API credential. Audit metadata contains only
-field names and progress, never brief content. Drafts remain locked and cannot
-publish until versioning and explicit publish approval pass their later phase
-gates. See [`WEBSITE_STUDIO.md`](./WEBSITE_STUDIO.md).
+The prompt assistant accepts only strict, bounded brief patches and questions.
+It cannot produce executable code, arbitrary URLs, deployment configuration,
+domain mutation, or API credentials. Audit metadata contains only message
+kind/step, field names, progress, version, and release identifiers—never prompt,
+answer, brief, provider body, or generated content.
+
+Publishing is a separate authenticated RPC requiring a non-viewer, an existing
+validated spec version, and an explicit confirmation submitted by the browser.
+A model response cannot satisfy that confirmation. Releases are immutable;
+new releases supersede old rows and only the active slug is public. The public
+renderer uses registered components, ID-based approved assets, a restrictive
+CSP, and no customer script/form/external-URL execution path. See
+[`WEBSITE_STUDIO.md`](./WEBSITE_STUDIO.md).
 
 ## Security review gates
 

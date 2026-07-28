@@ -1,8 +1,49 @@
 import { expect, test } from '@playwright/test';
 
+test('creates, refines, previews, and explicitly publishes a website from one prompt', async ({
+  page,
+}) => {
+  await page.goto('/dashboard/sites');
+  await expect(page.getByRole('heading', { name: '說出你的網站，透過對話完成它。' })).toBeVisible();
+
+  const description = `建立專業的雙語自動化顧問網站 ${Date.now()}，說明服務價值並引導訪客聯絡。`;
+  await page.getByLabel('用幾句話描述想建立的網站').fill(description);
+  await page.getByRole('button', { name: '讓 AI 開始追問' }).click();
+
+  await expect(page.getByText('AI 需求追問')).toBeVisible();
+  await expect(page.getByText('這個網站最主要要服務誰？希望幫他們解決什麼問題？')).toBeVisible();
+  await page
+    .getByLabel('在這裡補充 AI 詢問的資訊…')
+    .fill('需要建立專業網站、清楚介紹服務並取得詢問名單的台灣中小企業經營者。');
+  await page.getByRole('button', { name: '送出回答' }).click();
+  await expect(
+    page.getByText('需求已完整。你可以先檢查內容，或立即建立已驗證的 Canvas 預覽。'),
+  ).toBeVisible();
+
+  await page.getByRole('button', { name: '建立 Canvas 預覽' }).click();
+  await expect(page.getByRole('heading', { name: '網站預覽 Canvas' })).toBeVisible();
+  const preview = page.frameLocator('[data-testid="website-preview-frame"]');
+  await expect(preview.getByRole('heading', { name: '首頁' })).toBeVisible();
+
+  await page.getByLabel('自然語言修改').fill('把首頁主標題改得更有行動力，但保留所有頁面。');
+  await page.getByRole('button', { name: '套用已驗證 AI 修改' }).click();
+  await expect(page.getByText(/v2/).first()).toBeVisible();
+
+  await page.getByRole('button', { name: /檢查並發布/ }).click();
+  await page.getByText('我已檢查此 Canvas，並同意公開這個確切版本。').click();
+  await page.getByRole('button', { name: /發布版本 v2/ }).click();
+  const publicLink = page.getByRole('link', { name: '開啟公開網站' });
+  await expect(publicLink).toBeVisible();
+  const publicPath = await publicLink.getAttribute('href');
+  expect(publicPath).toMatch(/^\/s\/[a-z0-9-]+$/);
+  const publicResponse = await page.request.get(publicPath!);
+  expect(publicResponse.ok()).toBe(true);
+  expect(await publicResponse.text()).toContain('index,follow');
+});
+
 test('collects every guided decision before creating a locked website draft', async ({ page }) => {
   await page.goto('/dashboard/sites');
-  await expect(page.getByRole('heading', { name: '先把網站想清楚，再開始生成。' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '說出你的網站，透過對話完成它。' })).toBeVisible();
   await expect(page.getByRole('link', { name: '網站工作室' })).toHaveAttribute(
     'aria-current',
     'page',
@@ -10,11 +51,14 @@ test('collects every guided decision before creating a locked website draft', as
   await expect(page.locator('body')).not.toContainText('API 金鑰');
 
   const projectName = `產品網站 ${Date.now()}`;
+  await page.getByText('進階手動建立').click();
   await page.getByLabel('專案名稱').fill(projectName);
   await page.getByRole('button', { name: '建立專案', exact: true }).click();
   await expect(page.getByRole('heading', { name: projectName })).toBeVisible();
   await expect(page.getByRole('button', { name: '建立已驗證網站草稿' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '發布功能將於 Phase 30 開放' })).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: '建立 Canvas 版本後即可確認發布。' }),
+  ).toBeDisabled();
 
   await page
     .getByLabel('這個網站最重要的目的為何？')
@@ -47,7 +91,7 @@ test('collects every guided decision before creating a locked website draft', as
 
   await expect(page.getByText('六項必要決策已完整。')).toBeVisible();
   await page.getByRole('button', { name: '建立已驗證網站草稿' }).click();
-  await expect(page.getByText('已建立通過驗證的網站草稿；發布功能仍維持鎖定。')).toBeVisible();
+  await expect(page.getByText('已建立通過驗證的網站草稿。')).toBeVisible();
   await expect(page.getByText('草稿已鎖定', { exact: true })).toBeVisible();
   await expect(page.getByText('需求草稿已鎖定；下方視覺編輯會建立可復原的新版本。')).toBeVisible();
   await expect(page.getByRole('heading', { name: '將需求轉成安全的網站結構' })).toBeVisible();
@@ -104,7 +148,7 @@ test('collects every guided decision before creating a locked website draft', as
     .fill('專業的自動化工作空間，深海軍藍與薄荷綠點綴，柔和自然光，不含文字與浮水印。');
   await page.getByLabel('無障礙替代文字').fill('專業安全自動化工作空間');
   await page.getByRole('button', { name: '產生並套用圖片' }).click();
-  await expect(page.getByText('v5 · 首頁 AI 主視覺').first()).toBeVisible();
+  await expect(page.getByText('v5 · 首頁 AI 主視覺').first()).toBeVisible({ timeout: 20_000 });
   await expect(preview.getByRole('img', { name: '專業安全自動化工作空間' })).toBeVisible();
   await expect(page.getByText(/mock · mock-image-v1/)).toBeVisible();
 

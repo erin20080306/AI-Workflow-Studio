@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  WebsiteBriefConversationAnalysisSchema,
+  WebsitePromptStartInputSchema,
+} from './conversation';
+import { WebsitePublicationSchema, WebsitePublishInputSchema } from './publication';
+import {
   WebsiteBriefDraftSchema,
   WebsiteBriefPatchSchema,
   completeWebsiteBrief,
@@ -65,6 +70,64 @@ describe('Website brief validation', () => {
     ).toThrow();
     expect(() => WebsiteBriefDraftSchema.parse({ callsToAction: ['Start', 'start'] })).toThrow();
     expect(() => WebsiteBriefPatchSchema.parse({ providerApiKey: 'secret' })).toThrow();
+  });
+});
+
+describe('Prompt-to-site conversation and publishing validation', () => {
+  it('accepts a bounded prompt analysis and rejects duplicate follow-up steps', () => {
+    expect(
+      WebsiteBriefConversationAnalysisSchema.parse({
+        brief: { ...completeBrief, audience: '' },
+        name: 'AI automation product site',
+        questions: [
+          {
+            body: 'Who is the primary audience for this website?',
+            step: 'audience',
+          },
+        ],
+      }).questions,
+    ).toHaveLength(1);
+    expect(() =>
+      WebsiteBriefConversationAnalysisSchema.parse({
+        brief: completeBrief,
+        name: 'Duplicate questions',
+        questions: [
+          { body: 'Who is the primary audience?', step: 'audience' },
+          { body: 'Which audience problem matters most?', step: 'audience' },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it('requires a meaningful prompt and an explicit publish confirmation', () => {
+    expect(
+      WebsitePromptStartInputSchema.parse({
+        description: 'Build a professional bilingual automation product website.',
+        locale: 'en',
+        model: 'auto',
+        tier: 'economy',
+      }).model,
+    ).toBe('auto');
+    expect(() =>
+      WebsitePromptStartInputSchema.parse({
+        apiKey: 'must-not-be-accepted',
+        description: 'Build a professional bilingual automation product website.',
+        locale: 'en',
+        model: 'auto',
+      }),
+    ).toThrow();
+    expect(() => WebsitePublishInputSchema.parse({ confirmed: false, version: 1 })).toThrow();
+    expect(
+      WebsitePublicationSchema.parse({
+        id: 'a1000000-0000-4000-8000-000000000001',
+        projectId: 'a2000000-0000-4000-8000-000000000001',
+        publicPath: '/s/product-site-a2000000',
+        publishedAt: '2026-07-28T00:00:00.000Z',
+        slug: 'product-site-a2000000',
+        status: 'active',
+        version: 3,
+      }).version,
+    ).toBe(3);
   });
 });
 

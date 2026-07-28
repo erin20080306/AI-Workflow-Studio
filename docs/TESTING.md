@@ -78,8 +78,11 @@ monthly source/tool allowance consumption, Store-only billing constraints,
 service-role-only entitlement synchronization, and audit-safe internal
 overrides.
 Website Studio database assertions verify Tenant A cannot read Tenant B's
-project or brief, authenticated browser roles cannot mutate projects, and a
-stored draft must carry all six completion steps and the required timestamps.
+project, brief conversation, or publication history; authenticated browser
+roles cannot mutate those resources; a stored draft must carry all six
+completion steps and required timestamps; only an authorized service RPC can
+publish; and a second release preserves one active slug plus an immutable
+superseded record.
 
 ### End to end
 
@@ -115,10 +118,13 @@ service tests inject local transports and assert exact product/SKU selection,
 server-only RPC metadata, fail-closed malformed keys, and the absence of raw
 Store ID keys from persistence calls.
 
-The Website Studio E2E creates a project, completes purpose, audience, pages,
-brand direction, content, and calls to action, verifies incomplete briefs cannot
-create drafts, creates the validated draft, confirms publishing remains
-disabled, and proves an unversioned post-draft update fails closed.
+The Website Studio E2E covers both entry paths. The primary journey describes a
+site in one sentence, answers an AI follow-up, creates a validated Canvas,
+applies a conversational edit, explicitly confirms one version, and retrieves
+the public route. The advanced journey completes purpose, audience, pages,
+brand direction, content, and calls to action, proves incomplete briefs cannot
+create drafts, verifies immutable editing/Undo/Redo and private AI images, and
+proves an unversioned post-draft update fails closed.
 
 The Agent API E2E starts a write-capable Run while its paired Agent is offline,
 asserts no Job exists before approval, approves it, reconnects, claims exactly

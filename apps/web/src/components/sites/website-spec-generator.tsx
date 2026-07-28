@@ -2,6 +2,7 @@
 
 import {
   WebsiteSpecClientGenerationSchema,
+  type WebsitePublication,
   type WebsiteGenerationSelection,
   type WebsiteSpecClientGeneration,
 } from '@ai-workflow-studio/website-schema';
@@ -58,12 +59,14 @@ const copy = {
 
 export function WebsiteSpecGenerator({
   initialGeneration,
+  initialPublication,
   initialVersions,
   modelOptions,
   projectId,
   tierOptions,
 }: Readonly<{
   initialGeneration: WebsiteSpecClientGeneration | undefined;
+  initialPublication: WebsitePublication | undefined;
   initialVersions: readonly WebsiteSpecClientGeneration[];
   modelOptions: readonly WebsiteGenerationModelOption[];
   projectId: string;
@@ -176,6 +179,7 @@ export function WebsiteSpecGenerator({
           </dl>
           <WebsiteSpecEditor
             initialGeneration={generation}
+            initialPublication={initialPublication}
             initialVersions={initialVersions.length === 0 ? [generation] : initialVersions}
             modelOptions={modelOptions}
             projectId={projectId}

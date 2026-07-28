@@ -25,20 +25,27 @@ The cost values are conservative internal safety estimates, not provider
 invoices. An individual text source remains limited to 1 MiB even when the
 monthly plan allowance is larger.
 
-## Create a Website Studio brief
+## Create and publish a website
 
 1. Open **網站工作室 / Website Studio** in the authenticated workspace.
-2. Enter a project name and create the Website Project.
-3. Complete purpose, audience, pages, brand direction, content, and calls to
-   action. Save each guided step.
-4. When all six decisions are complete, choose **建立已驗證網站草稿 / Create
-   validated site draft**.
-5. The Phase 23 draft is locked and cannot publish. Create another project when
-   the brief must change before versioned editing is available.
+2. Describe the desired website in one or more sentences, choose an entitled
+   model/tier when needed, and ask AI to begin.
+3. Answer the bounded follow-up questions. Use **進階六步驟需求設定** when you
+   want to inspect or override purpose, audience, pages, brand, content, and
+   calls to action manually.
+4. Create the Canvas after all six decisions validate. Review desktop, tablet,
+   and mobile views.
+5. Modify the site with a natural-language request or the direct visual/version
+   controls. Each successful change creates a restorable immutable version.
+6. Open **檢查並發布**, verify the exact Canvas version, check the confirmation,
+   and publish. AI cannot perform this confirmation for you.
+7. Open the generated `/s/{siteSlug}` link to see the active public release.
+   Publishing a later version keeps the same public URL and preserves the old
+   release as superseded history.
 
-OpenAI, Claude, Gemini, Auto generation, responsive preview, reversible editing,
-publishing, and custom domains are not part of the Phase 23 brief. Ordinary
-users never enter AI provider API keys.
+Ordinary users never enter AI provider API keys. Published sites currently use
+the platform host; customer custom-domain and rollback controls are follow-on
+hosting work.
 
 ## Create and review a workflow
 

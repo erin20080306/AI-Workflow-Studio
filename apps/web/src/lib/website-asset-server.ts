@@ -236,3 +236,41 @@ export async function getWebsiteAssetPreviewUrls(
   );
   return new Map(signed.filter((item): item is readonly [string, string] => item !== undefined));
 }
+
+export async function getPublishedWebsiteAsset(
+  tenantIdValue: string,
+  projectIdValue: string,
+  assetIdValue: string,
+): Promise<{ readonly bytes: Uint8Array; readonly mimeType: 'image/png' } | undefined> {
+  const tenantId = z.string().uuid().parse(tenantIdValue);
+  const projectId = z.string().uuid().parse(projectIdValue);
+  const assetId = AssetIdentifierSchema.parse(assetIdValue);
+  if (getEnvironment().mockMode) {
+    const item = (memoryAssets().get(projectId) ?? []).find((asset) => asset.asset.id === assetId);
+    return item === undefined ? undefined : { bytes: item.bytes, mimeType: 'image/png' };
+  }
+  const admin = createSupabaseAdminClient();
+  const row = await admin
+    .from('website_assets')
+    .select('mime_type, storage_path')
+    .eq('tenant_id', tenantId)
+    .eq('project_id', projectId)
+    .eq('spec_asset_id', assetId)
+    .maybeSingle();
+  const parsed = z
+    .object({
+      mime_type: z.literal('image/png'),
+      storage_path: z.string().min(10).max(300),
+    })
+    .strict()
+    .safeParse(row.data);
+  if (row.error !== null || !parsed.success) return undefined;
+  const download = await admin.storage
+    .from(WEBSITE_ASSET_BUCKET)
+    .download(parsed.data.storage_path);
+  if (download.error !== null) return undefined;
+  return {
+    bytes: new Uint8Array(await download.data.arrayBuffer()),
+    mimeType: parsed.data.mime_type,
+  };
+}

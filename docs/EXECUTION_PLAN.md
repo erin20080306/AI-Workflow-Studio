@@ -45,7 +45,7 @@ test, and build checks and has been committed.
 | 27    | Visual editing and versions   | Natural-language and direct edits are reversible, versioned, and auditable       | completed |
 | 28    | AI website image generation   | Bounded provider images become private, validated, quota-controlled assets       | completed |
 | 29    | Unified AI workspace          | Exact models, chat images, and confirmed deletion remain quota and Tenant safe   | completed |
-| 30    | Website publishing            | Approved builds pass quality gates and deploy without exposing credentials       | pending   |
+| 30    | Prompt-to-site and publishing | Prompt, follow-up, Canvas, edits, and approved public releases pass all gates    | completed |
 
 ## Phase 0 — Repository audit
 
@@ -289,10 +289,23 @@ atomically removes messages, sources, artifacts, and image metadata while
 retaining a content-free audit event. Website Studio remains a separate,
 available workspace.
 
-## Phase 30 — Website publishing
+## Phase 30 — Prompt-to-site and publishing
 
-Add explicit publish approval, production builds, SEO metadata, sitemap,
-robots, accessibility and link gates, domains, deployment history, rollback,
-and credential-safe hosting integration. Publishing is a material external
-action and must never occur from a model response without the authenticated
-user's final approval.
+Make a natural-language request the primary Website Studio entry point. The
+assistant may infer only a validated brief patch, ask a bounded set of missing
+questions, and create the first Canvas preview only after all required fields
+validate. Keep the six-step brief as an optional advanced editor.
+
+Continue changes through the existing immutable Website Spec version engine.
+Publishing requires an explicit authenticated confirmation, freezes an immutable
+release against one validated spec version, serves only registered components and
+private project assets through authorization-aware public routes, and supports a
+safe subsequent release without exposing provider or platform credentials.
+
+Add explicit publish approval, safe server rendering, SEO metadata, immutable
+release history, and credential-safe platform hosting. Publishing is a material
+external action and must never occur from a model response without the
+authenticated user's final approval. Customer custom domains, independent
+per-site deployment projects, sitemap indexes, rollback controls, and expanded
+accessibility/link reports continue as follow-on hosting operations after this
+prompt-to-public-route milestone.

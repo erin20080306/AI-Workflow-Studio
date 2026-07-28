@@ -138,12 +138,14 @@ project from `briefing` to `draft`.
 Authenticated browsers receive tenant-scoped RLS reads only. Mutations derive
 the actor and Tenant from `WorkspaceContext`, reject viewers, use the
 server-only Supabase administrator client, and write metadata-only audit events.
-The Phase 23 draft has no JavaScript, tool authority, preview origin,
-deployment credential, or publishing capability.
 
-AI Website Specs, registered components, sandboxed preview, reversible versions,
-and explicit publishing are separate acceptance gates in Phases 24–27. See
-[`WEBSITE_STUDIO.md`](./WEBSITE_STUDIO.md).
+The Phase 30 prompt layer converts one bounded request and follow-up answers into
+the same strict brief used by the advanced editor. Canvas generation and every
+subsequent edit produce immutable Website Spec versions made only from
+registered components. Explicit publication freezes one exact version in an
+immutable release and exposes a stable `/s/{siteSlug}` server-rendered route.
+The public renderer has no AI credential, tool authority, build script, or
+customer executable-code path. See [`WEBSITE_STUDIO.md`](./WEBSITE_STUDIO.md).
 
 ## Trust boundaries
 

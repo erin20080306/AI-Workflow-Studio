@@ -1,6 +1,10 @@
 'use client';
 
-import { WebsiteProjectSchema, type WebsiteProject } from '@ai-workflow-studio/website-schema';
+import {
+  WebsiteProjectSchema,
+  type WebsiteGenerationSelection,
+  type WebsiteProject,
+} from '@ai-workflow-studio/website-schema';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -15,15 +19,22 @@ import {
   SparkIcon,
 } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
+import { WebsiteModelDropdowns } from '@/components/sites/website-model-dropdowns';
+import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
+import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
 
 const ProjectResponseSchema = z.object({ project: WebsiteProjectSchema });
 
 const copy = {
   en: {
+    advanced: 'Advanced manual setup',
     briefing: 'Brief in progress',
     create: 'Create project',
     createFailed: 'The website project could not be created.',
     creating: 'Creating…',
+    description: 'Describe the website in a few sentences',
+    descriptionPlaceholder:
+      'Create a polished bilingual website for a workflow automation product. It should explain the value, pricing, security, and guide small teams to start a free trial.',
     draft: 'Validated draft',
     empty: 'No website projects yet',
     emptyBody:
@@ -34,20 +45,26 @@ const copy = {
       ['Brand and actions', 'Record the desired voice, visual direction, and conversion goals.'],
     ],
     heading: 'Website Studio',
-    locked: 'Publishing unavailable',
+    locked: 'Explicit approval before publishing',
     name: 'Project name',
     namePlaceholder: 'For example: AI Workflow Studio product site',
     open: 'Continue brief',
-    safety: 'Guided, tenant-isolated, draft-only',
+    quickCreate: 'Let AI ask the next question',
+    quickCreating: 'Reading your request safely…',
+    safety: 'Prompt → questions → Canvas → publish approval',
     subtitle:
-      'Turn a clear product brief into a validated website project. AI generation and preview are introduced in the next gated phases.',
-    title: 'Plan a website before generating it.',
+      'Start with one request. AI extracts a safe brief, asks only what is missing, then creates a reviewable Canvas before anything can be published.',
+    title: 'Describe the website. Build it through conversation.',
   },
   'zh-Hant': {
+    advanced: '進階手動建立',
     briefing: '需求整理中',
     create: '建立專案',
     createFailed: '網站專案建立失敗，請稍後再試。',
     creating: '建立中…',
+    description: '用幾句話描述想建立的網站',
+    descriptionPlaceholder:
+      '幫我建立一個時尚、專業的中英文 AI 自動化平台網站，說明功能、方案、安全性，主要服務中小企業，並引導訪客免費體驗。',
     draft: '已驗證草稿',
     empty: '尚未建立網站專案',
     emptyBody: '建立專案後，引導流程會先收集所有必要決策，資料完整前不會允許建立草稿。',
@@ -57,25 +74,37 @@ const copy = {
       ['品牌與行動', '記錄品牌語氣、視覺方向與希望訪客採取的行動。'],
     ],
     heading: '網站工作室',
-    locked: '尚未開放發布',
+    locked: '發布前必須明確確認',
     name: '專案名稱',
     namePlaceholder: '例如：AI Workflow Studio 產品官網',
     open: '繼續整理',
-    safety: '步驟引導、租戶隔離、僅限草稿',
-    subtitle: '先把產品需求整理成經驗證的網站專案；AI 產生與預覽會在後續安全階段加入。',
-    title: '先把網站想清楚，再開始生成。',
+    quickCreate: '讓 AI 開始追問',
+    quickCreating: '正在安全理解需求…',
+    safety: '一句話 → AI 追問 → Canvas → 確認發布',
+    subtitle:
+      '先說明想做什麼；AI 會整理安全需求，只追問缺少的資訊，並在任何發布前建立可檢查、可對話修改的 Canvas。',
+    title: '說出你的網站，透過對話完成它。',
   },
 } as const;
 
 export function WebsiteStudioHome({
   initialProjects,
+  modelOptions,
+  tierOptions,
 }: Readonly<{
   initialProjects: readonly WebsiteProject[];
+  modelOptions: readonly WebsiteGenerationModelOption[];
+  tierOptions: readonly AiTierOption[];
 }>) {
   const router = useRouter();
   const { locale } = useLanguage();
   const text = copy[locale];
+  const [description, setDescription] = useState('');
   const [name, setName] = useState('');
+  const [selectedModel, setSelectedModel] = useState<WebsiteGenerationSelection>(
+    modelOptions[0]?.id ?? 'auto',
+  );
+  const [selectedTier, setSelectedTier] = useState<AiModelTierSelection>('auto');
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string>();
 
@@ -99,6 +128,31 @@ export function WebsiteStudioHome({
     }
   }
 
+  async function quickStart(): Promise<void> {
+    if (description.trim().length < 10 || modelOptions.length === 0) return;
+    setCreating(true);
+    setMessage(undefined);
+    try {
+      const response = await fetch('/api/websites/quick-start', {
+        body: JSON.stringify({
+          description,
+          locale,
+          model: selectedModel,
+          tier: selectedTier,
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) throw new Error('quick start failed');
+      const project = ProjectResponseSchema.parse(payload).project;
+      router.push(`/dashboard/sites/${project.id}`);
+    } catch {
+      setMessage(text.createFailed);
+      setCreating(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-[1360px]">
       <section className="overflow-hidden rounded-[32px] bg-slate-950 text-white shadow-sm">
@@ -113,40 +167,76 @@ export function WebsiteStudioHome({
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">{text.subtitle}</p>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/7 p-5 backdrop-blur">
+          <div className="rounded-3xl bg-white p-5 text-slate-950 shadow-2xl">
             <div className="flex items-center gap-3">
-              <span className="grid size-11 place-items-center rounded-2xl bg-indigo-400/15 text-indigo-200">
-                <PlusIcon className="size-5" />
+              <span className="grid size-11 place-items-center rounded-2xl bg-indigo-50 text-indigo-700">
+                <SparkIcon className="size-5" />
               </span>
               <div>
-                <p className="font-semibold">{text.create}</p>
-                <p className="mt-0.5 text-xs text-slate-400">Website Project · Draft only</p>
+                <p className="font-semibold">{text.quickCreate}</p>
+                <p className="mt-0.5 text-xs text-slate-500">Website Copilot · Phase 30</p>
               </div>
             </div>
             <label className="mt-5 block">
-              <span className="text-xs font-semibold text-slate-300">{text.name}</span>
-              <input
-                className="mt-2 w-full rounded-2xl border border-white/15 bg-slate-900 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-indigo-400"
-                maxLength={120}
-                onChange={(event) => setName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') void createProject();
-                }}
-                placeholder={text.namePlaceholder}
-                value={name}
+              <span className="text-xs font-semibold text-slate-600">{text.description}</span>
+              <textarea
+                className="mt-2 min-h-32 w-full resize-y rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm leading-6 text-slate-950 outline-none placeholder:text-slate-400 focus:border-indigo-500"
+                maxLength={6_000}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder={text.descriptionPlaceholder}
+                value={description}
               />
             </label>
+            <div className="mt-3">
+              <WebsiteModelDropdowns
+                disabled={creating}
+                locale={locale}
+                modelOptions={modelOptions}
+                onModelChange={setSelectedModel}
+                onTierChange={setSelectedTier}
+                selectedModel={selectedModel}
+                selectedTier={selectedTier}
+                tierOptions={tierOptions}
+              />
+            </div>
             <button
-              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={creating || name.trim().length < 2}
-              onClick={() => void createProject()}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={creating || description.trim().length < 10 || modelOptions.length === 0}
+              onClick={() => void quickStart()}
               type="button"
             >
-              {creating ? text.creating : text.create}
+              {creating ? text.quickCreating : text.quickCreate}
               <ArrowRightIcon className="size-4" />
             </button>
+            <details className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <summary className="cursor-pointer text-xs font-semibold text-slate-600">
+                {text.advanced}
+              </summary>
+              <label className="mt-3 block">
+                <span className="text-xs font-semibold text-slate-600">{text.name}</span>
+                <input
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+                  maxLength={120}
+                  onChange={(event) => setName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void createProject();
+                  }}
+                  placeholder={text.namePlaceholder}
+                  value={name}
+                />
+              </label>
+              <button
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-800 disabled:opacity-40"
+                disabled={creating || name.trim().length < 2}
+                onClick={() => void createProject()}
+                type="button"
+              >
+                <PlusIcon className="size-4" />
+                {creating ? text.creating : text.create}
+              </button>
+            </details>
             {message !== undefined ? (
-              <p aria-live="polite" className="mt-3 text-xs text-rose-200">
+              <p aria-live="polite" className="mt-3 text-xs font-semibold text-rose-700">
                 {message}
               </p>
             ) : null}
