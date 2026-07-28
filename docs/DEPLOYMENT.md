@@ -84,7 +84,7 @@ Configure:
 | Setup URL              | `https://www.erin-aiworkflowstudio.com/api/integrations/github/setup`    |
 | Callback URL           | `https://www.erin-aiworkflowstudio.com/api/integrations/github/callback` |
 | Repository permissions | Metadata: read; Contents: read and write                                 |
-| Installation scope     | Only on this account; users choose selected repositories                 |
+| Installation scope     | Any account; each installer chooses selected repositories                |
 
 Store the resulting values as server-only Vercel Production variables:
 

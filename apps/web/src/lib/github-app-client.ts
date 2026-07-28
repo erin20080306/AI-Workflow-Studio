@@ -3,23 +3,21 @@ import 'server-only';
 import { createHash, createPrivateKey, randomBytes, sign } from 'node:crypto';
 import { z } from 'zod';
 
-import type { WebsiteStaticSource } from '@/lib/website-static-export';
+import type { WebsiteStaticSource } from './website-static-export';
 import {
   WebsiteGithubAccountSchema,
   WebsiteGithubRepositorySchema,
   type WebsiteGithubAccount,
   type WebsiteGithubRepository,
-} from '@/lib/website-github-schema';
+} from './website-github-schema';
 
-const GithubConfigurationSchema = z
-  .object({
-    GITHUB_APP_CLIENT_ID: z.string().min(10).max(160),
-    GITHUB_APP_CLIENT_SECRET: z.string().min(24).max(500),
-    GITHUB_APP_ID: z.string().regex(/^[1-9][0-9]{0,19}$/),
-    GITHUB_APP_PRIVATE_KEY_BASE64: z.string().min(256).max(16_000),
-    GITHUB_APP_SLUG: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-  })
-  .strict();
+const GithubConfigurationSchema = z.object({
+  GITHUB_APP_CLIENT_ID: z.string().min(10).max(160),
+  GITHUB_APP_CLIENT_SECRET: z.string().min(24).max(500),
+  GITHUB_APP_ID: z.string().regex(/^[1-9][0-9]{0,19}$/),
+  GITHUB_APP_PRIVATE_KEY_BASE64: z.string().min(256).max(16_000),
+  GITHUB_APP_SLUG: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+});
 
 const InstallationSchema = z
   .object({
