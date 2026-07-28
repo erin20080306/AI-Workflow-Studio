@@ -6,6 +6,7 @@ import {
   exchangeGithubOauthCode,
   getGithubAppConfiguration,
   githubAppInstallationUrl,
+  validateGithubInstallationForUser,
 } from './github-app-client';
 
 function stubGithubConfiguration(): void {
@@ -67,6 +68,38 @@ describe('getGithubAppConfiguration', () => {
           'content-type': 'application/json',
         }),
         method: 'POST',
+      }),
+    );
+  });
+
+  it('validates the selected installation through the authorized installation list', async () => {
+    stubGithubConfiguration();
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        installations: [
+          {
+            account: { login: 'workflow-owner', type: 'User' },
+            id: 987_654,
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      validateGithubInstallationForUser('github-user-token-long-enough', '987654'),
+    ).resolves.toEqual({
+      login: 'workflow-owner',
+      type: 'User',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.github.com/user/installations?per_page=100&page=1',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: 'Bearer github-user-token-long-enough',
+        }),
+        method: 'GET',
       }),
     );
   });

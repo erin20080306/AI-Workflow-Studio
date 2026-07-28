@@ -31,6 +31,12 @@ const InstallationSchema = z
   })
   .passthrough();
 
+const UserInstallationsSchema = z
+  .object({
+    installations: z.array(InstallationSchema),
+  })
+  .passthrough();
+
 const InstallationTokenSchema = z
   .object({
     token: z.string().min(20),
@@ -297,14 +303,26 @@ export async function validateGithubInstallationForUser(
   accessToken: string,
   installationId: string,
 ): Promise<WebsiteGithubAccount> {
-  const response = await githubRequest(
-    `https://api.github.com/user/installations/${installationId}`,
-    {
-      headers: { authorization: `Bearer ${accessToken}` },
-      method: 'GET',
-    },
+  for (let page = 1; page <= 5; page += 1) {
+    const response = await githubRequest(
+      `https://api.github.com/user/installations?per_page=100&page=${page}`,
+      {
+        headers: { authorization: `Bearer ${accessToken}` },
+        method: 'GET',
+      },
+    );
+    const rows = UserInstallationsSchema.parse(await response.json()).installations;
+    const installation = rows.find((row) => String(row.id) === installationId);
+    if (installation !== undefined) {
+      return WebsiteGithubAccountSchema.parse(installation.account);
+    }
+    if (rows.length < 100) break;
+  }
+  throw new GithubAppError(
+    'GITHUB_INSTALLATION_FORBIDDEN',
+    'The GitHub App installation is not available to the authorized user.',
+    403,
   );
-  return WebsiteGithubAccountSchema.parse(InstallationSchema.parse(await response.json()).account);
 }
 
 export async function revokeGithubUserToken(accessToken: string): Promise<void> {
