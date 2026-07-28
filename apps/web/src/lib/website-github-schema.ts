@@ -31,6 +31,45 @@ export const WebsiteGithubRepositorySchema = z
   })
   .strict();
 
+export const WebsiteGithubRepositoryUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(320)
+  .transform((value, context) => {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      context.addIssue({ code: 'custom', message: 'Enter a valid GitHub repository URL.' });
+      return z.NEVER;
+    }
+
+    const path = url.pathname.replaceAll(/^\/+|\/+$/g, '').replace(/\.git$/u, '');
+    const validPath = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(path);
+    if (
+      url.protocol !== 'https:' ||
+      url.hostname !== 'github.com' ||
+      url.port !== '' ||
+      url.username !== '' ||
+      url.password !== '' ||
+      url.search !== '' ||
+      url.hash !== '' ||
+      !validPath
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Use an HTTPS GitHub repository URL such as https://github.com/owner/repository.',
+      });
+      return z.NEVER;
+    }
+
+    return {
+      fullName: path,
+      normalizedUrl: `https://github.com/${path}`,
+    };
+  });
+
 export const WebsiteGithubPushInputSchema = z
   .object({
     branch: z
@@ -61,6 +100,7 @@ export type WebsiteGithubAccount = z.infer<typeof WebsiteGithubAccountSchema>;
 export type WebsiteGithubPublication = z.infer<typeof WebsiteGithubPublicationSchema>;
 export type WebsiteGithubPushInput = z.infer<typeof WebsiteGithubPushInputSchema>;
 export type WebsiteGithubRepository = z.infer<typeof WebsiteGithubRepositorySchema>;
+export type WebsiteGithubRepositoryUrl = z.infer<typeof WebsiteGithubRepositoryUrlSchema>;
 export type WebsiteGithubState = z.infer<typeof WebsiteGithubStateSchema>;
 
 export function githubBranchForSiteSlug(siteSlug: string): string {

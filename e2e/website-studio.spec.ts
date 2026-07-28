@@ -51,16 +51,33 @@ test('creates, refines, previews, and explicitly publishes a website from one pr
   expect(publicResponse.ok()).toBe(true);
   expect(await publicResponse.text()).toContain('index,follow');
 
+  await expect(page.getByRole('heading', { name: '這個網站要如何正式上線？' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /平台子網域（推薦）/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.getByRole('button', { name: /GitHub／自行部署/ }).click();
   await expect(page.getByRole('heading', { name: '將網站程式碼推送到你的 GitHub' })).toBeVisible();
   await expect(page.getByText('virtual-automation-team · Organization')).toBeVisible();
-  await expect(page.getByLabel('GitHub 儲存庫')).toContainText(
-    'virtual-automation-team/operations-showcase',
-  );
+  await page.getByLabel('GitHub 儲存庫網址').fill('https://github.com/not-authorized/example');
+  await expect(page.getByText(/此儲存庫尚未授權/)).toBeVisible();
+  await page
+    .getByLabel('GitHub 儲存庫網址')
+    .fill('https://github.com/virtual-automation-team/operations-showcase');
+  await expect(page.getByText(/此儲存庫已授權/)).toBeVisible();
   await page.getByLabel('不可變更的網站版本').selectOption('2');
   await page.getByText('我同意將這個確切網站版本寫入所選的儲存庫。').click();
   await page.getByRole('button', { name: '將確切版本推送到 GitHub' }).click();
   await expect(page.getByText(/網站程式碼已推送 · v2/)).toBeVisible();
   await expect(page.getByText('確定性來源 SHA-256')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'AI 部署引導' })).toBeVisible();
+  await expect(page.getByLabel('部署服務')).toHaveValue('vercel');
+  await expect(page.getByText(/ai-workflow-studio\//).last()).toBeVisible();
+  await page.getByLabel('部署服務').selectOption('cloudflare-pages');
+  await expect(page.getByRole('link', { name: /開啟 Cloudflare Pages/ })).toHaveAttribute(
+    'href',
+    /dash\.cloudflare\.com/,
+  );
 });
 
 test('collects every guided decision before creating a locked website draft', async ({ page }) => {

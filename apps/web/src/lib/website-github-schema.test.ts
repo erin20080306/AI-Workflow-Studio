@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { WebsiteGithubPushInputSchema, githubBranchForSiteSlug } from './website-github-schema';
+import {
+  WebsiteGithubPushInputSchema,
+  WebsiteGithubRepositoryUrlSchema,
+  githubBranchForSiteSlug,
+} from './website-github-schema';
 
 describe('website GitHub publishing input', () => {
   it('uses an isolated managed branch namespace', () => {
@@ -34,6 +38,27 @@ describe('website GitHub publishing input', () => {
         repositoryId: '123456',
         version: 4,
       }).success,
+    ).toBe(false);
+  });
+
+  it('normalizes a pasted HTTPS repository URL and rejects tokens or non-GitHub hosts', () => {
+    expect(
+      WebsiteGithubRepositoryUrlSchema.parse('https://github.com/Example/website.git/'),
+    ).toEqual({
+      fullName: 'Example/website',
+      normalizedUrl: 'https://github.com/Example/website',
+    });
+    expect(
+      WebsiteGithubRepositoryUrlSchema.safeParse('https://token@github.com/example/website')
+        .success,
+    ).toBe(false);
+    expect(
+      WebsiteGithubRepositoryUrlSchema.safeParse('https://gitlab.com/example/website').success,
+    ).toBe(false);
+    expect(
+      WebsiteGithubRepositoryUrlSchema.safeParse(
+        'https://github.com/example/website?access_token=secret',
+      ).success,
     ).toBe(false);
   });
 });

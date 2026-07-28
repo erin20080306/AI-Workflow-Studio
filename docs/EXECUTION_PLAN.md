@@ -54,8 +54,9 @@ test, and build checks and has been committed.
 | 36    | Customer-selected subdomains  | Each site can reserve a safe unique label on the platform wildcard               | completed |
 | 37    | AI-first website brief        | One direction prompt creates a rich inferred brief with bounded follow-ups       | completed |
 | 38    | Paid GitHub site publishing   | Paid users can explicitly push an exact safe release through a GitHub App        | completed |
-| 39    | Guided site integrations      | Allowlisted payment/API modules guide setup without exposing credentials         | pending   |
-| 40    | Website delivery acceptance   | Free/paid gates, pages, domains, ZIP, GitHub, and integrations pass end to end   | pending   |
+| 39    | Guided site delivery          | Subdomain or pasted GitHub URL paths produce safe, actionable delivery guidance  | completed |
+| 40    | Guided site integrations      | Allowlisted payment/API modules guide setup without exposing credentials         | pending   |
+| 41    | Website delivery acceptance   | Free/paid gates, pages, domains, ZIP, GitHub, and integrations pass end to end   | pending   |
 
 ## Phase 0 — Repository audit
 

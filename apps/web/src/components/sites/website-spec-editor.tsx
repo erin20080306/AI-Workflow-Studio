@@ -17,10 +17,9 @@ import { z } from 'zod';
 
 import { CheckIcon, SaveIcon, SparkIcon } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
+import { WebsiteDeliveryPanel } from '@/components/sites/website-delivery-panel';
 import { WebsiteModelDropdowns } from '@/components/sites/website-model-dropdowns';
-import { WebsiteGithubPublishPanel } from '@/components/sites/website-github-publish-panel';
 import { WebsitePreviewCanvas } from '@/components/sites/website-preview-canvas';
-import { WebsitePublishPanel } from '@/components/sites/website-publish-panel';
 import type { AiModelTierSelection, AiTierOption } from '@/lib/ai-model-selection';
 import type { WebsiteGenerationModelOption } from '@/lib/website-generation-models';
 import type { WebsiteGithubState } from '@/lib/website-github-schema';
@@ -821,15 +820,11 @@ export function WebsiteSpecEditor({
       ) : null}
 
       <WebsitePreviewCanvas generation={generation} projectId={projectId} />
-      <WebsitePublishPanel
+      <WebsiteDeliveryPanel
+        canPublishGithub={canPublishGithub}
         generation={generation}
+        githubState={githubState}
         initialPublication={initialPublication}
-        projectId={projectId}
-        suggestedSiteSlug={suggestedSiteSlug}
-      />
-      <WebsiteGithubPublishPanel
-        canPublish={canPublishGithub}
-        initialState={githubState}
         projectId={projectId}
         suggestedSiteSlug={suggestedSiteSlug}
         versions={versions}

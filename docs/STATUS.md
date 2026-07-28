@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 38 — Paid GitHub site publishing (completed)
+Phase 39 — Guided site delivery (completed)
 
 ## Repository baseline
 
@@ -2970,3 +2970,61 @@ Status: completed
 
 - `1ecbd0b` — `feat(web): add paid GitHub website publishing`
 - `eb6f33c` — final live-response compatibility fix
+
+## Phase 39 — Guided site delivery
+
+Status: completed
+
+### Implemented
+
+- Replaced the sequential hosting and GitHub panels with one explicit delivery
+  choice. Customers may choose platform hosting or GitHub/self-deployment
+  without changing the validated Canvas version.
+- Made the platform wildcard the recommended default. The UI now states that
+  only the customer-selected address label is required and that GitHub, DNS,
+  external hosting, and a separate deployment are not required.
+- Replaced the GitHub repository picker with a pasted HTTPS GitHub repository
+  URL. The URL parser rejects credentials, query strings, fragments, non-GitHub
+  hosts, non-HTTPS schemes, ports, and malformed owner/repository paths.
+- Matches the normalized URL only against repositories explicitly returned by
+  the connected least-privilege GitHub App installation. A pasted repository
+  that is valid but not authorized cannot enable the external write.
+- Preserved paid-plan, owner/admin, immutable version, explicit confirmation,
+  deterministic source digest, idempotency, managed-branch, and no-token
+  controls from Phase 38.
+- Added an automatically tailored deployment guide after a successful push. It
+  carries the exact repository and managed branch into allowlisted Vercel,
+  Cloudflare Pages, or GitHub Pages instructions and links only to official
+  provider destinations.
+- External deployment remains optional. Customers may switch back to the
+  platform subdomain path and let AI Workflow Studio host the site directly.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 237 tests across 53 files
+- `pnpm build:web`: passed — 47 generated application pages. The first
+  sandboxed attempt could not bind a Turbopack worker port; the identical
+  permitted retry compiled successfully.
+- `pnpm security:scan-client`: passed — 34 client files scanned
+- `pnpm exec playwright test e2e/website-studio.spec.ts --workers=1`: passed —
+  2 tests covering prompt-to-site, Canvas, editing, versions, image generation,
+  platform hosting, pasted GitHub URL validation, authorization matching,
+  managed-branch push, and deployment-provider guidance
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- The deployment assistant gives bounded, provider-specific instructions and
+  opens the customer-owned provider console; it does not hold external provider
+  credentials or deploy on the customer's behalf.
+- Payment and external API integration guidance remains the isolated Phase 40
+  scope. Complete free/paid delivery acceptance remains Phase 41.
+- The requested operation video remains intentionally paused until the newly
+  deployed production interface passes authenticated acceptance.
+
+### Commit
+
+- `feat(web): add guided website delivery` (this phase commit)

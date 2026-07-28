@@ -6,8 +6,10 @@ import { z } from 'zod';
 
 import { CheckIcon, ShieldIcon } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
+import { WebsiteDeploymentGuidePanel } from '@/components/sites/website-deployment-guide-panel';
 import {
   WebsiteGithubPublicationSchema,
+  WebsiteGithubRepositoryUrlSchema,
   WebsiteGithubRepositorySchema,
   githubBranchForSiteSlug,
   type WebsiteGithubPublication,
@@ -39,9 +41,17 @@ const copy = {
     published: 'Website source published',
     publish: 'Publish exact version to GitHub',
     publishing: 'Publishing safely…',
-    repository: 'Repository',
+    repository: 'GitHub repository URL',
+    repositoryAuthorized: 'This repository is authorized for the connected GitHub App.',
     repositoryEmpty: 'No allowed repositories were returned by this installation.',
     repositoryLoading: 'Loading allowed repositories…',
+    repositoryPlaceholder: 'https://github.com/owner/repository',
+    repositoryUnauthorized:
+      'This repository is not authorized. Add it to the GitHub App installation, then try again.',
+    repositoryUrlHelp:
+      'Paste the repository URL. The platform matches it against repositories explicitly authorized to the GitHub App.',
+    repositoryUrlInvalid: 'Enter an HTTPS URL in the form https://github.com/owner/repository.',
+    reviewAuthorization: 'Review GitHub App repository access',
     source: 'Deterministic source SHA-256',
     title: 'Publish website source to your GitHub',
     version: 'Immutable website version',
@@ -63,9 +73,15 @@ const copy = {
     published: '網站程式碼已推送',
     publish: '將確切版本推送到 GitHub',
     publishing: '正在安全推送…',
-    repository: 'GitHub 儲存庫',
+    repository: 'GitHub 儲存庫網址',
+    repositoryAuthorized: '此儲存庫已授權給目前連接的 GitHub App。',
     repositoryEmpty: '此 GitHub App 安裝沒有回傳可用儲存庫。',
     repositoryLoading: '正在讀取已授權儲存庫…',
+    repositoryPlaceholder: 'https://github.com/擁有者/儲存庫',
+    repositoryUnauthorized: '此儲存庫尚未授權；請加入 GitHub App 安裝範圍後再試一次。',
+    repositoryUrlHelp: '請貼上儲存庫網址；平台只會比對已明確授權給 GitHub App 的儲存庫。',
+    repositoryUrlInvalid: '請輸入 https://github.com/擁有者/儲存庫 格式的 HTTPS 網址。',
+    reviewAuthorization: '檢查 GitHub App 儲存庫權限',
     source: '確定性來源 SHA-256',
     title: '將網站程式碼推送到你的 GitHub',
     version: '不可變更的網站版本',
@@ -104,7 +120,7 @@ export function WebsiteGithubPublishPanel({
     [],
   );
   const [loadingRepositories, setLoadingRepositories] = useState(false);
-  const [repositoryId, setRepositoryId] = useState('');
+  const [repositoryUrl, setRepositoryUrl] = useState('');
   const [version, setVersion] = useState(versions[0]?.version ?? 1);
   const [suffix, setSuffix] = useState(() =>
     githubBranchForSiteSlug(suggestedSiteSlug).replace('ai-workflow-studio/', ''),
@@ -114,6 +130,14 @@ export function WebsiteGithubPublishPanel({
   const [message, setMessage] = useState<string>();
   const [publication, setPublication] = useState<WebsiteGithubPublication>();
   const branch = `ai-workflow-studio/${suffix}`;
+  const parsedRepositoryUrl = WebsiteGithubRepositoryUrlSchema.safeParse(repositoryUrl);
+  const selectedRepository = parsedRepositoryUrl.success
+    ? repositories.find(
+        (repository) =>
+          repository.fullName.toLowerCase() === parsedRepositoryUrl.data.fullName.toLowerCase(),
+      )
+    : undefined;
+  const repositoryId = selectedRepository?.id ?? '';
   const sortedVersions = useMemo(
     () => [...versions].sort((left, right) => right.version - left.version),
     [versions],
@@ -139,7 +163,6 @@ export function WebsiteGithubPublishPanel({
       .then((items) => {
         if (!active) return;
         setRepositories(items);
-        setRepositoryId(items[0]?.id ?? '');
       })
       .catch(() => {
         if (active) setMessage(text.failed);
@@ -195,7 +218,7 @@ export function WebsiteGithubPublishPanel({
       if (!response.ok) throw new Error('disconnect failed');
       setState({ configured: state.configured });
       setRepositories([]);
-      setRepositoryId('');
+      setRepositoryUrl('');
       setMessage(text.disconnected);
     } catch {
       setMessage(text.failed);
@@ -270,23 +293,50 @@ export function WebsiteGithubPublishPanel({
           </label>
           <label className="text-xs font-semibold text-slate-200">
             <span className="mb-2 block">{text.repository}</span>
-            <select
+            <input
+              aria-label={text.repository}
+              autoCapitalize="none"
+              autoComplete="off"
               className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-3 text-sm text-white"
               disabled={busy || loadingRepositories || repositories.length === 0}
-              onChange={(event) => setRepositoryId(event.target.value)}
-              value={repositoryId}
-            >
-              {repositories.length === 0 ? (
-                <option value="">
-                  {loadingRepositories ? text.repositoryLoading : text.repositoryEmpty}
-                </option>
-              ) : null}
-              {repositories.map((repository) => (
-                <option key={repository.id} value={repository.id}>
-                  {repository.fullName} {repository.private ? '· private' : '· public'}
-                </option>
-              ))}
-            </select>
+              onChange={(event) => setRepositoryUrl(event.target.value)}
+              placeholder={text.repositoryPlaceholder}
+              spellCheck={false}
+              type="url"
+              value={repositoryUrl}
+            />
+            <span className="mt-2 block font-normal leading-5 text-slate-400">
+              {loadingRepositories
+                ? text.repositoryLoading
+                : repositories.length === 0
+                  ? text.repositoryEmpty
+                  : text.repositoryUrlHelp}
+            </span>
+            {repositoryUrl.trim().length > 0 ? (
+              <span
+                className={`mt-2 block font-semibold leading-5 ${
+                  selectedRepository !== undefined ? 'text-emerald-300' : 'text-amber-200'
+                }`}
+              >
+                {!parsedRepositoryUrl.success
+                  ? text.repositoryUrlInvalid
+                  : selectedRepository === undefined
+                    ? text.repositoryUnauthorized
+                    : `${text.repositoryAuthorized} ${selectedRepository.fullName} · ${
+                        selectedRepository.private ? 'private' : 'public'
+                      }`}
+              </span>
+            ) : null}
+            {parsedRepositoryUrl.success && selectedRepository === undefined ? (
+              <a
+                className="mt-2 inline-flex text-xs font-semibold text-violet-200 underline"
+                href="https://github.com/settings/installations"
+                rel="noreferrer"
+                target="_blank"
+              >
+                {text.reviewAuthorization} ↗
+              </a>
+            ) : null}
           </label>
           <label className="text-xs font-semibold text-slate-200 lg:col-span-2">
             <span className="mb-2 block">{text.branch}</span>
@@ -334,26 +384,29 @@ export function WebsiteGithubPublishPanel({
       )}
 
       {publication !== undefined ? (
-        <div className="mt-5 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold text-emerald-100">
-            <CheckIcon className="size-4" /> {text.published} · v{publication.version}
-          </p>
-          <a
-            className="mt-2 block break-all text-xs font-semibold text-violet-200 underline"
-            href={publication.commitUrl}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {publication.repositoryFullName} · {publication.branch} ·{' '}
-            {publication.commitSha.slice(0, 10)}
-          </a>
-          <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
-            {text.source}
-          </p>
-          <p className="mt-1 break-all font-mono text-[10px] text-slate-300">
-            {publication.sourceSha256}
-          </p>
-        </div>
+        <>
+          <div className="mt-5 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4">
+            <p className="flex items-center gap-2 text-sm font-semibold text-emerald-100">
+              <CheckIcon className="size-4" /> {text.published} · v{publication.version}
+            </p>
+            <a
+              className="mt-2 block break-all text-xs font-semibold text-violet-200 underline"
+              href={publication.commitUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {publication.repositoryFullName} · {publication.branch} ·{' '}
+              {publication.commitSha.slice(0, 10)}
+            </a>
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+              {text.source}
+            </p>
+            <p className="mt-1 break-all font-mono text-[10px] text-slate-300">
+              {publication.sourceSha256}
+            </p>
+          </div>
+          <WebsiteDeploymentGuidePanel publication={publication} />
+        </>
       ) : null}
 
       {message !== undefined ? (
