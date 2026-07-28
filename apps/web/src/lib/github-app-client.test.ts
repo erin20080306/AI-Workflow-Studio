@@ -81,7 +81,12 @@ describe('getGithubAppConfiguration', () => {
       Response.json({
         installations: [
           {
-            account: { login: 'workflow-owner', type: 'User' },
+            account: {
+              avatar_url: 'https://avatars.githubusercontent.com/u/123456',
+              id: 123_456,
+              login: 'workflow-owner',
+              type: 'User',
+            },
             id: 987_654,
           },
         ],
@@ -115,7 +120,12 @@ describe('getGithubAppConfiguration', () => {
       .mockResolvedValueOnce(Response.json({ login: 'workflow-owner', type: 'User' }))
       .mockResolvedValueOnce(
         Response.json({
-          account: { login: 'workflow-owner', type: 'User' },
+          account: {
+            avatar_url: 'https://avatars.githubusercontent.com/u/123456',
+            id: 123_456,
+            login: 'workflow-owner',
+            type: 'User',
+          },
           id: 987_654,
         }),
       );

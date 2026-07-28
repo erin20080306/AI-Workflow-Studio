@@ -44,6 +44,15 @@ const GithubUserSchema = z
   })
   .passthrough();
 
+function githubAccountView(
+  account: z.infer<typeof InstallationSchema>['account'],
+): WebsiteGithubAccount {
+  return WebsiteGithubAccountSchema.parse({
+    login: account.login,
+    type: account.type,
+  });
+}
+
 const InstallationTokenSchema = z
   .object({
     token: z.string().min(20),
@@ -321,7 +330,7 @@ export async function validateGithubInstallationForUser(
     const rows = UserInstallationsSchema.parse(await response.json()).installations;
     const installation = rows.find((row) => String(row.id) === installationId);
     if (installation !== undefined) {
-      return WebsiteGithubAccountSchema.parse(installation.account);
+      return githubAccountView(installation.account);
     }
     if (rows.length < 100) break;
   }
@@ -342,7 +351,7 @@ export async function validateGithubInstallationForUser(
     installation.account.type === 'User' &&
     installation.account.login.toLowerCase() === user.login.toLowerCase()
   ) {
-    return WebsiteGithubAccountSchema.parse(installation.account);
+    return githubAccountView(installation.account);
   }
   throw new GithubAppError(
     'GITHUB_INSTALLATION_FORBIDDEN',

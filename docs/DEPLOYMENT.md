@@ -83,7 +83,7 @@ Configure:
 | Homepage URL           | `https://www.erin-aiworkflowstudio.com`                                  |
 | Callback URL           | `https://www.erin-aiworkflowstudio.com/api/integrations/github/callback` |
 | OAuth during install   | Enabled; the install request carries a short-lived state and PKCE pair   |
-| Setup URL              | Empty while OAuth during installation is enabled                         |
+| Setup URL              | Disabled and ignored while OAuth during installation is enabled          |
 | Repository permissions | Metadata: read; Contents: read and write                                 |
 | Installation scope     | Any account; each installer chooses selected repositories                |
 
