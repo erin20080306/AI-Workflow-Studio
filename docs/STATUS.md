@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 30 — Prompt-to-site and confirmed publishing (completed)
+Phase 31 — Prompt-to-workflow automation (completed)
 
 ## Repository baseline
 
@@ -2366,3 +2366,66 @@ Status: completed
 ### Commit
 
 - `feat(web): add prompt-to-site publishing` (this phase commit)
+
+## Phase 31 — Prompt-to-workflow automation
+
+Status: completed
+
+### Implemented
+
+- Replaced the standalone workflow composer's hard-coded Mock provider, Mock
+  device, Mock folder, and fake save notification with cost-aware Auto routing
+  through the configured OpenAI, Claude, or Gemini provider.
+- Accepted meaningful workflow requests from two characters onward in both the
+  workflow composer and Assistant Plan mode. The planner now treats short
+  phrases as complete requests, infers a manual trigger and conservative
+  bounded defaults, and records every inference as an assumption.
+- Loaded the authenticated Tenant's real Desktop Agent and approved folder
+  aliases. The planner prefers an online Agent, never sends absolute paths, and
+  falls back to a safe cloud target when no Agent is paired.
+- Switched workflow planning to provider-portable JSON generation: OpenAI uses
+  Responses JSON mode, Gemini uses JSON MIME output without an incompatible
+  shared response schema, and Claude relies on the strict JSON-only planner
+  contract. Website generation retains its provider-native strict schema mode.
+- Derived the canonical planner provider schema from the same strict Zod output
+  contract used after generation. Every response still passes strict JSON,
+  Workflow v1, registered-node, execution-target, DAG, permission, and bounded
+  repair validation before the application can use it.
+- Automatically persisted each validated plan as a real Tenant-scoped inactive
+  workflow and immutable first version. Save failures keep the validated
+  preview visible and offer a bounded retry instead of claiming success.
+- Removed hard-coded order-folder and personal-device claims from the workflow
+  review. Permission and risk summaries now reflect the selected trusted
+  context and the actual generated nodes.
+- Preserved explicit approval boundaries: automatic planning and draft
+  persistence do not activate a workflow, dispatch a run, write a file, call an
+  external service, or approve a destructive action.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 178 tests across 41 files
+- `pnpm build:web`: passed — 42 generated pages, including the authenticated
+  short-prompt workflow composer and draft APIs
+- `pnpm exec playwright test e2e/mock-workflow.spec.ts`: passed — short prompt,
+  automatic validated plan, real draft persistence, node review, and no-write
+  Dry Run
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- This phase has not been deployed to Vercel. The production site will keep its
+  previous behavior until this commit is pushed and a Production deployment
+  succeeds.
+- Local Excel and folder automations require a paired Desktop Agent plus
+  explicitly approved folder aliases. AI may plan only the safe cloud subset
+  when no Agent is available and never fabricates local authority.
+- Real provider success still depends on a valid server-only credential,
+  account model access, provider billing/quota, and an enabled model mapping.
+  Provider errors fail closed without persisting or executing a workflow.
+
+### Commit
+
+- `feat(web): automate short-prompt workflow planning` (this phase commit)

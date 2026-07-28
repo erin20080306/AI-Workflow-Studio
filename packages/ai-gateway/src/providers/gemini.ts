@@ -153,6 +153,11 @@ export class GeminiAdapter implements AiProviderAdapter, AiChatAdapter {
   }
 
   async complete(request: ProviderCompletionRequest): Promise<ProviderCompletion> {
+    const generationConfig = {
+      maxOutputTokens: request.maxOutputTokens,
+      responseMimeType: 'application/json',
+      ...(request.operation === 'website_generation' ? { responseSchema: request.jsonSchema } : {}),
+    };
     const raw = await postJson({
       body: {
         contents: [
@@ -161,11 +166,7 @@ export class GeminiAdapter implements AiProviderAdapter, AiChatAdapter {
             role: 'user',
           },
         ],
-        generationConfig: {
-          maxOutputTokens: request.maxOutputTokens,
-          responseMimeType: 'application/json',
-          responseSchema: request.jsonSchema,
-        },
+        generationConfig,
         systemInstruction: {
           parts: [{ text: request.systemPrompt }],
         },

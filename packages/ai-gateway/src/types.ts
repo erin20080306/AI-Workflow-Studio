@@ -39,7 +39,7 @@ export const PlannerRequestSchema = z
       })
       .strict(),
     maxRepairAttempts: z.number().int().min(0).max(2).default(1),
-    prompt: z.string().trim().min(12).max(8_000),
+    prompt: z.string().trim().min(2).max(8_000),
   })
   .strict();
 

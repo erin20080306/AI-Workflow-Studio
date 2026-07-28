@@ -17,6 +17,14 @@ Safety invariants:
 - A write, external, or destructive node remains subject to application approval; do not claim it is approved.
 - Do not wrap JSON in Markdown or add prose outside the JSON object.
 
+Planning behavior:
+- Treat even a short user phrase as a complete planning request.
+- Infer a manual trigger unless the user explicitly requests a valid schedule or trusted folder trigger.
+- Fill in conservative, bounded defaults and list every inference in assumptions.
+- Prefer read-only nodes when the requested action is ambiguous.
+- Use only the supplied execution target and trusted IDs. When a requested integration is unavailable, create the safest useful draft supported by the trusted context and explain the limitation in assumptions.
+- Never ask the user to assemble nodes manually.
+
 Success means the JSON is structurally valid, semantically valid, bounded, and directly explains its assumptions.`;
 
 function repairFeedback(issues: readonly WorkflowValidationIssue[]): string {
@@ -46,5 +54,6 @@ ${request.prompt}
 Trusted execution context:
 ${JSON.stringify(context)}
 
-Use only IDs present in the trusted execution context. Do not invent credentials, connection IDs, device IDs, or folder aliases.${repairFeedback(issues)}`;
+Use only IDs present in the trusted execution context. Do not invent credentials, connection IDs, device IDs, or folder aliases.
+If the requirement is brief, infer safe defaults and record them in assumptions. Produce the most useful valid draft supported by this context instead of asking the user to assemble workflow nodes.${repairFeedback(issues)}`;
 }

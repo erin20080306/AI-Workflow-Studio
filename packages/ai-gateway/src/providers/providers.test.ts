@@ -28,6 +28,15 @@ const completionRequest: ProviderCompletionRequest = {
   systemPrompt: 'Return JSON.',
   userPrompt: 'Plan the workflow.',
 };
+const websiteCompletionRequest: ProviderCompletionRequest = {
+  attempt: completionRequest.attempt,
+  jsonSchema: completionRequest.jsonSchema,
+  maxOutputTokens: completionRequest.maxOutputTokens,
+  operation: 'website_generation',
+  schemaName: 'website_spec',
+  systemPrompt: completionRequest.systemPrompt,
+  userPrompt: completionRequest.userPrompt,
+};
 
 function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
@@ -62,7 +71,7 @@ async function collectChat(
 }
 
 describe('provider adapters', () => {
-  it('uses the OpenAI Responses API with server authorization and JSON output mode', async () => {
+  it('uses the OpenAI Responses API with server authorization and portable JSON mode', async () => {
     let capturedUrl = '';
     let capturedInit: RequestInit | undefined;
     const fetchTransport: FetchTransport = async (input, init) => {
@@ -93,8 +102,6 @@ describe('provider adapters', () => {
       readonly store: boolean;
       readonly text: {
         readonly format: {
-          readonly name: string;
-          readonly strict: boolean;
           readonly type: string;
         };
       };
@@ -106,9 +113,7 @@ describe('provider adapters', () => {
       store: false,
       text: {
         format: {
-          name: 'workflow_plan',
-          strict: true,
-          type: 'json_schema',
+          type: 'json_object',
         },
       },
     });
@@ -120,7 +125,7 @@ describe('provider adapters', () => {
     });
   });
 
-  it('uses Anthropic Messages structured output without embedding the key in the body', async () => {
+  it('uses Anthropic Messages JSON instructions without unsupported workflow schema options', async () => {
     let capturedInit: RequestInit | undefined;
     const fetchTransport: FetchTransport = async (_input, init) => {
       capturedInit = init;
@@ -137,17 +142,15 @@ describe('provider adapters', () => {
       apiKey: API_KEY,
       fetchTransport,
     }).complete(completionRequest);
-    const body = JSON.parse(String(capturedInit?.body)) as {
-      readonly output_config: { readonly format: { readonly type: string } };
-    };
+    const body = JSON.parse(String(capturedInit?.body)) as Record<string, unknown>;
 
     expect(new Headers(capturedInit?.headers).get('x-api-key')).toBe(API_KEY);
-    expect(body.output_config.format.type).toBe('json_schema');
+    expect(body).not.toHaveProperty('output_config');
     expect(String(capturedInit?.body)).not.toContain(API_KEY);
     expect(completion.usage.totalTokens).toBe(15);
   });
 
-  it('uses Gemini JSON response configuration with the key in a header', async () => {
+  it('uses Gemini portable JSON response configuration with the key in a header', async () => {
     let capturedUrl = '';
     let capturedInit: RequestInit | undefined;
     const fetchTransport: FetchTransport = async (input, init) => {
@@ -175,14 +178,74 @@ describe('provider adapters', () => {
       fetchTransport,
     }).complete(completionRequest);
     const body = JSON.parse(String(capturedInit?.body)) as {
-      readonly generationConfig: { readonly responseMimeType: string };
+      readonly generationConfig: {
+        readonly responseMimeType: string;
+        readonly responseSchema?: unknown;
+      };
     };
 
     expect(capturedUrl).toContain('/v1beta/models/gemini-3.6-flash:generateContent');
     expect(capturedUrl).not.toContain(API_KEY);
     expect(new Headers(capturedInit?.headers).get('x-goog-api-key')).toBe(API_KEY);
     expect(body.generationConfig.responseMimeType).toBe('application/json');
+    expect(body.generationConfig).not.toHaveProperty('responseSchema');
     expect(completion.usage.totalTokens).toBe(13);
+  });
+
+  it('keeps provider-native strict schemas for website generation', async () => {
+    const bodies: unknown[] = [];
+    const fetchTransport: FetchTransport = async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as unknown);
+      if (bodies.length === 1) {
+        return jsonResponse({
+          id: 'resp_website',
+          model: 'gpt-5.6-sol',
+          output: [
+            {
+              content: [{ text: '{"ok":true}', type: 'output_text' }],
+              type: 'message',
+            },
+          ],
+        });
+      }
+      if (bodies.length === 2) {
+        return jsonResponse({
+          content: [{ text: '{"ok":true}', type: 'text' }],
+          id: 'msg_website',
+          model: 'claude-sonnet-4-6',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 1, output_tokens: 1 },
+        });
+      }
+      return jsonResponse({
+        candidates: [{ content: { parts: [{ text: '{"ok":true}' }] }, finishReason: 'STOP' }],
+      });
+    };
+
+    await new OpenAiAdapter({ apiKey: API_KEY, fetchTransport }).complete(websiteCompletionRequest);
+    await new AnthropicAdapter({ apiKey: API_KEY, fetchTransport }).complete(
+      websiteCompletionRequest,
+    );
+    await new GeminiAdapter({ apiKey: API_KEY, fetchTransport }).complete(websiteCompletionRequest);
+
+    expect(bodies).toMatchObject([
+      {
+        text: {
+          format: {
+            name: 'website_spec',
+            strict: true,
+            type: 'json_schema',
+          },
+        },
+      },
+      { output_config: { format: { type: 'json_schema' } } },
+      {
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: completionRequest.jsonSchema,
+        },
+      },
+    ]);
   });
 
   it('rejects a truncated Gemini structured response', async () => {

@@ -186,10 +186,11 @@ const copy = {
       'Example: Every weekday, consolidate Excel orders, remove duplicates, and prepare a report for review.',
     promptHelpAsk: 'Ask mode can read selected sources but never runs workflow actions.',
     promptHelpImage: 'Use at least 10 characters. Image requests use your workspace AI allowance.',
-    promptHelpPlan: 'Use at least 12 characters. The plan remains a draft.',
+    promptHelpPlan:
+      'A short phrase is enough. AI fills safe defaults and the plan remains an inactive draft.',
     promptShortAsk: 'Please enter at least 2 characters.',
     promptShortImage: 'Please describe the image in at least 10 characters.',
-    promptShortPlan: 'Please describe the plan in at least 12 characters.',
+    promptShortPlan: 'Enter at least 2 meaningful characters.',
     requestRun: 'Create run request',
     run: 'Run',
     runOpen: 'Open run details',
@@ -271,10 +272,10 @@ const copy = {
     placeholderPlan: '例如：每個工作日整合 Excel 訂單、移除重複資料，再產生一份供我檢查的報表。',
     promptHelpAsk: '詢問模式可讀取已選來源，但絕不執行工作流動作。',
     promptHelpImage: '請至少輸入 10 個字；圖片生成會計入工作區 AI 額度。',
-    promptHelpPlan: '至少輸入 12 個字；產生的計畫仍是草稿。',
+    promptHelpPlan: '輸入短句即可；AI 會補上安全預設，產生的計畫仍是未啟用草稿。',
     promptShortAsk: '請至少輸入 2 個字。',
     promptShortImage: '請至少用 10 個字描述要產生的圖片。',
-    promptShortPlan: '請至少用 12 個字完整描述規劃需求。',
+    promptShortPlan: '請至少輸入 2 個有意義的字元。',
     requestRun: '建立執行要求',
     run: '執行',
     runOpen: '開啟執行詳情',
@@ -850,7 +851,7 @@ export function AssistantWorkspace({
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const requestPrompt = prompt.trim();
-    const minimum = mode === 'ask' ? 2 : mode === 'image' ? 10 : 12;
+    const minimum = mode === 'image' ? 10 : 2;
     if (requestPrompt.length < minimum) {
       setPromptError('short');
       return;

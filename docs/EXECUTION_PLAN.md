@@ -46,6 +46,7 @@ test, and build checks and has been committed.
 | 28    | AI website image generation   | Bounded provider images become private, validated, quota-controlled assets       | completed |
 | 29    | Unified AI workspace          | Exact models, chat images, and confirmed deletion remain quota and Tenant safe   | completed |
 | 30    | Prompt-to-site and publishing | Prompt, follow-up, Canvas, edits, and approved public releases pass all gates    | completed |
+| 31    | Prompt-to-workflow automation | Short prompts create validated, persisted, approval-aware workflow drafts        | completed |
 
 ## Phase 0 — Repository audit
 
@@ -309,3 +310,18 @@ authenticated user's final approval. Customer custom domains, independent
 per-site deployment projects, sitemap indexes, rollback controls, and expanded
 accessibility/link reports continue as follow-on hosting operations after this
 prompt-to-public-route milestone.
+
+## Phase 31 — Prompt-to-workflow automation
+
+Replace the remaining Mock-only workflow composer with real, cost-aware Auto
+routing across configured OpenAI, Claude, and Gemini models. A request as short
+as a few meaningful characters must be accepted; the planner should infer a
+manual trigger and conservative bounded defaults when the user does not provide
+them, while recording every inference as an assumption.
+
+Provider output must remain valid JSON and pass the existing strict Workflow v1
+schema, registered-node, DAG, execution-target, folder-alias, and permission
+validation before it is persisted. A validated plan is automatically saved as a
+Tenant-scoped draft and may be dry-run without writes. Activation, external
+calls, writes, and destructive actions remain separate explicit approvals and
+must never be initiated by model output.

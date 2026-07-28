@@ -170,4 +170,22 @@ describe('AiGateway', () => {
     ).rejects.toMatchObject({ code: 'AI_REQUEST_INVALID' });
     expect(adapter.calls).toBe(0);
   });
+
+  it('accepts a short meaningful workflow phrase and fills safe defaults', async () => {
+    const usage = new InMemoryUsageSink();
+    const result = await new AiGateway(new MockAiAdapter(), usage).plan({
+      context: {
+        allowedFolderAliasIds: [],
+        executionTarget: { type: 'cloud' },
+        locale: 'zh-Hant',
+        timezone: 'Asia/Taipei',
+      },
+      maxRepairAttempts: 1,
+      prompt: '整理訂單',
+    });
+
+    expect(result.output.workflow.trigger).toEqual({ config: {}, type: 'manual.trigger' });
+    expect(result.output.workflow.executionTarget).toEqual({ type: 'cloud' });
+    expect(result.output.assumptions.length).toBeGreaterThan(0);
+  });
 });

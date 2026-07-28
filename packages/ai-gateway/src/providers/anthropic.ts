@@ -190,12 +190,16 @@ export class AnthropicAdapter implements AiProviderAdapter, AiChatAdapter {
         max_tokens: request.maxOutputTokens,
         messages: [{ content: request.userPrompt, role: 'user' }],
         model: this.model,
-        output_config: {
-          format: {
-            schema: request.jsonSchema,
-            type: 'json_schema',
-          },
-        },
+        ...(request.operation === 'website_generation'
+          ? {
+              output_config: {
+                format: {
+                  schema: request.jsonSchema,
+                  type: 'json_schema',
+                },
+              },
+            }
+          : {}),
         system: request.systemPrompt,
       },
       ...(this.fetchTransport === undefined ? {} : { fetchTransport: this.fetchTransport }),

@@ -1,7 +1,8 @@
 'use client';
 
 import { AIPlannerOutputSchema, type Workflow } from '@ai-workflow-studio/workflow-schema';
-import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { useMemo, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 
 import {
@@ -13,78 +14,133 @@ import {
   SparkIcon,
 } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
-import { MOCK_DEVICE_ID, MOCK_FOLDER_ALIAS_ID } from '@/lib/mock-workflows';
+import { AssistantWorkflowDraftCreateResponseSchema } from '@/lib/assistant-execution-schema';
+import type { AssistantExecutionTarget } from '@/lib/assistant-execution-targets';
+import { selectWorkflowPlanningContext } from '@/lib/workflow-planning-context';
 
 import { WorkflowReview } from './workflow-review';
 
 const copy = {
   en: {
-    alias: 'Approved folder alias',
-    context: 'Execution context',
-    contextHelp:
-      'Mock mode never reads a real folder. The local path always remains on the Desktop Agent; this site stores only its alias ID.',
-    create: 'Generate safe preview',
+    alias: 'Approved folder access',
+    autoSaved: 'AI workflow draft created',
+    cloud: 'Secure cloud planner',
+    cloudHelp:
+      'No Desktop Agent is paired. AI will create the safest cloud-compatible draft and will not invent a device, path, or connection.',
+    context: 'Trusted execution context',
+    create: 'Create workflow with AI',
     description:
-      'AI produces only a draft Workflow JSON. It cannot generate or execute code, and it never activates a workflow directly.',
-    device: 'Mock device',
-    draft: 'Generated draft',
+      'A few words are enough. AI fills conservative defaults, validates Workflow JSON, and saves a draft automatically. It never activates or runs the workflow.',
+    device: 'Execution target',
+    draft: 'Validated workflow draft',
     error:
-      'A safe preview is not available right now. No workflow was saved or executed. Please try again.',
-    example:
-      'Consolidate the Excel files in the order folder every day, deduplicate by order number, and create a new summary report.',
-    folder: 'Order import folder',
-    help: 'Include the source, rules, output, and schedule. Refer to sensitive data through approved connections or folder aliases.',
-    minLength:
-      'Describe the source, processing rules, and expected output in at least 12 characters.',
-    planner: 'Mock AI planner',
-    planning: 'Validating…',
-    prompt: 'Natural-language request',
-    saved: 'Draft saved in the mock workspace',
-    savedHelp: 'It has not been activated and no data was written.',
-    title: 'Describe what you want to automate',
+      'AI could not create a validated workflow right now. Nothing was saved or executed. Please try again.',
+    example: 'Organize orders every day and create a summary.',
+    folderCount: (count: number) => `${count} approved folder ${count === 1 ? 'alias' : 'aliases'}`,
+    help: 'Start with a short phrase. Add a source, timing, or output only when you want more control.',
+    minLength: 'Enter at least 2 meaningful characters.',
+    noFolders: 'No local folder access',
+    openWorkflow: 'Open workflow',
+    planner: 'Automatic AI planner',
+    planning: 'Planning, validating, and saving…',
+    prompt: 'What should be automated?',
+    retrySave: 'The plan is valid, but the draft was not saved. Retry saving it below.',
+    savedHelp: 'It remains inactive. No file, service, or external data was changed.',
+    targetHelp:
+      'Only the displayed Agent and folder aliases are shared with the planner. Absolute paths stay on the Desktop Agent.',
+    title: 'Describe the work in a few words',
     useExample: 'Use example',
   },
   'zh-Hant': {
-    alias: '已核准的資料夾別名',
-    context: '執行情境',
-    contextHelp: 'Mock 模式不會讀取真實資料夾。實際路徑永遠留在桌面 Agent，本網站只保存別名 ID。',
-    create: '產生安全預覽',
-    description: 'AI 只會產生 Workflow JSON 草稿；不會產生或執行程式碼，也不會直接啟用流程。',
-    device: 'Mock 裝置',
-    draft: '已產生草稿',
-    error: '目前無法建立安全預覽，請稍後重試。沒有任何工作流被儲存或執行。',
-    example: '每天整理訂單資料夾裡的 Excel，依訂單編號去重，並建立一份新的彙整報表。',
-    folder: '訂單匯入資料夾',
-    help: '建議包含來源、規則、輸出與執行時間；敏感資料請使用已設定的連線或資料夾別名。',
-    minLength: '請至少用 12 個字描述資料來源、處理方式與預期輸出。',
-    planner: 'Mock AI 規劃器',
-    planning: '正在驗證…',
-    prompt: '自然語言需求',
-    saved: '草稿已儲存於 Mock 工作區',
-    savedHelp: '尚未啟用，也未執行任何資料寫入。',
-    title: '描述你想自動化的工作',
-    useExample: '使用範例需求',
+    alias: '已核准的資料夾權限',
+    autoSaved: 'AI 工作流草稿已建立',
+    cloud: '安全雲端規劃',
+    cloudHelp: '尚未配對桌面 Agent。AI 只會建立雲端可用的安全草稿，不會虛構裝置、路徑或連線。',
+    context: '可信任的執行情境',
+    create: '由 AI 建立工作流',
+    description:
+      '只要幾個字即可。AI 會補上保守預設、驗證 Workflow JSON，並自動儲存草稿；不會直接啟用或執行。',
+    device: '執行目標',
+    draft: '已驗證的工作流草稿',
+    error: 'AI 目前無法建立通過驗證的工作流；沒有儲存或執行任何內容，請稍後再試。',
+    example: '每天整理訂單並建立摘要',
+    folderCount: (count: number) => `${count} 個已核准資料夾別名`,
+    help: '先輸入短句即可；若想更精準，再補上來源、時間或輸出方式。',
+    minLength: '請至少輸入 2 個有意義的字元。',
+    noFolders: '沒有本機資料夾權限',
+    openWorkflow: '開啟工作流',
+    planner: 'AI 自動規劃器',
+    planning: 'AI 正在規劃、驗證並儲存…',
+    prompt: '想自動處理什麼？',
+    retrySave: '規劃已通過驗證，但草稿尚未儲存；請在下方重新儲存。',
+    savedHelp: '目前仍未啟用，沒有變更任何檔案、服務或外部資料。',
+    targetHelp: '規劃器只能看見畫面所列的 Agent 與資料夾別名；實際路徑仍只保存在桌面 Agent。',
+    title: '用幾個字描述想自動化的工作',
+    useExample: '使用範例',
   },
 } as const;
+
 const PlannerApiResponseSchema = z
   .object({
+    assistantMessage: z.object({ id: z.string().uuid() }).passthrough(),
+    conversationId: z.string().uuid(),
     output: AIPlannerOutputSchema,
   })
   .passthrough();
 
-export function WorkflowComposer() {
+interface PlanReference {
+  readonly conversationId: string;
+  readonly messageId: string;
+}
+
+type DraftStatus =
+  | { readonly status: 'idle' }
+  | { readonly status: 'saving' }
+  | { readonly status: 'failed' }
+  | { readonly status: 'saved'; readonly workflowId: string };
+
+export function WorkflowComposer({
+  executionTargets,
+}: Readonly<{
+  executionTargets: readonly AssistantExecutionTarget[];
+}>) {
   const { locale } = useLanguage();
   const text = copy[locale];
+  const planningContext = useMemo(
+    () => selectWorkflowPlanningContext(executionTargets),
+    [executionTargets],
+  );
   const [prompt, setPrompt] = useState('');
   const [promptError, setPromptError] = useState<'invalid' | 'unavailable'>();
   const [workflow, setWorkflow] = useState<Workflow>();
+  const [planReference, setPlanReference] = useState<PlanReference>();
   const [planning, setPlanning] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [draft, setDraft] = useState<DraftStatus>({ status: 'idle' });
+
+  async function saveDraft(reference: PlanReference): Promise<void> {
+    setDraft({ status: 'saving' });
+    try {
+      const response = await fetch('/api/ai/workflow-drafts', {
+        body: JSON.stringify(reference),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const parsed = AssistantWorkflowDraftCreateResponseSchema.safeParse(await response.json());
+      if (!response.ok || !parsed.success) {
+        throw new Error('Workflow draft creation failed');
+      }
+      setDraft({ status: 'saved', workflowId: parsed.data.draft.workflowId });
+    } catch {
+      setDraft({ status: 'failed' });
+    }
+  }
 
   async function createPreview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaved(false);
-    if (prompt.trim().length < 12) {
+    const requestPrompt = prompt.trim();
+    setDraft({ status: 'idle' });
+    setPlanReference(undefined);
+    if (requestPrompt.length < 2) {
       setWorkflow(undefined);
       setPromptError('invalid');
       return;
@@ -95,28 +151,30 @@ export function WorkflowComposer() {
       const response = await fetch('/api/ai/plan', {
         body: JSON.stringify({
           context: {
-            allowedFolderAliasIds: [MOCK_FOLDER_ALIAS_ID],
-            executionTarget: {
-              deviceId: MOCK_DEVICE_ID,
-              type: 'desktop',
-            },
+            allowedFolderAliasIds: planningContext.allowedFolderAliasIds,
+            executionTarget: planningContext.executionTarget,
             locale,
             timezone: 'Asia/Taipei',
           },
-          maxRepairAttempts: 1,
-          prompt,
-          provider: 'mock',
+          maxRepairAttempts: 2,
+          prompt: requestPrompt,
+          provider: 'auto',
+          tier: 'auto',
         }),
-        headers: {
-          'content-type': 'application/json',
-        },
+        headers: { 'content-type': 'application/json' },
         method: 'POST',
       });
       const parsed = PlannerApiResponseSchema.safeParse(await response.json());
       if (!response.ok || !parsed.success) {
         throw new Error('Invalid planning response');
       }
+      const reference = {
+        conversationId: parsed.data.conversationId,
+        messageId: parsed.data.assistantMessage.id,
+      };
       setWorkflow(parsed.data.output.workflow);
+      setPlanReference(reference);
+      await saveDraft(reference);
     } catch {
       setWorkflow(undefined);
       setPromptError('unavailable');
@@ -124,6 +182,9 @@ export function WorkflowComposer() {
       setPlanning(false);
     }
   }
+
+  const selectedTarget = planningContext.selectedTarget;
+  const folderCount = selectedTarget?.folderAliases.length ?? 0;
 
   return (
     <div>
@@ -168,7 +229,7 @@ export function WorkflowComposer() {
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60"
                 disabled={planning}
                 type="submit"
               >
@@ -198,7 +259,9 @@ export function WorkflowComposer() {
                   </span>
                   <div>
                     <p className="text-xs text-slate-400">{text.device}</p>
-                    <p className="mt-0.5 text-sm font-semibold">Erin’s MacBook Air</p>
+                    <p className="mt-0.5 text-sm font-semibold">
+                      {selectedTarget?.deviceName ?? text.cloud}
+                    </p>
                   </div>
                   <CheckIcon className="ml-auto size-4 text-emerald-300" />
                 </div>
@@ -210,14 +273,16 @@ export function WorkflowComposer() {
                   </span>
                   <div>
                     <p className="text-xs text-slate-400">{text.alias}</p>
-                    <p className="mt-0.5 text-sm font-semibold">{text.folder}</p>
+                    <p className="mt-0.5 text-sm font-semibold">
+                      {folderCount > 0 ? text.folderCount(folderCount) : text.noFolders}
+                    </p>
                   </div>
-                  <CheckIcon className="ml-auto size-4 text-emerald-300" />
+                  {folderCount > 0 && <CheckIcon className="ml-auto size-4 text-emerald-300" />}
                 </div>
               </div>
             </div>
             <p className="mt-5 border-t border-white/10 pt-4 text-xs leading-5 text-slate-400">
-              {text.contextHelp}
+              {selectedTarget === undefined ? text.cloudHelp : text.targetHelp}
             </p>
           </aside>
         </div>
@@ -233,12 +298,27 @@ export function WorkflowComposer() {
               {workflow.name}
             </h2>
             <p className="mt-1 text-sm text-slate-600">{workflow.description}</p>
+            {draft.status === 'failed' && (
+              <p className="mt-3 text-sm font-medium text-amber-800" role="alert">
+                {text.retrySave}
+              </p>
+            )}
           </div>
-          <WorkflowReview onSaveDraft={() => setSaved(true)} workflow={workflow} />
+          <WorkflowReview
+            executionContext={{
+              folderAliases: selectedTarget?.folderAliases ?? [],
+              targetName: selectedTarget?.deviceName ?? text.cloud,
+            }}
+            {...(draft.status === 'failed' && planReference !== undefined
+              ? { onSaveDraft: () => saveDraft(planReference) }
+              : {})}
+            savingDraft={draft.status === 'saving'}
+            workflow={workflow}
+          />
         </section>
       )}
 
-      {saved && (
+      {draft.status === 'saved' && (
         <div
           aria-live="polite"
           className="fixed bottom-5 right-5 z-50 flex max-w-sm items-center gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-sm text-white shadow-2xl"
@@ -247,8 +327,14 @@ export function WorkflowComposer() {
             <CheckIcon className="size-4" />
           </span>
           <div>
-            <p className="font-semibold">{text.saved}</p>
+            <p className="font-semibold">{text.autoSaved}</p>
             <p className="mt-0.5 text-xs text-slate-400">{text.savedHelp}</p>
+            <Link
+              className="mt-1 inline-flex text-xs font-semibold text-indigo-300 hover:text-indigo-200"
+              href={`/dashboard/workflows/${encodeURIComponent(draft.workflowId)}`}
+            >
+              {text.openWorkflow} →
+            </Link>
           </div>
         </div>
       )}

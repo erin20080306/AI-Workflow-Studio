@@ -49,25 +49,29 @@ const copy = {
     execution: 'Execution',
     inspector: 'Node inspector',
     nodeSummary: (nodes: number, edges: number) => `${nodes} nodes · ${edges} connections`,
-    overwrite: 'Overwrite existing file · No',
+    accessDestructive: (count: number) => `Destructive · ${count} nodes`,
+    accessExternal: (count: number) => `External service · ${count} nodes`,
+    accessRead: (count: number) => `Read · ${count} nodes`,
+    accessWrite: (count: number) => `Write · ${count} nodes`,
     permissions: 'Permission summary',
-    permissionsHelp:
-      'Can access only the “Order import folder” alias. The workflow never receives an absolute path.',
+    permissionsHelp: (count: number) =>
+      count === 0
+        ? 'No local folder alias is shared with this workflow.'
+        : `Can access only ${count} approved folder ${count === 1 ? 'alias' : 'aliases'}. Absolute paths never leave the Desktop Agent.`,
     planned: (planned: number, total: number) => `${planned} / ${total} steps planned`,
     planning: 'Planning…',
-    read: 'Read · Up to 50 MB / 100,000 rows / 20 sheets',
     readWrite: 'Expected data access',
     risk: 'Risk',
     riskApproval: 'Risk and approval',
     riskHelp:
-      'AI can create drafts only. A user must approve report writes before the first live run.',
+      'AI creates an inactive draft only. Writes, external calls, and destructive actions keep their required approval.',
     safetyPassed: 'Safety check passed',
     safetySettings: 'Safety settings',
     saveDraft: 'Save draft',
+    savingDraft: 'Saving…',
     selectNode: 'Select a node to inspect its settings.',
     validationErrors: 'Validation errors',
     validationRequired: 'Validation issues need attention',
-    write: 'Write · New file “Daily order summary.xlsx”',
     writeNodes: (count: number) => `${count} write nodes`,
   },
   'zh-Hant': {
@@ -78,23 +82,28 @@ const copy = {
     execution: '執行位置',
     inspector: '節點檢視器',
     nodeSummary: (nodes: number, edges: number) => `${nodes} 個節點 · ${edges} 條連線`,
-    overwrite: '覆寫既有檔案 · 否',
+    accessDestructive: (count: number) => `破壞性 · ${count} 個節點`,
+    accessExternal: (count: number) => `外部服務 · ${count} 個節點`,
+    accessRead: (count: number) => `讀取 · ${count} 個節點`,
+    accessWrite: (count: number) => `寫入 · ${count} 個節點`,
     permissions: '權限摘要',
-    permissionsHelp: '僅能讀寫「訂單匯入資料夾」別名；流程不會收到實際絕對路徑。',
+    permissionsHelp: (count: number) =>
+      count === 0
+        ? '此工作流沒有取得任何本機資料夾別名。'
+        : `只能使用 ${count} 個已核准資料夾別名；實際絕對路徑不會離開桌面 Agent。`,
     planned: (planned: number, total: number) => `${planned} / ${total} 個步驟已規劃`,
     planning: '規劃中…',
-    read: '讀取 · 最多 50 MB / 100,000 列 / 20 個工作表',
     readWrite: '預計讀寫資料',
     risk: '風險',
     riskApproval: '風險與核准',
-    riskHelp: 'AI 只能建立草稿。首次正式執行前必須由使用者核准報表寫入。',
+    riskHelp: 'AI 只建立未啟用草稿；寫入、外部呼叫與破壞性動作仍保留必要核准。',
     safetyPassed: '安全檢查通過',
     safetySettings: '安全設定',
     saveDraft: '儲存草稿',
+    savingDraft: '儲存中…',
     selectNode: '選取節點以檢查設定。',
     validationErrors: '驗證錯誤',
     validationRequired: '需要修正驗證問題',
-    write: '寫入 · 新檔「每日訂單彙整.xlsx」',
     writeNodes: (count: number) => `${count} 個寫入節點`,
   },
 } as const;
@@ -117,10 +126,17 @@ function formatConfigValue(value: unknown, locale: 'en' | 'zh-Hant'): string {
 }
 
 export function WorkflowReview({
+  executionContext,
   onSaveDraft,
+  savingDraft = false,
   workflow,
 }: Readonly<{
-  onSaveDraft?: () => void;
+  executionContext?: {
+    readonly folderAliases: readonly { readonly displayName: string }[];
+    readonly targetName: string;
+  };
+  onSaveDraft?: () => Promise<void> | void;
+  savingDraft?: boolean;
   workflow: Workflow;
 }>) {
   const { locale } = useLanguage();
@@ -201,11 +217,12 @@ export function WorkflowReview({
           {onSaveDraft !== undefined && (
             <button
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-              onClick={onSaveDraft}
+              disabled={savingDraft}
+              onClick={() => void onSaveDraft()}
               type="button"
             >
               <SaveIcon className="size-4" />
-              {text.saveDraft}
+              {savingDraft ? text.savingDraft : text.saveDraft}
             </button>
           )}
         </div>
@@ -309,16 +326,22 @@ export function WorkflowReview({
             <ShieldIcon className="size-4" />
             <h2 className="text-sm font-semibold">{text.permissions}</h2>
           </div>
-          <p className="mt-4 text-sm font-semibold text-slate-950">Erin’s MacBook Air</p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">{text.permissionsHelp}</p>
+          <p className="mt-4 text-sm font-semibold text-slate-950">
+            {executionContext?.targetName ??
+              (workflow.executionTarget.type === 'cloud' ? 'Cloud' : 'Desktop Agent')}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            {text.permissionsHelp(executionContext?.folderAliases.length ?? 0)}
+          </p>
         </article>
 
         <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-950">{text.readWrite}</h2>
           <div className="mt-4 space-y-2 text-xs text-slate-600">
-            <p>{text.read}</p>
-            <p>{text.write}</p>
-            <p>{text.overwrite}</p>
+            <p>{text.accessRead(inspection.risk.read.length)}</p>
+            <p>{text.accessWrite(inspection.risk.write.length)}</p>
+            <p>{text.accessExternal(inspection.risk.external.length)}</p>
+            <p>{text.accessDestructive(inspection.risk.destructive.length)}</p>
           </div>
         </article>
 

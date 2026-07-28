@@ -4,12 +4,17 @@ import Link from 'next/link';
 import { ChevronRightIcon } from '@/components/icons';
 import { LocalizedText } from '@/components/language-provider';
 import { WorkflowComposer } from '@/components/workflows/workflow-composer';
+import { listAssistantExecutionTargets } from '@/lib/assistant-execution-targets';
+import { requireWorkspaceContext } from '@/lib/auth/context';
 
 export const metadata: Metadata = {
   title: '新建工作流',
 };
 
-export default function NewWorkflowPage() {
+export default async function NewWorkflowPage() {
+  const context = await requireWorkspaceContext();
+  const executionTargets = await listAssistantExecutionTargets(context);
+
   return (
     <div className="mx-auto max-w-[1440px]">
       <nav
@@ -24,7 +29,7 @@ export default function NewWorkflowPage() {
           <LocalizedText en="New" zhHant="新建" />
         </span>
       </nav>
-      <WorkflowComposer />
+      <WorkflowComposer executionTargets={executionTargets} />
     </div>
   );
 }

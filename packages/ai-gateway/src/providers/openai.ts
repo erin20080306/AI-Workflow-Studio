@@ -162,6 +162,15 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
   }
 
   async complete(request: ProviderCompletionRequest): Promise<ProviderCompletion> {
+    const format =
+      request.operation === 'workflow_plan'
+        ? { type: 'json_object' as const }
+        : {
+            name: request.schemaName,
+            schema: request.jsonSchema,
+            strict: true,
+            type: 'json_schema' as const,
+          };
     const raw = await postJson({
       body: {
         input: request.userPrompt,
@@ -171,12 +180,7 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
         reasoning: { effort: this.reasoningEffort },
         store: false,
         text: {
-          format: {
-            name: request.schemaName,
-            schema: request.jsonSchema,
-            strict: true,
-            type: 'json_schema',
-          },
+          format,
         },
       },
       ...(this.fetchTransport === undefined ? {} : { fetchTransport: this.fetchTransport }),
