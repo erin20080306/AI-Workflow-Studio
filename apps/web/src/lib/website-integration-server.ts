@@ -16,6 +16,7 @@ import {
   type WebsiteIntegrationPlan,
   type WebsiteIntegrationPlanInput,
 } from '@/lib/website-integration-guidance';
+import { canManageWebsiteIntegrations } from '@/lib/website-static-export-access';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
 const WebsiteIntegrationPlanRowSchema = z.object({
@@ -40,10 +41,10 @@ function memoryKey(context: WorkspaceContext, projectId: string, kind: string): 
 }
 
 function assertIntegrationAccess(context: WorkspaceContext): void {
-  if (!['owner', 'admin'].includes(context.actor.role)) {
+  if (!canManageWebsiteIntegrations(context)) {
     throw new WebsiteStudioError(
       'WEBSITE_FORBIDDEN',
-      'Only workspace owners and administrators may manage website integrations.',
+      'Website integrations require an active paid subscription and an owner or administrator role.',
     );
   }
 }

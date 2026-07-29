@@ -102,6 +102,9 @@ const copy = {
       'A polished editorial workspace with soft natural light, deep navy and mint accents, no text or watermark.',
     imageTitle: 'AI website image',
     imageTier: 'Image quality and cost level',
+    integrationsPaid:
+      'Payment, contact, analytics, and external API implementation guidance requires an active paid subscription and a workspace owner or administrator.',
+    integrationsTitle: 'Guided website integrations',
     moveDown: 'Move down',
     moveUp: 'Move up',
     page: 'Page',
@@ -160,6 +163,9 @@ const copy = {
       '具專業編輯風格的工作空間，柔和自然光、深海軍藍與薄荷綠點綴，不含文字與浮水印。',
     imageTitle: 'AI 網站圖片',
     imageTier: '圖片品質與成本等級',
+    integrationsPaid:
+      '付款、聯絡表單、網站分析與外部 API 實作引導，需有效付費訂閱並由工作區 Owner 或 Admin 管理。',
+    integrationsTitle: '網站串接實作引導',
     moveDown: '向下移動',
     moveUp: '向上移動',
     page: '頁面',
@@ -203,6 +209,7 @@ function sectionFieldValue(section: WebsiteSection | undefined, field: EditableF
 
 export function WebsiteSpecEditor({
   canExportWebsite,
+  canManageIntegrations,
   canPublishGithub,
   githubState,
   initialGeneration,
@@ -214,6 +221,7 @@ export function WebsiteSpecEditor({
   tierOptions,
 }: Readonly<{
   canExportWebsite: boolean;
+  canManageIntegrations: boolean;
   canPublishGithub: boolean;
   githubState: WebsiteGithubState;
   initialGeneration: WebsiteSpecClientGeneration;
@@ -830,7 +838,14 @@ export function WebsiteSpecEditor({
         suggestedSiteSlug={suggestedSiteSlug}
         versions={versions}
       />
-      <WebsiteIntegrationsPanel projectId={projectId} />
+      {canManageIntegrations ? (
+        <WebsiteIntegrationsPanel projectId={projectId} />
+      ) : (
+        <section className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <h3 className="text-base font-semibold text-slate-950">{text.integrationsTitle}</h3>
+          <p className="mt-2 max-w-3xl text-xs leading-6 text-slate-600">{text.integrationsPaid}</p>
+        </section>
+      )}
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_1.2fr]">
         <article className="rounded-2xl border border-slate-200 p-4 sm:p-5">

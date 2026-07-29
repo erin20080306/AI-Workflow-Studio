@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canDownloadWebsiteExport,
+  canManageWebsiteIntegrations,
   canPublishWebsiteToGithub,
 } from './website-static-export-access';
 
@@ -81,5 +82,50 @@ describe('GitHub website publishing entitlement', () => {
         subscription: { plan: 'free', status: 'active' },
       }),
     ).toBe(false);
+  });
+});
+
+describe('website delivery role matrix', () => {
+  const sessions = {
+    freeOwner: {
+      actor: { role: 'owner' as const },
+      platformAdmin: false,
+      subscription: { plan: 'free' as const, status: 'active' as const },
+    },
+    paidEditor: {
+      actor: { role: 'editor' as const },
+      platformAdmin: false,
+      subscription: { plan: 'pro' as const, status: 'active' as const },
+    },
+    paidWorkspaceAdmin: {
+      actor: { role: 'admin' as const },
+      platformAdmin: false,
+      subscription: { plan: 'team' as const, status: 'active' as const },
+    },
+    platformAdmin: {
+      actor: { role: 'owner' as const },
+      platformAdmin: true,
+      subscription: { plan: 'free' as const, status: 'active' as const },
+    },
+  };
+
+  it('keeps Free website creation separate from paid source and integration delivery', () => {
+    expect(canDownloadWebsiteExport(sessions.freeOwner)).toBe(false);
+    expect(canPublishWebsiteToGithub(sessions.freeOwner)).toBe(false);
+    expect(canManageWebsiteIntegrations(sessions.freeOwner)).toBe(false);
+  });
+
+  it('lets a paid member download without granting administrator external writes', () => {
+    expect(canDownloadWebsiteExport(sessions.paidEditor)).toBe(true);
+    expect(canPublishWebsiteToGithub(sessions.paidEditor)).toBe(false);
+    expect(canManageWebsiteIntegrations(sessions.paidEditor)).toBe(false);
+  });
+
+  it('allows paid workspace administrators and platform support administrators', () => {
+    for (const session of [sessions.paidWorkspaceAdmin, sessions.platformAdmin]) {
+      expect(canDownloadWebsiteExport(session)).toBe(true);
+      expect(canPublishWebsiteToGithub(session)).toBe(true);
+      expect(canManageWebsiteIntegrations(session)).toBe(true);
+    }
   });
 });

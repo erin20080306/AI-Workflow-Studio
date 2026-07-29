@@ -17,3 +17,11 @@ export function canPublishWebsiteToGithub(
 ): boolean {
   return ['owner', 'admin'].includes(context.actor.role) && canDownloadWebsiteExport(context);
 }
+
+export function canManageWebsiteIntegrations(
+  context: WebsiteExportAccessContext & {
+    readonly actor: { readonly role: 'admin' | 'editor' | 'owner' | 'viewer' };
+  },
+): boolean {
+  return ['owner', 'admin'].includes(context.actor.role) && canDownloadWebsiteExport(context);
+}

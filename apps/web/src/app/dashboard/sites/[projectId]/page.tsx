@@ -19,6 +19,7 @@ import {
 } from '@/lib/website-spec-server';
 import {
   canDownloadWebsiteExport,
+  canManageWebsiteIntegrations,
   canPublishWebsiteToGithub,
 } from '@/lib/website-static-export-access';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
@@ -54,6 +55,7 @@ export default async function WebsiteBriefPage({
     return (
       <WebsiteBriefWorkspace
         canExportWebsite={canDownloadWebsiteExport(context)}
+        canManageIntegrations={canManageWebsiteIntegrations(context)}
         canPublishGithub={canPublishGithub}
         githubState={githubState}
         initialGeneration={generation === undefined ? undefined : websiteSpecClientView(generation)}

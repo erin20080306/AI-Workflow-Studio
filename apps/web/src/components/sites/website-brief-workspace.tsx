@@ -210,6 +210,7 @@ function updatePageField(
 
 export function WebsiteBriefWorkspace({
   canExportWebsite,
+  canManageIntegrations,
   canPublishGithub,
   githubState,
   initialGeneration,
@@ -221,6 +222,7 @@ export function WebsiteBriefWorkspace({
   tierOptions,
 }: Readonly<{
   canExportWebsite: boolean;
+  canManageIntegrations: boolean;
   canPublishGithub: boolean;
   githubState: WebsiteGithubState;
   initialGeneration: WebsiteSpecClientGeneration | undefined;
@@ -887,6 +889,7 @@ export function WebsiteBriefWorkspace({
         <div className="mt-5">
           <WebsiteSpecGenerator
             canExportWebsite={canExportWebsite}
+            canManageIntegrations={canManageIntegrations}
             canPublishGithub={canPublishGithub}
             githubState={githubState}
             initialGeneration={generation}
