@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { WebsiteAdminDashboard } from '@/components/sites/website-admin-dashboard';
 import { requireWorkspaceContext } from '@/lib/auth/context';
+import { getWebsiteSiteAccessDashboard } from '@/lib/website-access-server';
 import { getWebsiteAdminDashboard } from '@/lib/website-admin-server';
 import { getActiveWebsitePublication } from '@/lib/website-publication-server';
 import { websiteSiteUrl } from '@/lib/website-site-host';
@@ -26,7 +27,8 @@ export default async function WebsiteAdminPage({
   const context = await requireWorkspaceContext();
   try {
     const project = await getWebsiteProject(context, parsed.data.projectId);
-    const [dashboard, generation, publication] = await Promise.all([
+    const [access, dashboard, generation, publication] = await Promise.all([
+      getWebsiteSiteAccessDashboard(context, project.id),
       getWebsiteAdminDashboard(context, project.id),
       getWebsiteSpecGeneration(context, project.id),
       getActiveWebsitePublication(context, project.id),
@@ -34,6 +36,8 @@ export default async function WebsiteAdminPage({
     return (
       <WebsiteAdminDashboard
         canManage={context.actor.role !== 'viewer'}
+        canManageAccess={context.actor.role === 'owner' || context.actor.role === 'admin'}
+        initialAccess={access}
         initialDashboard={dashboard}
         pages={generation?.spec.pages.map((page) => ({ slug: page.slug, title: page.title })) ?? []}
         projectId={project.id}

@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 42 — Full-stack website admin (completed)
+Phase 43 — Site users and access (completed)
 
 ## Repository baseline
 
@@ -3253,3 +3253,68 @@ Status: completed
 - Contact anti-abuse controls are intentionally conservative and do not replace
   a future provider-level bot or abuse service for high-volume public sites.
 - Phase 42 has not been pushed or deployed to Production in this phase.
+
+## Phase 43 — Site users and access
+
+Status: completed
+
+### Implemented
+
+- Kept every published customer site on the existing platform-hosted URL model:
+  the stable `/s/{siteSlug}` compatibility path and customer-selected
+  `{name}.sites.erin-aiworkflowstudio.com` wildcard subdomain continue to serve
+  the same reviewed Website Spec release.
+- Added opt-in public registration, password login, logout, and a bilingual
+  member account screen. Site identities use Supabase Auth in production but
+  receive no AI Workflow Studio workspace membership or workspace permissions.
+- Added distinct per-site `member`, `staff`, and `manager` roles plus active and
+  suspended states. Each published page can remain public or require a reviewed
+  minimum role; role hierarchy and suspension are enforced server-side before
+  rendering any CMS content.
+- Added a project-scoped Website Admin access panel with conservative
+  deterministic suggestions, a complete per-page access matrix, explicit owner
+  or workspace-administrator confirmation, registration control, member role
+  management, and immediate suspension.
+- Added atomic access-matrix persistence, site membership records, RLS,
+  service-only writes, updated timestamps, audit events, foreign keys, bounded
+  indexes, and a 5,000-member per-site safety limit.
+- Added email-confirmation handling that returns confirmed site users to their
+  site account without creating a platform workspace. Authentication pages use
+  no client script, are not indexed or cached, and allow form submission only to
+  the exact current platform or customer subdomain origin.
+- Added the member account link to published navigation while preserving
+  multi-page rendering, CMS content, contact forms, Canvas previews, versioned
+  publishing, and the existing platform-subdomain workflow.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 252 tests across 58 files
+- `pnpm db:test`: passed — all migrations applied to a fresh database; site
+  access RLS, cross-Tenant isolation, workspace/site membership separation,
+  service-only mutation, reviewed-matrix persistence, and audit assertions
+  passed
+- `pnpm build:web`: passed — 47 application pages and all site identity,
+  confirmation, access-administration, and protected public-site routes compiled
+  successfully. The sandboxed Turbopack attempt could not bind its worker port;
+  the identical permitted retry passed.
+- `pnpm security:scan-client`: passed — 35 generated client files scanned
+- `pnpm test:e2e e2e/website-studio.spec.ts`: passed — 2 Chromium tests covered
+  prompt-to-site, Canvas, versioned platform publishing, CMS, contact inbox,
+  reviewed page protection, cross-origin authentication rejection, new site
+  registration, protected content access, member suspension, paid delivery, and
+  GitHub/integration guidance
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- Phase 43 adds the safe identity and access foundation, not the entire Codex
+  Sites feature set. Schema-driven site collections and bounded actions remain
+  Phase 44; private files and site analytics remain Phase 45; combined
+  multi-role production acceptance remains Phase 46.
+- Site registration is disabled by default. AI suggestions never activate
+  protection until an owner or workspace administrator reviews every current
+  page and explicitly saves the complete matrix.
+- Phase 43 has not been pushed or deployed to Production in this phase.

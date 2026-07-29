@@ -58,7 +58,7 @@ test, and build checks and has been committed.
 | 40    | Guided site integrations      | Allowlisted payment/API modules guide setup without exposing credentials          | completed |
 | 41    | Website delivery acceptance   | Free/paid gates, pages, domains, ZIP, GitHub, and integrations pass end to end    | completed |
 | 42    | Full-stack website admin      | Safe CMS content and public form submissions work through a Tenant-safe backend   | completed |
-| 43    | Site users and access         | Generated sites can use allowlisted identity, roles, and protected portal pages   | pending   |
+| 43    | Site users and access         | Generated sites can use allowlisted identity, roles, and protected portal pages   | completed |
 | 44    | Site data and actions         | Validated collections, forms, workflows, and server actions remain schema-bound   | pending   |
 | 45    | Site files and analytics      | Private media, delivery metrics, and site settings remain quota and Tenant safe   | pending   |
 | 46    | Full-stack site acceptance    | AI-built public and admin experiences pass role, data, file, and action E2E gates | pending   |
@@ -524,6 +524,8 @@ pretend that unimplemented authentication, payment, file, or custom-database
 modules are live.
 
 ## Phase 43 — Site users and access
+
+Status: completed
 
 Add opt-in identity modules for sites that need registration, login, member
 profiles, protected portal pages, and project-defined roles. AI may select only

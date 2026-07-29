@@ -20,7 +20,8 @@ grant execute on function tests.assert_true(boolean, text) to authenticated, ser
 insert into auth.users (id, email)
 values
   ('e1000000-0000-4000-8000-000000000001', 'website-owner-a@example.invalid'),
-  ('e1000000-0000-4000-8000-000000000002', 'website-owner-b@example.invalid');
+  ('e1000000-0000-4000-8000-000000000002', 'website-owner-b@example.invalid'),
+  ('e1000000-0000-4000-8000-000000000003', 'website-member@example.invalid');
 
 insert into public.tenants (id, name, slug, owner_user_id)
 values
@@ -773,6 +774,89 @@ select tests.assert_true(
   'an exact website version GitHub push must remain metadata-auditable'
 );
 
+select public.replace_website_site_access(
+  'e2000000-0000-4000-8000-000000000001',
+  'e3000000-0000-4000-8000-000000000001',
+  'e1000000-0000-4000-8000-000000000001',
+  true,
+  '[{"pageSlug":"member-portal","requiredRole":"member"}]',
+  'website-owner-a@example.invalid',
+  'Website Owner A'
+);
+
+select public.replace_website_site_access(
+  'e2000000-0000-4000-8000-000000000002',
+  'e3000000-0000-4000-8000-000000000002',
+  'e1000000-0000-4000-8000-000000000002',
+  false,
+  '[{"pageSlug":"staff-portal","requiredRole":"staff"}]',
+  'website-owner-b@example.invalid',
+  'Website Owner B'
+);
+
+insert into public.website_site_memberships (
+  tenant_id,
+  project_id,
+  user_id,
+  email,
+  display_name,
+  role,
+  status,
+  created_by,
+  updated_by
+)
+values (
+  'e2000000-0000-4000-8000-000000000001',
+  'e3000000-0000-4000-8000-000000000001',
+  'e1000000-0000-4000-8000-000000000003',
+  'website-member@example.invalid',
+  'Website member',
+  'member',
+  'active',
+  'e1000000-0000-4000-8000-000000000003',
+  'e1000000-0000-4000-8000-000000000003'
+);
+
+select tests.assert_true(
+  (
+    select registration_enabled
+    from public.website_site_access_configs
+    where project_id = 'e3000000-0000-4000-8000-000000000001'
+  ),
+  'an owner-reviewed site may explicitly enable public registration'
+);
+
+select tests.assert_true(
+  (
+    select count(*) = 1
+      and max(required_role::text) = 'member'
+    from public.website_site_page_access
+    where project_id = 'e3000000-0000-4000-8000-000000000001'
+  ),
+  'the reviewed protected-page matrix must persist only allowlisted roles'
+);
+
+select tests.assert_true(
+  (
+    select count(*) = 1
+      and max(role::text) = 'manager'
+    from public.website_site_memberships
+    where project_id = 'e3000000-0000-4000-8000-000000000001'
+      and user_id = 'e1000000-0000-4000-8000-000000000001'
+  ),
+  'the workspace owner must receive a distinct per-site manager membership'
+);
+
+select tests.assert_true(
+  exists (
+    select 1
+    from public.audit_logs
+    where action = 'website_access.reviewed'
+      and correlation_id = 'e3000000-0000-4000-8000-000000000001'
+  ),
+  'reviewing site access must create an auditable metadata-only event'
+);
+
 reset role;
 set local role authenticated;
 select set_config(
@@ -803,6 +887,50 @@ select tests.assert_true(
   and not has_table_privilege('authenticated', 'public.website_github_publications', 'select')
   and not has_table_privilege('authenticated', 'public.website_github_publications', 'insert'),
   'GitHub installation and push metadata must remain server-only'
+);
+
+select tests.assert_true(
+  (
+    select count(*) = 1
+      and bool_and(tenant_id = 'e2000000-0000-4000-8000-000000000001')
+    from public.website_site_access_configs
+  ),
+  'a workspace member must only read site access configuration from their tenant'
+);
+
+select tests.assert_true(
+  (
+    select count(*) = 2
+      and bool_and(tenant_id = 'e2000000-0000-4000-8000-000000000001')
+    from public.website_site_memberships
+  ),
+  'workspace membership and site membership must remain separate tenant-scoped records'
+);
+
+select tests.assert_true(
+  not has_table_privilege('authenticated', 'public.website_site_access_configs', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_site_page_access', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_site_memberships', 'insert')
+  and not has_function_privilege(
+    'authenticated',
+    'public.replace_website_site_access(uuid,uuid,uuid,boolean,jsonb,text,text)',
+    'execute'
+  ),
+  'site role and protected-page mutations must remain behind authenticated server routes'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  'e1000000-0000-4000-8000-000000000003',
+  true
+);
+
+select tests.assert_true(
+  (
+    select count(*) = 0
+    from public.website_site_memberships
+  ),
+  'a site member must not receive workspace-level access to site member administration'
 );
 
 reset role;

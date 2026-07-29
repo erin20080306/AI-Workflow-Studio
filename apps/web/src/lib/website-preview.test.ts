@@ -103,11 +103,16 @@ describe('website preview', () => {
           updatedAt: '2026-07-29T00:00:00.000Z',
         },
       ],
+      {
+        href: '/api/public-sites/product-site-a1000000/auth?pageSlug=home',
+        label: 'Member sign in',
+      },
     );
     expect(html).toContain('content="index,follow"');
     expect(html).toContain('href="/s/product-site-a1000000/home"');
     expect(html).toContain('Latest news');
     expect(html).toContain('action="/api/public-sites/product-site-a1000000/contact"');
+    expect(html).toContain('href="/api/public-sites/product-site-a1000000/auth?pageSlug=home"');
     expect(html).toContain('<form');
     expect(html).not.toContain('<script');
     expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("script-src 'none'");

@@ -2,6 +2,11 @@ import { z } from 'zod';
 
 import { WEBSITE_PUBLIC_HEADERS } from '@/lib/website-preview-contract';
 import { renderWebsitePublishedDocument } from '@/lib/website-preview-renderer';
+import {
+  renderWebsiteAccessDeniedDocument,
+  websiteAccessHeaders,
+} from '@/lib/website-access-documents';
+import { getWebsitePageAccessState } from '@/lib/website-access-server';
 import { listPublishedWebsiteContent } from '@/lib/website-admin-server';
 import { getPublishedWebsiteBySlug } from '@/lib/website-publication-server';
 import { WEBSITE_SITE_HOST_HEADER } from '@/lib/website-site-host';
@@ -52,6 +57,28 @@ export async function GET(
           `/api/public-sites/${website.publication.slug}/assets/${asset.id}`,
         ]),
     );
+    const access = await getWebsitePageAccessState(website, pageSlug);
+    const authHref = `/api/public-sites/${website.publication.slug}/auth?pageSlug=${encodeURIComponent(
+      pageSlug,
+    )}`;
+    if (!access.allowed && access.requiredRole !== null) {
+      return new Response(
+        renderWebsiteAccessDeniedDocument({
+          authHref,
+          backHref:
+            routeMode === 'site-host'
+              ? `/${website.spec.pages[0]?.slug ?? ''}`
+              : `/s/${website.publication.slug}/${website.spec.pages[0]?.slug ?? ''}`,
+          hasIdentity: access.identity !== undefined,
+          locale: website.spec.locale,
+          requiredRole: access.requiredRole,
+        }),
+        {
+          headers: websiteAccessHeaders(),
+          status: access.identity === undefined ? 401 : 403,
+        },
+      );
+    }
     const managedContent = await listPublishedWebsiteContent(website, pageSlug);
     return new Response(
       renderWebsitePublishedDocument(
@@ -61,9 +88,19 @@ export async function GET(
         assetUrls,
         routeMode,
         managedContent,
+        {
+          href: authHref,
+          label:
+            access.member?.displayName ??
+            (website.spec.locale === 'zh-Hant' ? '會員登入' : 'Member sign in'),
+        },
       ),
       {
-        headers: WEBSITE_PUBLIC_HEADERS,
+        headers: {
+          ...WEBSITE_PUBLIC_HEADERS,
+          'cache-control': 'private, no-store, max-age=0',
+          vary: 'cookie',
+        },
         status: 200,
       },
     );

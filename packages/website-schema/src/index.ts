@@ -1,4 +1,22 @@
 export {
+  WebsiteSiteAccessDashboardSchema,
+  WebsiteSiteAccessMutationSchema,
+  WebsiteSiteAccessRuleSchema,
+  WebsiteSiteAuthInputSchema,
+  WebsiteSiteIdentitySchema,
+  WebsiteSiteMemberSchema,
+  WebsiteSiteMemberStatusSchema,
+  WebsiteSiteRoleSchema,
+  type WebsiteSiteAccessDashboard,
+  type WebsiteSiteAccessMutation,
+  type WebsiteSiteAccessRule,
+  type WebsiteSiteAuthInput,
+  type WebsiteSiteIdentity,
+  type WebsiteSiteMember,
+  type WebsiteSiteMemberStatus,
+  type WebsiteSiteRole,
+} from './access';
+export {
   WebsiteAdminDashboardSchema,
   WebsiteAdminMutationSchema,
   WebsiteContactSubmissionInputSchema,

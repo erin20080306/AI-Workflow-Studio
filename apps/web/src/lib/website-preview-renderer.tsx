@@ -16,6 +16,7 @@ const PREVIEW_STYLES = `
 .appearance-dark{--bg:#07101f;--surface:#101c2e;--surface-2:#17253a;--text:#f8fafc;--muted:#a9b6c8;--line:#2a3a50}
 .radius-soft{--radius:12px}.radius-pill{--radius:40px}.density-compact{--space:56px}.density-balanced{--space:72px}.font-editorial{--font:Georgia,"Times New Roman",serif}.font-technical{--font:"SFMono-Regular",Consolas,"Liberation Mono",monospace}.font-friendly{--font:ui-rounded,"SF Pro Rounded",system-ui,sans-serif}
 .shell{min-height:100vh}.site-header{align-items:center;background:color-mix(in srgb,var(--bg) 88%,transparent);border-bottom:1px solid var(--line);display:flex;gap:28px;justify-content:space-between;padding:20px clamp(24px,5vw,76px);position:sticky;top:0;z-index:5;backdrop-filter:blur(14px)}.brand{font-size:18px;font-weight:850;letter-spacing:-.02em}.nav{display:flex;flex-wrap:wrap;gap:8px}.nav-item,.footer-link{color:var(--muted);font-size:13px;font-weight:700;padding:8px 12px;text-decoration:none}
+.nav-account{border:1px solid var(--line);border-radius:999px;color:var(--text)}
 main{overflow:hidden}.section{padding:var(--space) clamp(24px,7vw,110px)}.section-inner{margin:0 auto;max-width:1180px}.eyebrow{color:var(--accent);font-size:12px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}.section-title{font-size:clamp(30px,5vw,58px);letter-spacing:-.045em;line-height:1.04;margin:14px 0}.section-body{color:var(--muted);font-size:18px;max-width:720px;white-space:pre-line}.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}.action{align-items:center;background:var(--accent);border:1px solid var(--accent);border-radius:999px;color:#fff;display:inline-flex;font-size:14px;font-weight:850;justify-content:center;padding:12px 20px}.action.secondary{background:transparent;color:var(--text)}
 	.hero{min-height:560px;display:grid;align-items:center}.hero-grid{align-items:center;display:grid;gap:52px;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr)}.hero.centered{text-align:center}.hero.centered .section-body,.hero.centered .actions{justify-content:center;margin-left:auto;margin-right:auto}.asset{align-items:flex-end;aspect-ratio:4/3;background:linear-gradient(145deg,var(--surface-2),color-mix(in srgb,var(--accent) 24%,var(--surface)));border:1px solid var(--line);border-radius:var(--radius);display:flex;margin:0;min-height:260px;overflow:hidden;padding:24px;position:relative}.asset:before,.asset:after{border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:50%;content:"";height:220px;position:absolute;right:-45px;top:-40px;width:220px}.asset:after{height:120px;left:35px;right:auto;top:55px;width:120px}.asset.generated{padding:0}.asset.generated:before,.asset.generated:after{display:none}.asset-image{height:100%;inset:0;object-fit:cover;position:absolute;width:100%}.asset-caption{clip:rect(0 0 0 0);clip-path:inset(50%);height:1px;overflow:hidden;position:absolute;white-space:nowrap;width:1px}.asset-label{background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:12px;font-weight:750;padding:8px 12px;position:relative;z-index:1}
 .feature-head{text-align:center}.feature-head .section-body{margin-left:auto;margin-right:auto}.grid{display:grid;gap:18px;margin-top:38px}.columns-2{grid-template-columns:repeat(2,minmax(0,1fr))}.columns-3{grid-template-columns:repeat(3,minmax(0,1fr))}.columns-4{grid-template-columns:repeat(4,minmax(0,1fr))}.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:28px}.card h3{font-size:19px;letter-spacing:-.02em;margin:18px 0 8px}.card p{color:var(--muted);margin:0}.icon{align-items:center;background:var(--surface-2);border-radius:14px;color:var(--accent);display:flex;font-size:13px;font-weight:900;height:42px;justify-content:center;text-transform:uppercase;width:42px}
@@ -66,6 +67,10 @@ function escapeHtml(value: string): string {
 }
 
 interface PublishedRenderOptions {
+  readonly account?: {
+    readonly href: string;
+    readonly label: string;
+  };
   readonly contactAction?: string;
   readonly pageHref: (pageSlug: string) => string;
 }
@@ -348,7 +353,13 @@ function renderWebsiteDocument(
             publishedPageHref(published, item.pageSlug),
           )}">${escapeHtml(item.label)}</a>`,
     )
-    .join('')}</nav></header><main>${page.sections
+    .join('')}${
+    published?.account === undefined
+      ? ''
+      : `<a class="nav-item nav-account" href="${escapeHtml(
+          published.account.href,
+        )}">${escapeHtml(published.account.label)}</a>`
+  }</nav></header><main>${page.sections
     .map((section) => sectionMarkup(section, spec, assetUrls, published))
     .join('')}${published === undefined ? '' : managedContentMarkup(managedContent)}${
     published === undefined || !page.sections.some(sectionHasContact)
@@ -372,6 +383,7 @@ export function renderWebsitePublishedDocument(
   assetUrls: ReadonlyMap<string, string> = new Map(),
   routeMode: 'platform-path' | 'site-host' = 'platform-path',
   managedContent: readonly WebsiteContentEntry[] = [],
+  account?: { readonly href: string; readonly label: string },
 ): string {
   const published = zSiteSlug(siteSlug);
   return renderWebsiteDocument(
@@ -379,6 +391,7 @@ export function renderWebsitePublishedDocument(
     pageSlug,
     assetUrls,
     {
+      ...(account === undefined ? {} : { account }),
       contactAction: `/api/public-sites/${published}/contact`,
       pageHref: (targetPageSlug) =>
         routeMode === 'site-host' ? `/${targetPageSlug}` : `/s/${published}/${targetPageSlug}`,

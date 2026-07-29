@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('creates, refines, previews, and explicitly publishes a website from one prompt', async ({
+  browser,
   page,
 }) => {
   await page.goto('/dashboard/sites');
@@ -80,6 +81,58 @@ test('creates, refines, previews, and explicitly publishes a website from one pr
   await expect(page.getByText('公開網站訪客 · visitor@example.com')).toBeVisible();
   await page.getByLabel('狀態').selectOption('read');
   await expect(page.getByText('網站後台已更新。')).toBeVisible();
+
+  await page.getByRole('button', { name: '會員與權限' }).click();
+  await expect(page.getByRole('heading', { name: '會員註冊與受保護頁面' })).toBeVisible();
+  await page.getByText('開放訪客註冊').click();
+  await page
+    .getByRole('combobox', { name: /最低角色/ })
+    .first()
+    .selectOption('member');
+  await page.getByText('我已逐頁檢查，並明確同意此註冊設定與完整存取矩陣。').click();
+  await page.getByRole('button', { name: '儲存已審查存取矩陣' }).click();
+  await expect(page.getByText('網站存取權限已更新。')).toBeVisible();
+
+  const crossOriginAuth = await page.request.post(`/api/public-sites/${siteSlug}/auth`, {
+    form: {
+      action: 'register',
+      confirmPassword: 'SiteMember123',
+      displayName: 'Cross-origin visitor',
+      email: `cross-origin-${Date.now()}@example.com`,
+      pageSlug: 'home',
+      password: 'SiteMember123',
+      website: '',
+    },
+    headers: { origin: 'https://attacker.invalid' },
+  });
+  expect(crossOriginAuth.ok()).toBe(false);
+
+  const visitorContext = await browser.newContext();
+  const visitorPage = await visitorContext.newPage();
+  const origin = new URL(page.url()).origin;
+  const protectedResponse = await visitorPage.goto(`${origin}${publicRequestPath}`);
+  expect(protectedResponse?.status()).toBe(401);
+  await expect(visitorPage.getByRole('heading', { name: '此頁面需要登入' })).toBeVisible();
+  await visitorPage.getByRole('link', { name: '前往會員登入' }).click();
+  const visitorEmail = `site-member-${Date.now()}@example.com`;
+  await visitorPage.getByLabel('顯示名稱').fill('Phase 43 網站會員');
+  await visitorPage.getByLabel('電子郵件').last().fill(visitorEmail);
+  await visitorPage.getByLabel('密碼', { exact: true }).last().fill('SiteMember123');
+  await visitorPage.getByLabel('確認密碼').fill('SiteMember123');
+  await visitorPage.getByRole('button', { name: '註冊', exact: true }).click();
+  await expect(visitorPage).toHaveURL(new RegExp(`${publicRequestPath.replaceAll('/', '\\/')}`));
+  await expect(visitorPage.getByText('這段內容由網站後台管理')).toBeVisible();
+
+  await page.reload();
+  await page.getByRole('button', { name: '會員與權限' }).click();
+  await expect(page.getByText(visitorEmail)).toBeVisible();
+  await page.getByLabel('Phase 43 網站會員 狀態').selectOption('suspended');
+  await expect(page.getByText('網站存取權限已更新。')).toBeVisible();
+  const suspendedResponse = await visitorPage.reload();
+  expect(suspendedResponse?.status()).toBe(403);
+  await expect(visitorPage.getByRole('heading', { name: '權限不足' })).toBeVisible();
+  await visitorContext.close();
+
   await page.getByRole('link', { name: /返回 Canvas/ }).click();
 
   await expect(page.getByRole('heading', { name: '這個網站要如何正式上線？' })).toBeVisible();

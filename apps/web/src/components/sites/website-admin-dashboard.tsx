@@ -3,6 +3,7 @@
 import {
   WebsiteAdminDashboardSchema,
   type WebsiteAdminDashboard as WebsiteAdminDashboardValue,
+  type WebsiteSiteAccessDashboard,
   type WebsiteSubmissionStatus,
 } from '@ai-workflow-studio/website-schema';
 import Link from 'next/link';
@@ -10,12 +11,14 @@ import { useMemo, useState } from 'react';
 import { z } from 'zod';
 
 import { useLanguage } from '@/components/language-provider';
+import { WebsiteAccessPanel } from '@/components/sites/website-access-panel';
 
 const DashboardResponseSchema = z.object({ dashboard: WebsiteAdminDashboardSchema }).strict();
 
 const copy = {
   en: {
     back: 'Back to Canvas',
+    access: 'Users & access',
     content: 'Content',
     contentBody: 'Body',
     contentHelp:
@@ -35,7 +38,7 @@ const copy = {
     message: 'Message',
     modules: 'Backend modules',
     modulesBody:
-      'CMS content and contact inbox are live. Members, uploads, analytics, custom collections, and API actions will be added as separately tested modules.',
+      'CMS content, contact inbox, site registration, roles, and protected pages are live. Uploads, analytics, custom collections, and API actions will be added as separately tested modules.',
     name: 'Name',
     newCount: 'New messages',
     page: 'Target page',
@@ -53,6 +56,7 @@ const copy = {
   },
   'zh-Hant': {
     back: '返回 Canvas',
+    access: '會員與權限',
     content: '內容管理',
     contentBody: '內容本文',
     contentHelp: '設為已發布後會顯示在指定的公開頁面；草稿只留在網站後台。',
@@ -70,7 +74,7 @@ const copy = {
     message: '訊息內容',
     modules: '後台模組',
     modulesBody:
-      'CMS 內容與聯絡收件匣已可使用；會員、檔案、分析、自訂資料集合與 API 動作會依序作為獨立模組完成測試後加入。',
+      'CMS 內容、聯絡收件匣、網站會員註冊、角色與受保護頁面已可使用；檔案、分析、自訂資料集合與 API 動作會依序作為獨立模組完成測試後加入。',
     name: '姓名',
     newCount: '未讀訊息',
     page: '顯示頁面',
@@ -88,10 +92,12 @@ const copy = {
   },
 } as const;
 
-type Tab = 'content' | 'inbox' | 'settings';
+type Tab = 'access' | 'content' | 'inbox' | 'settings';
 
 export function WebsiteAdminDashboard({
   canManage,
+  canManageAccess,
+  initialAccess,
   initialDashboard,
   pages,
   projectId,
@@ -99,6 +105,8 @@ export function WebsiteAdminDashboard({
   publicUrl,
 }: Readonly<{
   canManage: boolean;
+  canManageAccess: boolean;
+  initialAccess: WebsiteSiteAccessDashboard;
   initialDashboard: WebsiteAdminDashboardValue;
   pages: readonly { readonly slug: string; readonly title: string }[];
   projectId: string;
@@ -166,6 +174,7 @@ export function WebsiteAdminDashboard({
   }
 
   const tabLabels: Readonly<Record<Tab, string>> = {
+    access: text.access,
     content: text.content,
     inbox: `${text.inbox}${newMessages > 0 ? ` (${newMessages})` : ''}`,
     settings: text.settings,
@@ -418,6 +427,14 @@ export function WebsiteAdminDashboard({
         </section>
       ) : null}
 
+      {tab === 'access' ? (
+        <WebsiteAccessPanel
+          canManage={canManageAccess}
+          initialAccess={initialAccess}
+          projectId={projectId}
+        />
+      ) : null}
+
       {tab === 'settings' ? (
         <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-600">
@@ -429,7 +446,7 @@ export function WebsiteAdminDashboard({
             {[
               'CMS · active',
               'Contact inbox · active',
-              'Members · planned',
+              'Members & protected pages · active',
               'Files · planned',
               'Analytics · planned',
               'Custom data/API · planned',
