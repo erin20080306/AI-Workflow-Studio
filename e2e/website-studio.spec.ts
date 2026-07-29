@@ -78,6 +78,24 @@ test('creates, refines, previews, and explicitly publishes a website from one pr
     'href',
     /dash\.cloudflare\.com/,
   );
+
+  await expect(page.getByRole('heading', { name: '安全串接工作區' })).toBeVisible();
+  await page.getByRole('button', { name: /^付款/ }).click();
+  await expect(page.getByRole('heading', { name: 'Stripe · Hosted Checkout' })).toBeVisible();
+  await expect(page.getByText('STRIPE_SECRET_KEY · STRIPE_WEBHOOK_SECRET')).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('sk_test_');
+  await page.getByText('客戶自己的服務商帳戶與測試環境已準備完成。', { exact: true }).click();
+  await page.getByText('需要的後端元件已部署在測試環境。', { exact: true }).click();
+  await page.getByText('指定金鑰只設定在所選後端環境，沒有貼到本網站。', { exact: true }).click();
+  await page
+    .getByText('我已設定確切的 Callback、Redirect 與 Webhook 路徑。', { exact: true })
+    .click();
+  await page.getByText('我已檢查資料流、隱私聲明、保留期限與同意需求。', { exact: true }).click();
+  await page.getByText('服務商規定的成功、失敗、重複與濫用測試皆已通過。', { exact: true }).click();
+  await page.getByText('我明確同意此網站專案的服務商測試驗收結果。', { exact: true }).click();
+  await page.getByRole('button', { name: '儲存串接準備計畫' }).click();
+  await expect(page.getByText('已儲存不含金鑰的串接準備計畫。')).toBeVisible();
+  await expect(page.getByText('服務商測試已驗收 · 可進入受控實作').first()).toBeVisible();
 });
 
 test('collects every guided decision before creating a locked website draft', async ({ page }) => {

@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 39 — Guided site delivery (completed)
+Phase 40 — Guided site integrations (completed)
 
 ## Repository baseline
 
@@ -3045,3 +3045,63 @@ Status: completed
 ### Commit
 
 - `de221d6` — `feat(web): add guided website delivery`
+
+## Phase 40 — Guided site integrations
+
+Status: completed
+
+### Implemented
+
+- Added one persisted integration workspace for four allowlisted website
+  modules: Resend contact delivery, Vercel Web Analytics, Stripe-hosted
+  Checkout, and a Supabase Edge Function API proxy.
+- Each guide declares the customer-owned provider account, official setup
+  destination, required server component, exact callback/server paths, data
+  flow, privacy impact, deployment prerequisites, public placeholder names,
+  server-only secret names, and provider-specific test requirements.
+- The browser accepts only completion booleans. It never accepts or persists a
+  token, provider key, webhook secret, OAuth credential, payment credential, or
+  arbitrary provider URL.
+- Runtime Zod validation rejects a provider assigned to the wrong module and
+  rejects explicit test acceptance until every prerequisite and provider test
+  has passed.
+- Saved readiness plans are Tenant- and Website Project-scoped. Only owners and
+  workspace administrators may manage them; only the service role can access
+  the database table.
+- Test acceptance records the confirming user and time and writes a bounded
+  audit entry containing only the module, allowlisted provider, and status.
+- Static generated websites keep backend-dependent modules disabled. The
+  readiness workspace does not claim that payment collection, message
+  delivery, analytics, or API forwarding is live before the customer deploys
+  and tests the required provider-owned service.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 240 tests across 54 files
+- `pnpm db:test`: passed — fresh migrations, RLS/privilege assertions,
+  cross-Tenant checks, and seed validation
+- `pnpm build:web`: passed — 47 generated application pages, including the new
+  Website Integration Plans server route. The sandboxed attempt could not bind
+  a Turbopack worker port; the identical permitted retry compiled
+  successfully.
+- `pnpm security:scan-client`: passed — 34 client files scanned
+- `pnpm exec playwright test e2e/website-studio.spec.ts --workers=1`: passed —
+  2 tests covering prompt-to-site, Canvas, images, versions, publishing,
+  delivery choices, provider guidance, all safety confirmations, and
+  non-secret readiness persistence
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- Phase 40 provides a validated, persisted, and auditable integration contract;
+  it intentionally does not collect live payments, forward live customer data,
+  or accept provider credentials inside AI Workflow Studio.
+- A module becomes eligible for controlled implementation only after the
+  customer deploys its backend in the customer-owned environment and completes
+  the provider-specific test. This avoids showing a non-functional contact,
+  checkout, analytics, or external API feature on a static site.
+- Complete Free/paid/administrator delivery acceptance remains Phase 41. The
+  requested operation video remains paused until that acceptance is complete.

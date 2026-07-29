@@ -25,7 +25,7 @@ export default defineConfig({
   webServer: {
     command: 'pnpm --filter @ai-workflow-studio/web dev --hostname 127.0.0.1 --port 3100',
     env: {
-      NEXT_PUBLIC_APP_MODE: 'mock',
+      NEXT_PUBLIC_MOCK_MODE: 'true',
     },
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
