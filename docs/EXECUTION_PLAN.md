@@ -488,6 +488,8 @@ authenticated explicit confirmation and provider-specific test acceptance.
 
 ## Phase 41 — Website delivery acceptance
 
+Status: completed
+
 Verify the complete website product with separate Free, paid member, workspace
 administrator, and platform administrator sessions. Cover creation, all
 generated page links, Canvas previews, conversational edits, version restore,

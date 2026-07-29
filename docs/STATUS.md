@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 40 — Guided site integrations (completed)
+Phase 41 — Website delivery acceptance (completed)
 
 ## Repository baseline
 
@@ -3122,5 +3122,76 @@ Status: completed
   customer deploys its backend in the customer-owned environment and completes
   the provider-specific test. This avoids showing a non-functional contact,
   checkout, analytics, or external API feature on a static site.
-- Complete Free/paid/administrator delivery acceptance remains Phase 41. The
-  requested operation video remains paused until that acceptance is complete.
+- Complete Free/paid/administrator delivery acceptance was deferred to Phase 41.
+  The requested operation video remained paused until that acceptance completed.
+
+## Phase 41 — Website delivery acceptance
+
+Status: completed
+
+### Implemented
+
+- Centralized the Website Studio delivery entitlement matrix so the browser and
+  server enforce the same rules:
+  - Free owners may create, edit, preview, version, and publish platform-hosted
+    websites, but may not download source, push to GitHub, or manage payment/API
+    implementation guidance.
+  - Active paid editors may download the selected immutable Website Spec version
+    as a static ZIP, but may not perform GitHub writes or manage integrations.
+  - Active paid owners and workspace administrators may download, publish to an
+    authorized GitHub repository, and manage guided integrations.
+  - Platform administrators retain the existing support override; ordinary
+    members do not inherit it.
+- Replaced the integration workspace with a bilingual paid-feature explanation
+  when the session lacks the required plan or role. The corresponding server
+  route independently rejects the same unauthorized request.
+- Added deterministic acceptance coverage for Free, paid editor, paid workspace
+  administrator, and platform administrator contexts.
+- Added website AI usage acceptance coverage proving that generation reserves
+  quota before work, records provider/model usage, settles the reservation, and
+  increases the Tenant's metered cost after successful completion.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 244 tests across 55 files
+- `pnpm db:test`: passed — every migration was applied to a fresh database and
+  the RLS, Tenant isolation, idempotent seed, workflow run, Website publishing,
+  subdomain, and model-mapping assertions passed
+- `pnpm build:web`: passed — 47 application pages and all Website Studio server
+  routes compiled successfully
+- `pnpm security:scan-client`: passed — 34 generated client files scanned
+- `pnpm exec playwright test e2e/website-studio.spec.ts`: passed — 2 Chromium
+  tests covering one-sentence creation, necessary AI follow-up, advanced
+  six-decision intake, Canvas preview, generated images, multi-page navigation,
+  conversational editing, versions, explicit publishing, platform subdomains,
+  paid delivery, GitHub guidance, and non-secret integration readiness
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Production acceptance
+
+- Git commit `4feaa83` was pushed to `codex/ai-workflow-platform`.
+- Vercel Production deployment `dpl_95WXgG3S3RqqjJD1ydosgH9ewdRZ` is Ready and
+  serves the primary, apex, Vercel, and wildcard platform-site aliases.
+- Authenticated production acceptance confirmed that the platform administrator
+  support session can load ZIP, GitHub, publishing, and the four-module guided
+  integration workspace. The rendered browser content contained no password,
+  Stripe test/live key pattern, or Google API-key pattern.
+- Deterministic role-matrix tests cover the unavailable separate production
+  Free, paid-editor, and paid-workspace-administrator sessions without creating
+  temporary customer accounts or changing production subscriptions.
+- Public read-only acceptance confirmed that the published example site's
+  `/index`, `/services`, `/story`, and `/contact` pages return successfully with
+  their expected page titles and contain no tested credential pattern.
+- No integration was falsely enabled during acceptance. Payment, contact,
+  analytics, and external API modules remain disabled until a customer-owned
+  backend and provider-specific test are explicitly accepted.
+
+### Video readiness
+
+- Website functionality acceptance is complete. The operation video may now be
+  produced only from the safe mock environment with synthetic files and cropped
+  framing that excludes administrator identity, passwords, API keys, provider
+  dashboards, and production credentials.
