@@ -3,6 +3,7 @@
 import {
   WebsiteAdminDashboardSchema,
   type WebsiteAdminDashboard as WebsiteAdminDashboardValue,
+  type WebsiteDataDashboard,
   type WebsiteSiteAccessDashboard,
   type WebsiteSubmissionStatus,
 } from '@ai-workflow-studio/website-schema';
@@ -12,6 +13,7 @@ import { z } from 'zod';
 
 import { useLanguage } from '@/components/language-provider';
 import { WebsiteAccessPanel } from '@/components/sites/website-access-panel';
+import { WebsiteDataPanel } from '@/components/sites/website-data-panel';
 
 const DashboardResponseSchema = z.object({ dashboard: WebsiteAdminDashboardSchema }).strict();
 
@@ -26,6 +28,7 @@ const copy = {
     contentKey: 'Stable content key',
     contentTitle: 'Title',
     createContent: 'Create or update content',
+    data: 'Data & forms',
     emptyContent: 'No managed content yet.',
     emptyInbox: 'No contact messages yet.',
     error: 'The website backend could not be updated.',
@@ -38,7 +41,7 @@ const copy = {
     message: 'Message',
     modules: 'Backend modules',
     modulesBody:
-      'CMS content, contact inbox, site registration, roles, and protected pages are live. Uploads, analytics, custom collections, and API actions will be added as separately tested modules.',
+      'CMS, contact inbox, site access, reviewed collections, public/protected forms, and safe server actions are live. Uploads and analytics remain separate tested modules.',
     name: 'Name',
     newCount: 'New messages',
     page: 'Target page',
@@ -63,6 +66,7 @@ const copy = {
     contentKey: '穩定內容代稱',
     contentTitle: '內容標題',
     createContent: '建立或更新內容',
+    data: '資料與表單',
     emptyContent: '目前沒有後台管理內容。',
     emptyInbox: '目前沒有聯絡訊息。',
     error: '無法更新網站後台，請稍後再試。',
@@ -74,7 +78,7 @@ const copy = {
     message: '訊息內容',
     modules: '後台模組',
     modulesBody:
-      'CMS 內容、聯絡收件匣、網站會員註冊、角色與受保護頁面已可使用；檔案、分析、自訂資料集合與 API 動作會依序作為獨立模組完成測試後加入。',
+      'CMS、聯絡收件匣、網站會員、經審核資料集合、公開／受保護表單與安全伺服器動作已可使用；檔案與分析會在完成獨立測試後加入。',
     name: '姓名',
     newCount: '未讀訊息',
     page: '顯示頁面',
@@ -92,12 +96,13 @@ const copy = {
   },
 } as const;
 
-type Tab = 'access' | 'content' | 'inbox' | 'settings';
+type Tab = 'access' | 'content' | 'data' | 'inbox' | 'settings';
 
 export function WebsiteAdminDashboard({
   canManage,
   canManageAccess,
   initialAccess,
+  initialData,
   initialDashboard,
   pages,
   projectId,
@@ -107,6 +112,7 @@ export function WebsiteAdminDashboard({
   canManage: boolean;
   canManageAccess: boolean;
   initialAccess: WebsiteSiteAccessDashboard;
+  initialData: WebsiteDataDashboard;
   initialDashboard: WebsiteAdminDashboardValue;
   pages: readonly { readonly slug: string; readonly title: string }[];
   projectId: string;
@@ -176,6 +182,7 @@ export function WebsiteAdminDashboard({
   const tabLabels: Readonly<Record<Tab, string>> = {
     access: text.access,
     content: text.content,
+    data: text.data,
     inbox: `${text.inbox}${newMessages > 0 ? ` (${newMessages})` : ''}`,
     settings: text.settings,
   };
@@ -435,6 +442,15 @@ export function WebsiteAdminDashboard({
         />
       ) : null}
 
+      {tab === 'data' ? (
+        <WebsiteDataPanel
+          canManage={canManage}
+          initialDashboard={initialData}
+          pages={pages}
+          projectId={projectId}
+        />
+      ) : null}
+
       {tab === 'settings' ? (
         <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-600">
@@ -447,9 +463,9 @@ export function WebsiteAdminDashboard({
               'CMS · active',
               'Contact inbox · active',
               'Members & protected pages · active',
+              'Collections, forms & safe actions · active',
               'Files · planned',
               'Analytics · planned',
-              'Custom data/API · planned',
             ].map((module) => (
               <div
                 className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-800"

@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 43 — Site users and access (completed)
+Phase 44 — Site data and actions (completed)
 
 ## Repository baseline
 
@@ -3318,3 +3318,64 @@ Status: completed
   protection until an owner or workspace administrator reviews every current
   page and explicitly saves the complete matrix.
 - Phase 43 has not been pushed or deployed to Production in this phase.
+
+## Phase 44 — Site data and actions
+
+Status: completed
+
+### Implemented
+
+- Added reviewed, declarative website collections with text, long-text, number,
+  boolean, date, email, select, and same-site reference fields. Collection
+  schemas are limited to 24 fields and cannot be changed after records exist.
+- Added public and role-protected website forms tied to verified Canvas pages.
+  Public forms expose only reviewed non-reference fields, enforce required
+  values, and use same-origin checks, a 32 KB request boundary, honeypot
+  protection, rate limits, and no-script HTML responses.
+- Added safe create, update, and delete record actions with runtime field
+  validation, per-request UUID idempotency, optimistic record versions, and
+  explicit confirmation for destructive deletion.
+- Added an atomic database action boundary that permits only schema-bound record
+  mutations. It records metadata-only audit events, keeps values and credentials
+  out of audit payloads, and never accepts arbitrary SQL, JavaScript, Python,
+  shell commands, or provider credentials.
+- Added a conservative `audit-record-created` workflow marker. It can record a
+  reviewed creation event but cannot execute arbitrary workflow nodes or user
+  code.
+- Enforced service-only mutation, Tenant and project RLS, same-site
+  relationships, 12 collections, 12 forms, and 5,000 records per site.
+- Added a bilingual Website Admin data-and-forms workspace for reviewing
+  collections, form roles and fields, active state, bounded workflow markers,
+  records, versions, and confirmed deletion.
+- Rendered active reviewed forms on the published platform path and wildcard
+  subdomain while preserving page access roles from Phase 43.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 259 tests across 60 files
+- `pnpm db:test`: passed — fresh migrations, idempotent action replay,
+  optimistic updates, confirmed deletion, metadata-only audits, service-only
+  mutation, role separation, and cross-Tenant RLS assertions passed
+- `pnpm build:web`: passed — 47 application pages, including the authenticated
+  website data administration route and public form submission route, compiled
+  successfully. The sandboxed Turbopack attempt could not bind its worker port;
+  the identical permitted retry passed.
+- `pnpm security:scan-client`: passed — 35 generated client files scanned
+- `pnpm test:e2e -- e2e/website-studio.spec.ts`: passed — all 10 Chromium
+  acceptance tests passed, including collection and form creation, public
+  rendering, same-origin submission, cross-origin denial, record visibility,
+  version normalization, and explicit deletion.
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- Phase 44 intentionally provides schema-bound server actions rather than
+  arbitrary customer databases or executable server code.
+- The `audit-record-created` marker records a safe event for later integration;
+  it is not a general workflow-node executor.
+- Private file uploads, analytics, and their site-level controls remain Phase 45. Combined public visitor, site-member, operator, workspace, and platform
+  administrator acceptance remains Phase 46.
+- Phase 44 has not been pushed or deployed to Production in this phase.

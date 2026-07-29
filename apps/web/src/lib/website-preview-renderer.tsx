@@ -2,6 +2,9 @@ import {
   WebsiteSpecSchema,
   type WebsiteAction,
   type WebsiteContentEntry,
+  type WebsiteDataCollection,
+  type WebsiteDataForm,
+  type WebsiteDataField,
   type WebsiteSection,
   type WebsiteSpec,
 } from '@ai-workflow-studio/website-schema';
@@ -22,7 +25,7 @@ main{overflow:hidden}.section{padding:var(--space) clamp(24px,7vw,110px)}.sectio
 .feature-head{text-align:center}.feature-head .section-body{margin-left:auto;margin-right:auto}.grid{display:grid;gap:18px;margin-top:38px}.columns-2{grid-template-columns:repeat(2,minmax(0,1fr))}.columns-3{grid-template-columns:repeat(3,minmax(0,1fr))}.columns-4{grid-template-columns:repeat(4,minmax(0,1fr))}.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:28px}.card h3{font-size:19px;letter-spacing:-.02em;margin:18px 0 8px}.card p{color:var(--muted);margin:0}.icon{align-items:center;background:var(--surface-2);border-radius:14px;color:var(--accent);display:flex;font-size:13px;font-weight:900;height:42px;justify-content:center;text-transform:uppercase;width:42px}
 	.stats{background:var(--text);color:var(--bg)}.stat-grid{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.stat-value{font-size:42px;font-weight:900;letter-spacing:-.04em}.stat-label{color:color-mix(in srgb,var(--bg) 70%,transparent);font-size:13px;font-weight:700}.testimonial-grid{align-items:center;display:grid;gap:28px;grid-template-columns:minmax(220px,.4fr) minmax(0,1fr)}.testimonial-grid .asset{aspect-ratio:1;min-height:220px}.quote{background:var(--surface-2);border-radius:var(--radius);font-size:clamp(24px,3vw,40px);font-weight:750;letter-spacing:-.03em;padding:clamp(28px,6vw,72px)}.attribution{color:var(--muted);font-size:14px;margin-top:24px}.price{font-size:32px;font-weight:900;letter-spacing:-.04em}.card.highlighted{border-color:var(--accent);box-shadow:0 20px 50px color-mix(in srgb,var(--accent) 13%,transparent);transform:translateY(-8px)}.features{color:var(--muted);padding-left:20px}.faq-item{border-bottom:1px solid var(--line);padding:22px 0}.faq-item h3{font-size:18px;margin:0 0 8px}.faq-item p{color:var(--muted);margin:0}.cta{background:var(--text);border-radius:var(--radius);color:var(--bg);padding:clamp(32px,6vw,70px);text-align:center}.cta .section-body{color:color-mix(in srgb,var(--bg) 70%,transparent);margin-left:auto;margin-right:auto}.cta .actions{justify-content:center}.cta .action{background:var(--bg);border-color:var(--bg);color:var(--text)}.cta .action.secondary{background:transparent;color:var(--bg)}
 .content-grid{align-items:center;display:grid;gap:44px;grid-template-columns:repeat(2,minmax(0,1fr))}.content-grid.image-right .asset{order:2}.content-grid.text{display:block}.site-footer{background:var(--surface);border-top:1px solid var(--line);padding:34px clamp(24px,7vw,110px)}.footer-inner{align-items:center;display:flex;gap:24px;justify-content:space-between;margin:0 auto;max-width:1180px}.copyright{color:var(--muted);font-size:13px}.footer-links{display:flex;flex-wrap:wrap;gap:4px}
-.managed-content{background:var(--surface)}.managed-list{display:grid;gap:18px;margin-top:28px}.managed-entry{border-left:4px solid var(--accent);padding:8px 0 8px 24px}.managed-entry h3{font-size:25px;letter-spacing:-.025em;margin:0 0 8px}.managed-entry p{color:var(--muted);margin:0;white-space:pre-line}.contact-panel{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);display:grid;gap:18px;grid-template-columns:repeat(2,minmax(0,1fr));margin-top:28px;padding:clamp(24px,5vw,48px)}.contact-panel label{color:var(--muted);display:grid;font-size:13px;font-weight:750;gap:7px}.contact-panel .wide{grid-column:1/-1}.contact-panel input,.contact-panel textarea{background:var(--surface);border:1px solid var(--line);border-radius:14px;color:var(--text);font:inherit;padding:12px 14px}.contact-panel textarea{min-height:150px;resize:vertical}.contact-panel button{background:var(--accent);border:0;border-radius:999px;color:#fff;cursor:pointer;font-weight:850;justify-self:start;padding:13px 22px}.contact-honeypot{clip:rect(0 0 0 0);clip-path:inset(50%);height:1px;overflow:hidden;position:absolute;white-space:nowrap;width:1px}
+.managed-content{background:var(--surface)}.managed-list{display:grid;gap:18px;margin-top:28px}.managed-entry{border-left:4px solid var(--accent);padding:8px 0 8px 24px}.managed-entry h3{font-size:25px;letter-spacing:-.025em;margin:0 0 8px}.managed-entry p{color:var(--muted);margin:0;white-space:pre-line}.contact-panel,.data-panel{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);display:grid;gap:18px;grid-template-columns:repeat(2,minmax(0,1fr));margin-top:28px;padding:clamp(24px,5vw,48px)}.contact-panel label,.data-panel label{color:var(--muted);display:grid;font-size:13px;font-weight:750;gap:7px}.contact-panel .wide,.data-panel .wide{grid-column:1/-1}.contact-panel input,.contact-panel textarea,.data-panel input,.data-panel textarea,.data-panel select{background:var(--surface);border:1px solid var(--line);border-radius:14px;color:var(--text);font:inherit;padding:12px 14px}.contact-panel textarea,.data-panel textarea{min-height:150px;resize:vertical}.contact-panel button,.data-panel button{background:var(--accent);border:0;border-radius:999px;color:#fff;cursor:pointer;font-weight:850;justify-self:start;padding:13px 22px}.contact-honeypot{clip:rect(0 0 0 0);clip-path:inset(50%);height:1px;overflow:hidden;position:absolute;white-space:nowrap;width:1px}.data-role{background:color-mix(in srgb,var(--accent) 12%,var(--surface));border-radius:999px;color:var(--accent);display:inline-block;font-size:11px;font-weight:850;margin-top:8px;padding:5px 10px}.checkbox-field{align-items:center!important;display:flex!important;flex-direction:row-reverse;justify-content:flex-end}.checkbox-field input{width:auto}
 	@media(max-width:800px){.site-header{align-items:flex-start;flex-direction:column;gap:10px;padding:16px 22px}.nav{max-width:100%;overflow:hidden}.nav-item{padding:6px 8px}.section{padding:56px 22px}.hero{min-height:auto}.hero-grid,.content-grid,.testimonial-grid{grid-template-columns:1fr}.columns-3,.columns-4{grid-template-columns:repeat(2,minmax(0,1fr))}.footer-inner{align-items:flex-start;flex-direction:column}}@media(max-width:520px){.columns-2,.columns-3,.columns-4{grid-template-columns:1fr}.section-title{font-size:39px}.section-body{font-size:16px}.card{padding:22px}.asset{min-height:210px}.site-header{position:relative}}
 `;
 
@@ -73,6 +76,7 @@ interface PublishedRenderOptions {
   };
   readonly contactAction?: string;
   readonly pageHref: (pageSlug: string) => string;
+  readonly siteSlug?: string;
 }
 
 function publishedPageHref(published: PublishedRenderOptions, pageSlug: string): string {
@@ -150,6 +154,79 @@ function contactFormMarkup(
   }<textarea maxlength="2000" minlength="10" name="message" required></textarea></label><label class="contact-honeypot">Website<input autocomplete="off" name="website" tabindex="-1"></label><button type="submit">${
     zh ? '送出訊息' : 'Send message'
   }</button></form></div></section>`;
+}
+
+interface PublishedDataForm {
+  readonly collection: WebsiteDataCollection;
+  readonly form: WebsiteDataForm;
+}
+
+function dataFieldMarkup(field: WebsiteDataField, zh: boolean): string {
+  const required = field.required ? ' required' : '';
+  const name = `field-${field.key}`;
+  if (field.type === 'long-text') {
+    return `<label class="wide">${escapeHtml(field.label)}<textarea maxlength="8000" name="${escapeHtml(
+      name,
+    )}"${required}></textarea></label>`;
+  }
+  if (field.type === 'boolean') {
+    return `<label class="checkbox-field">${escapeHtml(
+      field.label,
+    )}<input name="${escapeHtml(name)}" type="checkbox" value="true"${required}></label>`;
+  }
+  if (field.type === 'select') {
+    return `<label>${escapeHtml(field.label)}<select name="${escapeHtml(
+      name,
+    )}"${required}><option value="">${zh ? '請選擇' : 'Select'}</option>${field.options
+      .map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`)
+      .join('')}</select></label>`;
+  }
+  if (field.type === 'reference') return '';
+  const type = {
+    date: 'date',
+    email: 'email',
+    number: 'number',
+    text: 'text',
+  }[field.type];
+  if (type === undefined) return '';
+  const maxLength =
+    field.type === 'text' ? ' maxlength="500"' : field.type === 'email' ? ' maxlength="254"' : '';
+  return `<label>${escapeHtml(field.label)}<input name="${escapeHtml(name)}" type="${type}"${maxLength}${required}></label>`;
+}
+
+function dataFormsMarkup(
+  spec: WebsiteSpec,
+  pageSlug: string,
+  siteSlug: string,
+  forms: readonly PublishedDataForm[],
+): string {
+  if (forms.length === 0) return '';
+  const zh = spec.locale === 'zh-Hant';
+  return forms
+    .map(({ collection, form }) => {
+      const fields = form.fieldKeys
+        .map((fieldKey) => collection.fields.find((field) => field.key === fieldKey))
+        .filter((field): field is WebsiteDataField => field !== undefined);
+      if (fields.length !== form.fieldKeys.length) return '';
+      return `<section class="section" id="${escapeHtml(
+        form.formKey,
+      )}"><div class="section-inner"><div class="eyebrow">${
+        zh ? '安全表單' : 'Secure form'
+      }</div><h2 class="section-title">${escapeHtml(form.title)}</h2>${
+        form.requiredRole === null
+          ? ''
+          : `<span class="data-role">${zh ? '需要角色' : 'Required role'} · ${escapeHtml(
+              form.requiredRole,
+            )}</span>`
+      }<form action="/api/public-sites/${escapeHtml(siteSlug)}/data/${escapeHtml(
+        form.formKey,
+      )}" class="data-panel" method="post"><input name="idempotencyKey" type="hidden" value="${crypto.randomUUID()}"><input name="pageSlug" type="hidden" value="${escapeHtml(
+        pageSlug,
+      )}">${fields.map((field) => dataFieldMarkup(field, zh)).join('')}<label class="contact-honeypot">Website<input autocomplete="off" name="website" tabindex="-1"></label><button type="submit">${escapeHtml(
+        form.submitLabel,
+      )}</button></form></div></section>`;
+    })
+    .join('');
 }
 
 function actionMarkup(
@@ -321,6 +398,7 @@ function renderWebsiteDocument(
   assetUrls: ReadonlyMap<string, string>,
   published?: PublishedRenderOptions,
   managedContent: readonly WebsiteContentEntry[] = [],
+  dataForms: readonly PublishedDataForm[] = [],
 ): string {
   const spec = WebsiteSpecSchema.parse(specValue);
   const page = spec.pages.find((item) => item.slug === pageSlug);
@@ -362,6 +440,10 @@ function renderWebsiteDocument(
   }</nav></header><main>${page.sections
     .map((section) => sectionMarkup(section, spec, assetUrls, published))
     .join('')}${published === undefined ? '' : managedContentMarkup(managedContent)}${
+    published?.siteSlug === undefined
+      ? ''
+      : dataFormsMarkup(spec, pageSlug, published.siteSlug, dataForms)
+  }${
     published === undefined || !page.sections.some(sectionHasContact)
       ? ''
       : contactFormMarkup(spec, pageSlug, published.contactAction)
@@ -384,6 +466,7 @@ export function renderWebsitePublishedDocument(
   routeMode: 'platform-path' | 'site-host' = 'platform-path',
   managedContent: readonly WebsiteContentEntry[] = [],
   account?: { readonly href: string; readonly label: string },
+  dataForms: readonly PublishedDataForm[] = [],
 ): string {
   const published = zSiteSlug(siteSlug);
   return renderWebsiteDocument(
@@ -395,8 +478,10 @@ export function renderWebsitePublishedDocument(
       contactAction: `/api/public-sites/${published}/contact`,
       pageHref: (targetPageSlug) =>
         routeMode === 'site-host' ? `/${targetPageSlug}` : `/s/${published}/${targetPageSlug}`,
+      siteSlug: published,
     },
     managedContent,
+    dataForms,
   );
 }
 

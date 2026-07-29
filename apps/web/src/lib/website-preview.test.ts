@@ -132,6 +132,72 @@ describe('website preview', () => {
     expect(html).not.toContain('href="/s/product-site-a1000000/home"');
   });
 
+  it('renders only reviewed published data forms without executable code', () => {
+    const html = renderWebsitePublishedDocument(
+      spec,
+      'home',
+      'product-site-a1000000',
+      new Map(),
+      'platform-path',
+      [],
+      undefined,
+      [
+        {
+          collection: {
+            collectionKey: 'bookings',
+            createdAt: '2026-07-29T00:00:00.000Z',
+            fields: [
+              {
+                key: 'email',
+                label: '電子郵件',
+                options: [],
+                referenceCollectionKey: null,
+                required: true,
+                type: 'email',
+              },
+              {
+                key: 'seats',
+                label: '人數',
+                options: [],
+                referenceCollectionKey: null,
+                required: true,
+                type: 'number',
+              },
+            ],
+            id: '10000000-0000-4000-8000-000000004410',
+            name: '預約',
+            projectId: '10000000-0000-4000-8000-000000004411',
+            reviewedAt: '2026-07-29T00:00:00.000Z',
+            tenantId: '10000000-0000-4000-8000-000000004412',
+            updatedAt: '2026-07-29T00:00:00.000Z',
+          },
+          form: {
+            active: true,
+            collectionKey: 'bookings',
+            createdAt: '2026-07-29T00:00:00.000Z',
+            fieldKeys: ['email', 'seats'],
+            formKey: 'booking-form',
+            id: '10000000-0000-4000-8000-000000004413',
+            pageSlug: 'home',
+            projectId: '10000000-0000-4000-8000-000000004411',
+            requiredRole: null,
+            submitLabel: '送出預約',
+            successMessage: '已收到預約。',
+            tenantId: '10000000-0000-4000-8000-000000004412',
+            title: '預約諮詢',
+            updatedAt: '2026-07-29T00:00:00.000Z',
+            workflowTrigger: 'audit-record-created',
+          },
+        },
+      ],
+    );
+    expect(html).toContain('action="/api/public-sites/product-site-a1000000/data/booking-form"');
+    expect(html).toContain('name="field-email"');
+    expect(html).toContain('name="field-seats"');
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('javascript:');
+  });
+
   it('renders portable static navigation to deterministic HTML files', () => {
     const multiPage = WebsiteSpecSchema.parse({
       ...spec,

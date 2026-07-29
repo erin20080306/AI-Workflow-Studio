@@ -59,7 +59,7 @@ test, and build checks and has been committed.
 | 41    | Website delivery acceptance   | Free/paid gates, pages, domains, ZIP, GitHub, and integrations pass end to end    | completed |
 | 42    | Full-stack website admin      | Safe CMS content and public form submissions work through a Tenant-safe backend   | completed |
 | 43    | Site users and access         | Generated sites can use allowlisted identity, roles, and protected portal pages   | completed |
-| 44    | Site data and actions         | Validated collections, forms, workflows, and server actions remain schema-bound   | pending   |
+| 44    | Site data and actions         | Validated collections, forms, workflows, and server actions remain schema-bound   | completed |
 | 45    | Site files and analytics      | Private media, delivery metrics, and site settings remain quota and Tenant safe   | pending   |
 | 46    | Full-stack site acceptance    | AI-built public and admin experiences pass role, data, file, and action E2E gates | pending   |
 
@@ -535,6 +535,8 @@ AI Workflow Studio workspace members, and role changes require authenticated,
 auditable server actions.
 
 ## Phase 44 — Site data and actions
+
+Status: completed
 
 Add schema-driven custom collections, validated public and protected forms,
 allowlisted workflow triggers, and bounded server actions. AI may propose fields,

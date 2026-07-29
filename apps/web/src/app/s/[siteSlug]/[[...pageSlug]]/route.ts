@@ -8,6 +8,7 @@ import {
 } from '@/lib/website-access-documents';
 import { getWebsitePageAccessState } from '@/lib/website-access-server';
 import { listPublishedWebsiteContent } from '@/lib/website-admin-server';
+import { listPublishedWebsiteDataForms } from '@/lib/website-data-server';
 import { getPublishedWebsiteBySlug } from '@/lib/website-publication-server';
 import { WEBSITE_SITE_HOST_HEADER } from '@/lib/website-site-host';
 
@@ -79,7 +80,10 @@ export async function GET(
         },
       );
     }
-    const managedContent = await listPublishedWebsiteContent(website, pageSlug);
+    const [managedContent, dataForms] = await Promise.all([
+      listPublishedWebsiteContent(website, pageSlug),
+      listPublishedWebsiteDataForms(website, pageSlug),
+    ]);
     return new Response(
       renderWebsitePublishedDocument(
         website.spec,
@@ -94,6 +98,7 @@ export async function GET(
             access.member?.displayName ??
             (website.spec.locale === 'zh-Hant' ? '會員登入' : 'Member sign in'),
         },
+        dataForms,
       ),
       {
         headers: {

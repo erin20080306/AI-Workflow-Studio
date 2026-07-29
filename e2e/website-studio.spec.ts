@@ -82,6 +82,138 @@ test('creates, refines, previews, and explicitly publishes a website from one pr
   await page.getByLabel('狀態').selectOption('read');
   await expect(page.getByText('網站後台已更新。')).toBeVisible();
 
+  const adminProjectId = new URL(page.url()).pathname.split('/').at(-2);
+  expect(adminProjectId).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+  );
+  const collectionResponse = await page.request.patch(`/api/websites/${adminProjectId!}/data`, {
+    data: {
+      action: 'upsert-collection',
+      collectionKey: 'bookings',
+      confirmed: true,
+      fields: [
+        {
+          key: 'name',
+          label: '姓名',
+          options: [],
+          referenceCollectionKey: null,
+          required: true,
+          type: 'text',
+        },
+        {
+          key: 'email',
+          label: '電子郵件',
+          options: [],
+          referenceCollectionKey: null,
+          required: true,
+          type: 'email',
+        },
+        {
+          key: 'seats',
+          label: '人數',
+          options: [],
+          referenceCollectionKey: null,
+          required: true,
+          type: 'number',
+        },
+      ],
+      name: '顧問預約',
+    },
+  });
+  expect(collectionResponse.ok()).toBe(true);
+  const formResponse = await page.request.patch(`/api/websites/${adminProjectId!}/data`, {
+    data: {
+      action: 'upsert-form',
+      active: true,
+      collectionKey: 'bookings',
+      confirmed: true,
+      fieldKeys: ['name', 'email', 'seats'],
+      formKey: 'booking-form',
+      pageSlug: 'home',
+      requiredRole: null,
+      submitLabel: '送出預約',
+      successMessage: '已安全收到預約。',
+      title: '預約顧問',
+      workflowTrigger: 'audit-record-created',
+    },
+  });
+  expect(formResponse.ok()).toBe(true);
+  const publicWithDataForm = await page.request.get(publicRequestPath);
+  expect(publicWithDataForm.ok()).toBe(true);
+  expect(await publicWithDataForm.text()).toContain(
+    `/api/public-sites/${siteSlug}/data/booking-form`,
+  );
+
+  const origin = new URL(page.url()).origin;
+  const publicDataResponse = await page.request.post(
+    `/api/public-sites/${siteSlug}/data/booking-form`,
+    {
+      form: {
+        'field-email': 'booking@example.com',
+        'field-name': 'Phase 44 訪客',
+        'field-seats': '2',
+        formKey: 'booking-form',
+        idempotencyKey: crypto.randomUUID(),
+        pageSlug: 'home',
+        website: '',
+      },
+      headers: { origin },
+    },
+  );
+  expect(publicDataResponse.status()).toBe(201);
+  expect(await publicDataResponse.text()).toContain('已安全收到預約。');
+  const deniedDataResponse = await page.request.post(
+    `/api/public-sites/${siteSlug}/data/booking-form`,
+    {
+      form: {
+        'field-email': 'attacker@example.com',
+        'field-name': 'Cross-origin visitor',
+        'field-seats': '1',
+        formKey: 'booking-form',
+        idempotencyKey: crypto.randomUUID(),
+        pageSlug: 'home',
+        website: '',
+      },
+      headers: { origin: 'https://attacker.invalid' },
+    },
+  );
+  expect(deniedDataResponse.status()).toBe(403);
+
+  await page.reload();
+  await page.getByRole('button', { name: '資料與表單' }).click();
+  await expect(page.getByRole('heading', { name: '表單流程 · 資料集合' })).toBeVisible();
+  await expect(page.getByText('預約顧問')).toBeVisible();
+  await expect(page.getByText('Phase 44 訪客')).toBeVisible();
+  const dataDashboardResponse = await page.request.get(`/api/websites/${adminProjectId!}/data`);
+  expect(dataDashboardResponse.ok()).toBe(true);
+  const dataDashboard = (await dataDashboardResponse.json()) as {
+    readonly dashboard: {
+      readonly records: readonly {
+        readonly collectionKey: string;
+        readonly id: string;
+        readonly values: Readonly<Record<string, unknown>>;
+        readonly version: number;
+      }[];
+    };
+  };
+  const bookingRecord = dataDashboard.dashboard.records[0];
+  expect(bookingRecord).toMatchObject({
+    collectionKey: 'bookings',
+    values: { email: 'booking@example.com', name: 'Phase 44 訪客', seats: 2 },
+    version: 1,
+  });
+  const deleteDataResponse = await page.request.patch(`/api/websites/${adminProjectId!}/data`, {
+    data: {
+      action: 'delete-record',
+      collectionKey: 'bookings',
+      confirmed: true,
+      expectedVersion: bookingRecord!.version,
+      idempotencyKey: crypto.randomUUID(),
+      recordId: bookingRecord!.id,
+    },
+  });
+  expect(deleteDataResponse.ok()).toBe(true);
+
   await page.getByRole('button', { name: '會員與權限' }).click();
   await expect(page.getByRole('heading', { name: '會員註冊與受保護頁面' })).toBeVisible();
   await page.getByText('開放訪客註冊').click();
@@ -109,7 +241,6 @@ test('creates, refines, previews, and explicitly publishes a website from one pr
 
   const visitorContext = await browser.newContext();
   const visitorPage = await visitorContext.newPage();
-  const origin = new URL(page.url()).origin;
   const protectedResponse = await visitorPage.goto(`${origin}${publicRequestPath}`);
   expect(protectedResponse?.status()).toBe(401);
   await expect(visitorPage.getByRole('heading', { name: '此頁面需要登入' })).toBeVisible();

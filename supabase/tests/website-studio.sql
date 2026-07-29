@@ -857,6 +857,242 @@ select tests.assert_true(
   'reviewing site access must create an auditable metadata-only event'
 );
 
+insert into public.website_data_collections (
+  id,
+  tenant_id,
+  project_id,
+  collection_key,
+  name,
+  fields,
+  reviewed_by,
+  created_by,
+  updated_by
+)
+values
+  (
+    'e9100000-0000-4000-8000-000000000001',
+    'e2000000-0000-4000-8000-000000000001',
+    'e3000000-0000-4000-8000-000000000001',
+    'bookings',
+    'Tenant A bookings',
+    '[
+      {
+        "key":"name",
+        "label":"Name",
+        "options":[],
+        "referenceCollectionKey":null,
+        "required":true,
+        "type":"text"
+      },
+      {
+        "key":"seats",
+        "label":"Seats",
+        "options":[],
+        "referenceCollectionKey":null,
+        "required":true,
+        "type":"number"
+      }
+    ]',
+    'e1000000-0000-4000-8000-000000000001',
+    'e1000000-0000-4000-8000-000000000001',
+    'e1000000-0000-4000-8000-000000000001'
+  ),
+  (
+    'e9100000-0000-4000-8000-000000000002',
+    'e2000000-0000-4000-8000-000000000002',
+    'e3000000-0000-4000-8000-000000000002',
+    'bookings',
+    'Tenant B bookings',
+    '[
+      {
+        "key":"name",
+        "label":"Name",
+        "options":[],
+        "referenceCollectionKey":null,
+        "required":true,
+        "type":"text"
+      }
+    ]',
+    'e1000000-0000-4000-8000-000000000002',
+    'e1000000-0000-4000-8000-000000000002',
+    'e1000000-0000-4000-8000-000000000002'
+  );
+
+insert into public.website_data_forms (
+  id,
+  tenant_id,
+  project_id,
+  collection_id,
+  form_key,
+  page_slug,
+  title,
+  field_keys,
+  submit_label,
+  success_message,
+  workflow_trigger,
+  active,
+  reviewed_by,
+  created_by,
+  updated_by
+)
+values
+  (
+    'e9110000-0000-4000-8000-000000000001',
+    'e2000000-0000-4000-8000-000000000001',
+    'e3000000-0000-4000-8000-000000000001',
+    'e9100000-0000-4000-8000-000000000001',
+    'booking-form',
+    'home',
+    'Tenant A booking form',
+    '["name","seats"]',
+    'Submit',
+    'Booking received.',
+    'audit-record-created',
+    true,
+    'e1000000-0000-4000-8000-000000000001',
+    'e1000000-0000-4000-8000-000000000001',
+    'e1000000-0000-4000-8000-000000000001'
+  ),
+  (
+    'e9110000-0000-4000-8000-000000000002',
+    'e2000000-0000-4000-8000-000000000002',
+    'e3000000-0000-4000-8000-000000000002',
+    'e9100000-0000-4000-8000-000000000002',
+    'booking-form',
+    'home',
+    'Tenant B booking form',
+    '["name"]',
+    'Submit',
+    'Booking received.',
+    'none',
+    true,
+    'e1000000-0000-4000-8000-000000000002',
+    'e1000000-0000-4000-8000-000000000002',
+    'e1000000-0000-4000-8000-000000000002'
+  );
+
+select public.execute_website_data_action(
+  target_tenant_id => 'e2000000-0000-4000-8000-000000000001',
+  target_project_id => 'e3000000-0000-4000-8000-000000000001',
+  target_collection_key => 'bookings',
+  action_name => 'create-record',
+  action_idempotency_key => 'e9200000-0000-4000-8000-000000000001',
+  action_values => '{"name":"Tenant A visitor","seats":2}',
+  workspace_actor_user_id => 'e1000000-0000-4000-8000-000000000001',
+  action_workflow_trigger => 'audit-record-created'
+);
+
+select public.execute_website_data_action(
+  target_tenant_id => 'e2000000-0000-4000-8000-000000000001',
+  target_project_id => 'e3000000-0000-4000-8000-000000000001',
+  target_collection_key => 'bookings',
+  action_name => 'create-record',
+  action_idempotency_key => 'e9200000-0000-4000-8000-000000000001',
+  action_values => '{"name":"Tenant A visitor","seats":2}',
+  workspace_actor_user_id => 'e1000000-0000-4000-8000-000000000001',
+  action_workflow_trigger => 'audit-record-created'
+);
+
+select tests.assert_true(
+  (
+    select count(*) = 1
+    from public.website_data_records
+    where project_id = 'e3000000-0000-4000-8000-000000000001'
+      and collection_id = 'e9100000-0000-4000-8000-000000000001'
+  )
+  and (
+    select count(*) = 1
+    from public.website_data_action_runs
+    where project_id = 'e3000000-0000-4000-8000-000000000001'
+      and idempotency_key = 'e9200000-0000-4000-8000-000000000001'
+  ),
+  'an idempotent website data action must write one record and one action run'
+);
+
+select public.execute_website_data_action(
+  target_tenant_id => 'e2000000-0000-4000-8000-000000000001',
+  target_project_id => 'e3000000-0000-4000-8000-000000000001',
+  target_collection_key => 'bookings',
+  action_name => 'update-record',
+  action_idempotency_key => 'e9200000-0000-4000-8000-000000000002',
+  action_values => '{"name":"Tenant A visitor","seats":4}',
+  workspace_actor_user_id => 'e1000000-0000-4000-8000-000000000001',
+  target_record_id => (
+    select id
+    from public.website_data_records
+    where project_id = 'e3000000-0000-4000-8000-000000000001'
+    limit 1
+  ),
+  target_expected_version => 1
+);
+
+select tests.assert_true(
+  (
+    select version = 2 and values ->> 'seats' = '4'
+    from public.website_data_records
+    where project_id = 'e3000000-0000-4000-8000-000000000001'
+  ),
+  'a safe update must use optimistic versioning and persist validated values'
+);
+
+do $$
+declare
+  denied boolean := false;
+begin
+  begin
+    perform public.execute_website_data_action(
+      target_tenant_id => 'e2000000-0000-4000-8000-000000000001',
+      target_project_id => 'e3000000-0000-4000-8000-000000000001',
+      target_collection_key => 'bookings',
+      action_name => 'delete-record',
+      action_idempotency_key => 'e9200000-0000-4000-8000-000000000003',
+      action_values => '{}',
+      workspace_actor_user_id => 'e1000000-0000-4000-8000-000000000001',
+      target_record_id => (
+        select id
+        from public.website_data_records
+        where project_id = 'e3000000-0000-4000-8000-000000000001'
+        limit 1
+      ),
+      target_expected_version => 2,
+      deletion_confirmed => false
+    );
+  exception
+    when others then
+      if position('Deletion requires explicit confirmation' in sqlerrm) > 0 then
+        denied := true;
+      else
+        raise;
+      end if;
+  end;
+  if not denied then
+    raise exception 'Website data delete without explicit confirmation was not denied';
+  end if;
+end;
+$$;
+
+select public.execute_website_data_action(
+  target_tenant_id => 'e2000000-0000-4000-8000-000000000002',
+  target_project_id => 'e3000000-0000-4000-8000-000000000002',
+  target_collection_key => 'bookings',
+  action_name => 'create-record',
+  action_idempotency_key => 'e9200000-0000-4000-8000-000000000004',
+  action_values => '{"name":"Tenant B visitor"}',
+  workspace_actor_user_id => 'e1000000-0000-4000-8000-000000000002'
+);
+
+select tests.assert_true(
+  exists (
+    select 1
+    from public.audit_logs
+    where action = 'website_data.record_created'
+      and correlation_id = 'e3000000-0000-4000-8000-000000000001'
+      and metadata ->> 'collectionKey' = 'bookings'
+      and not metadata ? 'values'
+  ),
+  'safe website data actions must audit metadata without storing record values'
+);
+
 reset role;
 set local role authenticated;
 select set_config(
@@ -919,6 +1155,45 @@ select tests.assert_true(
   'site role and protected-page mutations must remain behind authenticated server routes'
 );
 
+select tests.assert_true(
+  (
+    select count(*) = 1
+      and bool_and(tenant_id = 'e2000000-0000-4000-8000-000000000001')
+    from public.website_data_collections
+  )
+  and (
+    select count(*) = 1
+      and bool_and(tenant_id = 'e2000000-0000-4000-8000-000000000001')
+    from public.website_data_forms
+  )
+  and (
+    select count(*) = 1
+      and bool_and(tenant_id = 'e2000000-0000-4000-8000-000000000001')
+    from public.website_data_records
+  )
+  and (
+    select count(*) = 2
+      and bool_and(tenant_id = 'e2000000-0000-4000-8000-000000000001')
+    from public.website_data_action_runs
+  ),
+  'workspace members must only read website data definitions and actions from their tenant'
+);
+
+select tests.assert_true(
+  not has_table_privilege('authenticated', 'public.website_data_collections', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_data_collections', 'update')
+  and not has_table_privilege('authenticated', 'public.website_data_collections', 'delete')
+  and not has_table_privilege('authenticated', 'public.website_data_forms', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_data_records', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_data_action_runs', 'insert')
+  and not has_function_privilege(
+    'authenticated',
+    'public.execute_website_data_action(uuid,uuid,text,public.website_data_action_type,uuid,jsonb,uuid,uuid,uuid,integer,boolean,public.website_data_workflow_trigger)',
+    'execute'
+  ),
+  'website data mutations and safe action RPCs must remain server-only'
+);
+
 select set_config(
   'request.jwt.claim.sub',
   'e1000000-0000-4000-8000-000000000003',
@@ -931,6 +1206,14 @@ select tests.assert_true(
     from public.website_site_memberships
   ),
   'a site member must not receive workspace-level access to site member administration'
+);
+
+select tests.assert_true(
+  (select count(*) from public.website_data_collections) = 0
+  and (select count(*) from public.website_data_forms) = 0
+  and (select count(*) from public.website_data_records) = 0
+  and (select count(*) from public.website_data_action_runs) = 0,
+  'site-only members must not receive workspace administration access to website data'
 );
 
 reset role;
