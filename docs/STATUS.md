@@ -3094,6 +3094,25 @@ Status: completed
   non-secret readiness persistence
 - `pnpm build:desktop`: not applicable — no Desktop code changed
 
+### Production acceptance
+
+- Git commit `8aa108d` was pushed to `codex/ai-workflow-platform`, and
+  `202607280013_guided_site_integrations.sql` was applied to the linked
+  production database.
+- Vercel Production deployment `dpl_9DmfHskRTz4NBj5MduTm4hXWfvMw` is Ready and
+  serves the primary, apex, Vercel, and existing wildcard platform-site
+  aliases.
+- Authenticated read-only acceptance on the production Website Studio project
+  confirmed that the four-module integration workspace loads successfully.
+- The Stripe guide exposes only the allowlisted server variable names
+  `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, includes no credential input,
+  contains no test or live secret value pattern, and links to the official
+  Stripe Sandbox key page.
+- Explicit provider-test acceptance remains disabled until all provider
+  account, server runtime, secret-location, callback, privacy, and test
+  prerequisites are checked. Production acceptance did not falsely mark a
+  payment or external API provider test as passed and made no provider write.
+
 ### Known limitations
 
 - Phase 40 provides a validated, persisted, and auditable integration contract;
