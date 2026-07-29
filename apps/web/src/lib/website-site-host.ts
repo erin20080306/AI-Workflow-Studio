@@ -103,3 +103,8 @@ export function isPublishedWebsiteAssetPath(pathname: string, siteSlugValue: str
   const siteSlug = normalizeWebsiteSiteSlug(siteSlugValue);
   return pathname.startsWith(`/api/public-sites/${siteSlug}/assets/`);
 }
+
+export function isPublishedWebsiteApiPath(pathname: string, siteSlugValue: string): boolean {
+  const siteSlug = normalizeWebsiteSiteSlug(siteSlugValue);
+  return pathname.startsWith(`/api/public-sites/${siteSlug}/`);
+}

@@ -82,13 +82,36 @@ describe('website preview', () => {
     expect(html).not.toContain('<form');
   });
 
-  it('renders published navigation as internal links without enabling scripts or forms', () => {
-    const html = renderWebsitePublishedDocument(spec, 'home', 'product-site-a1000000');
+  it('renders published navigation, managed content, and a same-origin contact form', () => {
+    const html = renderWebsitePublishedDocument(
+      spec,
+      'home',
+      'product-site-a1000000',
+      new Map(),
+      'platform-path',
+      [
+        {
+          body: 'Managed content remains validated before public rendering.',
+          contentKey: 'latest-news',
+          createdAt: '2026-07-29T00:00:00.000Z',
+          id: '10000000-0000-4000-8000-000000004211',
+          pageSlug: 'home',
+          projectId: '10000000-0000-4000-8000-000000004212',
+          status: 'published',
+          tenantId: '10000000-0000-4000-8000-000000004213',
+          title: 'Latest news',
+          updatedAt: '2026-07-29T00:00:00.000Z',
+        },
+      ],
+    );
     expect(html).toContain('content="index,follow"');
     expect(html).toContain('href="/s/product-site-a1000000/home"');
+    expect(html).toContain('Latest news');
+    expect(html).toContain('action="/api/public-sites/product-site-a1000000/contact"');
+    expect(html).toContain('<form');
     expect(html).not.toContain('<script');
     expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("script-src 'none'");
-    expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("form-action 'none'");
+    expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("form-action 'self'");
     expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("frame-ancestors 'none'");
   });
 
@@ -138,6 +161,7 @@ describe('website preview', () => {
     expect(html).toContain('href="index.html"');
     expect(html).toContain('href="page-services.html"');
     expect(html).not.toContain('/s/');
+    expect(html).not.toContain('<form');
   });
 
   it('renders deterministically and keeps asset references inside registered markup', () => {

@@ -78,6 +78,76 @@ values
     '{"purpose":"Tenant B private purpose"}'
   );
 
+insert into public.website_content_entries (
+  id,
+  tenant_id,
+  project_id,
+  content_key,
+  page_slug,
+  title,
+  body,
+  status,
+  created_by,
+  updated_by
+)
+values
+  (
+    'e4000000-0000-4000-8000-000000000001',
+    'e2000000-0000-4000-8000-000000000001',
+    'e3000000-0000-4000-8000-000000000001',
+    'latest-news',
+    'home',
+    'Tenant A managed content',
+    'Tenant A private managed website content.',
+    'published',
+    'e1000000-0000-4000-8000-000000000001',
+    'e1000000-0000-4000-8000-000000000001'
+  ),
+  (
+    'e4000000-0000-4000-8000-000000000002',
+    'e2000000-0000-4000-8000-000000000002',
+    'e3000000-0000-4000-8000-000000000002',
+    'latest-news',
+    'home',
+    'Tenant B managed content',
+    'Tenant B private managed website content.',
+    'draft',
+    'e1000000-0000-4000-8000-000000000002',
+    'e1000000-0000-4000-8000-000000000002'
+  );
+
+insert into public.website_form_submissions (
+  id,
+  tenant_id,
+  project_id,
+  page_slug,
+  name,
+  email,
+  subject,
+  message
+)
+values
+  (
+    'e5000000-0000-4000-8000-000000000001',
+    'e2000000-0000-4000-8000-000000000001',
+    'e3000000-0000-4000-8000-000000000001',
+    'home',
+    'Tenant A visitor',
+    'tenant-a-visitor@example.invalid',
+    'Tenant A private subject',
+    'Tenant A private contact message for the site owner.'
+  ),
+  (
+    'e5000000-0000-4000-8000-000000000002',
+    'e2000000-0000-4000-8000-000000000002',
+    'e3000000-0000-4000-8000-000000000002',
+    'home',
+    'Tenant B visitor',
+    'tenant-b-visitor@example.invalid',
+    'Tenant B private subject',
+    'Tenant B private contact message for the site owner.'
+  );
+
 insert into public.website_brief_messages (
   tenant_id,
   project_id,
@@ -344,6 +414,16 @@ select tests.assert_true(
 );
 
 select tests.assert_true(
+  (select count(*) from public.website_content_entries) = 1,
+  'a member must only see managed website content from their tenant'
+);
+
+select tests.assert_true(
+  (select count(*) from public.website_form_submissions) = 1,
+  'a member must only see website form submissions from their tenant'
+);
+
+select tests.assert_true(
   not exists (
     select 1
     from public.website_assets
@@ -396,6 +476,20 @@ select tests.assert_true(
   and not has_table_privilege('authenticated', 'public.website_brief_messages', 'update')
   and not has_table_privilege('authenticated', 'public.website_brief_messages', 'delete'),
   'website conversation mutations must remain behind authenticated server routes'
+);
+
+select tests.assert_true(
+  not has_table_privilege('authenticated', 'public.website_content_entries', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_content_entries', 'update')
+  and not has_table_privilege('authenticated', 'public.website_content_entries', 'delete'),
+  'managed website content mutations must remain behind authenticated server routes'
+);
+
+select tests.assert_true(
+  not has_table_privilege('authenticated', 'public.website_form_submissions', 'insert')
+  and not has_table_privilege('authenticated', 'public.website_form_submissions', 'update')
+  and not has_table_privilege('authenticated', 'public.website_form_submissions', 'delete'),
+  'website form mutations must remain behind validated server routes'
 );
 
 select tests.assert_true(

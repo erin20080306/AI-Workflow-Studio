@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { WEBSITE_PUBLIC_HEADERS } from '@/lib/website-preview-contract';
 import { renderWebsitePublishedDocument } from '@/lib/website-preview-renderer';
+import { listPublishedWebsiteContent } from '@/lib/website-admin-server';
 import { getPublishedWebsiteBySlug } from '@/lib/website-publication-server';
 import { WEBSITE_SITE_HOST_HEADER } from '@/lib/website-site-host';
 
@@ -51,6 +52,7 @@ export async function GET(
           `/api/public-sites/${website.publication.slug}/assets/${asset.id}`,
         ]),
     );
+    const managedContent = await listPublishedWebsiteContent(website, pageSlug);
     return new Response(
       renderWebsitePublishedDocument(
         website.spec,
@@ -58,6 +60,7 @@ export async function GET(
         website.publication.slug,
         assetUrls,
         routeMode,
+        managedContent,
       ),
       {
         headers: WEBSITE_PUBLIC_HEADERS,

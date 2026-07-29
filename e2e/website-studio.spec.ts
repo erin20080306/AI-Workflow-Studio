@@ -51,6 +51,37 @@ test('creates, refines, previews, and explicitly publishes a website from one pr
   expect(publicResponse.ok()).toBe(true);
   expect(await publicResponse.text()).toContain('index,follow');
 
+  await page.getByRole('link', { name: '網站後台' }).click();
+  await expect(page.getByText('網站私人後台')).toBeVisible();
+  await page.getByLabel('穩定內容代稱').fill('launch-note');
+  await page.getByLabel('內容標題').fill('正式上線公告');
+  await page.getByLabel('內容本文').fill('這段內容由網站後台管理，並安全顯示在公開網站。');
+  await page.getByText('發布內容').click();
+  await page.getByRole('button', { name: '儲存內容' }).click();
+  await expect(page.getByText('網站後台已更新。')).toBeVisible();
+  expect(await (await page.request.get(publicRequestPath)).text()).toContain(
+    '這段內容由網站後台管理，並安全顯示在公開網站。',
+  );
+
+  const siteSlug = publicRequestPath.split('/')[2]!;
+  const contactResponse = await page.request.post(`/api/public-sites/${siteSlug}/contact`, {
+    form: {
+      email: 'visitor@example.com',
+      message: '我想了解網站後台與自動化服務。',
+      name: '公開網站訪客',
+      pageSlug: 'home',
+      subject: '服務詢問',
+      website: '',
+    },
+  });
+  expect(contactResponse.status()).toBe(201);
+  await page.reload();
+  await page.getByRole('button', { name: /聯絡收件匣/ }).click();
+  await expect(page.getByText('公開網站訪客 · visitor@example.com')).toBeVisible();
+  await page.getByLabel('狀態').selectOption('read');
+  await expect(page.getByText('網站後台已更新。')).toBeVisible();
+  await page.getByRole('link', { name: /返回 Canvas/ }).click();
+
   await expect(page.getByRole('heading', { name: '這個網站要如何正式上線？' })).toBeVisible();
   await expect(page.getByRole('button', { name: /平台子網域（推薦）/ })).toHaveAttribute(
     'aria-pressed',

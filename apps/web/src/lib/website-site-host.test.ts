@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   defaultWebsiteSiteSlug,
+  isPublishedWebsiteApiPath,
   isPublishedWebsiteAssetPath,
   normalizeWebsiteSiteSlug,
   websiteSiteRewritePath,
@@ -42,6 +43,11 @@ describe('website wildcard host routing', () => {
     expect(
       isPublishedWebsiteAssetPath('/api/public-sites/another-site/assets/hero-art', slug),
     ).toBe(false);
+  });
+
+  it('keeps bounded public site APIs outside wildcard page rewrites', () => {
+    expect(isPublishedWebsiteApiPath(`/api/public-sites/${slug}/contact`, slug)).toBe(true);
+    expect(isPublishedWebsiteApiPath('/api/public-sites/another-site/contact', slug)).toBe(false);
   });
 
   it('builds the stable HTTPS platform subdomain', () => {

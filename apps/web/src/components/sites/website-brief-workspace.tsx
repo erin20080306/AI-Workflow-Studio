@@ -52,6 +52,7 @@ const QuickBuildResponseSchema = z
 
 const copy = {
   en: {
+    admin: 'Website admin',
     advanced: 'Advanced six-step brief',
     answer: 'Send answers',
     answerPlaceholder: 'Add the decision that would materially change this website…',
@@ -127,6 +128,7 @@ const copy = {
     },
   },
   'zh-Hant': {
+    admin: '網站後台',
     advanced: '進階六步驟需求設定',
     answer: '送出全部回答',
     answerPlaceholder: '補充會真正影響網站方向的決策…',
@@ -561,14 +563,24 @@ export function WebsiteBriefWorkspace({
             {locked ? text.draft : text.briefing} · {project.completedSteps} / 6
           </p>
         </div>
-        <span
-          className={`inline-flex items-center gap-2 self-start rounded-full px-3 py-1.5 text-xs font-semibold sm:self-auto ${
-            locked ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'
-          }`}
-        >
-          {locked ? <CheckIcon className="size-4" /> : <SparkIcon className="size-4" />}
-          {locked ? text.draft : text.assistant}
-        </span>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {locked ? (
+            <Link
+              className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800"
+              href={`/dashboard/sites/${project.id}/admin`}
+            >
+              {text.admin}
+            </Link>
+          ) : null}
+          <span
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
+              locked ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'
+            }`}
+          >
+            {locked ? <CheckIcon className="size-4" /> : <SparkIcon className="size-4" />}
+            {locked ? text.draft : text.assistant}
+          </span>
+        </div>
       </div>
 
       {locked && message !== undefined ? (

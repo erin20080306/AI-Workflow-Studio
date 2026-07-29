@@ -64,7 +64,7 @@ export const WEBSITE_PUBLIC_HEADERS = {
     "media-src 'none'",
     "object-src 'none'",
     "base-uri 'none'",
-    "form-action 'none'",
+    "form-action 'self'",
     "frame-ancestors 'none'",
   ].join('; '),
   'content-type': 'text/html; charset=utf-8',

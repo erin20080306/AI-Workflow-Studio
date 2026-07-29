@@ -6,7 +6,7 @@ import {
   parseSupabasePublicConfiguration,
 } from './lib/supabase/config';
 import {
-  isPublishedWebsiteAssetPath,
+  isPublishedWebsiteApiPath,
   WEBSITE_SITE_HOST_HEADER,
   websiteSiteRewritePath,
   websiteSiteSlugFromHost,
@@ -18,7 +18,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete(WEBSITE_SITE_HOST_HEADER);
   if (siteSlug !== undefined) {
-    if (isPublishedWebsiteAssetPath(request.nextUrl.pathname, siteSlug)) {
+    if (isPublishedWebsiteApiPath(request.nextUrl.pathname, siteSlug)) {
       return NextResponse.next({ request: { headers: requestHeaders } });
     }
     requestHeaders.set(WEBSITE_SITE_HOST_HEADER, siteSlug);

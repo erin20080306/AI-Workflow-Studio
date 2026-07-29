@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 41 — Website delivery acceptance (completed)
+Phase 42 — Full-stack website admin (completed)
 
 ## Repository baseline
 
@@ -3195,3 +3195,61 @@ Status: completed
   produced only from the safe mock environment with synthetic files and cropped
   framing that excludes administrator identity, passwords, API keys, provider
   dashboards, and production credentials.
+
+## Phase 42 — Full-stack website admin
+
+Status: completed
+
+### Implemented
+
+- Added a bilingual, authenticated Website Project admin area reached from the
+  existing Canvas workspace. Workspace viewers receive read-only access while
+  owners and administrators can manage content and contact-message status.
+- Added safe CMS entries with stable content keys, page targeting, draft versus
+  published state, bounded titles and bodies, and runtime validation. Published
+  entries are rendered only on the matching page of the active public site.
+- Added an accessible server-rendered contact form to published pages that
+  explicitly contain a validated contact action. Canvas previews and portable
+  static exports remain non-submitting.
+- Added a public contact endpoint with strict form schemas, a 16 KB request
+  boundary, honeypot field, five-message ten-minute sender limit, escaped
+  success/error documents, no client script, and no credential handling.
+- Added a project-scoped contact inbox with `new`, `read`, and `archived`
+  states. Status mutations are authenticated, Tenant checked, and audited.
+- Added `website_content_entries` and `website_form_submissions` migrations with
+  foreign keys, constraints, indexes, updated timestamps, RLS, authenticated
+  member reads, service-only mutations, and bounded non-PII audit metadata.
+- Added explicit future phase gates for site-user identity and roles, custom
+  data and actions, files and analytics, and full-stack role acceptance. The UI
+  labels those modules as planned instead of implying they are already live.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 247 tests across 56 files
+- `pnpm db:test`: passed — fresh migrations, RLS/privilege assertions,
+  cross-Tenant visibility, and authenticated mutation denial passed
+- `pnpm build:web`: passed — 47 application pages, including the authenticated
+  website admin page and both new server routes, compiled successfully. The
+  sandboxed Turbopack attempt could not bind its worker port; the identical
+  permitted retry passed.
+- `pnpm security:scan-client`: passed — 35 generated client files scanned
+- `pnpm exec playwright test e2e/website-studio.spec.ts --grep 'creates, refines'`:
+  passed — one Chromium flow covered prompt-to-site, Canvas, publishing, CMS
+  publication on the public page, public contact submission, inbox receipt,
+  and status update
+- `pnpm build:desktop`: not applicable — no Desktop code changed
+
+### Known limitations
+
+- This phase establishes a real website backend, but it is not yet full parity
+  with a general full-stack website platform. Site-user registration and roles,
+  custom collections/actions, private files, analytics, and their combined
+  acceptance remain Phases 43–46.
+- CMS entries are intentionally bounded text records rather than arbitrary HTML
+  or executable customer code.
+- Contact anti-abuse controls are intentionally conservative and do not replace
+  a future provider-level bot or abuse service for high-volume public sites.
+- Phase 42 has not been pushed or deployed to Production in this phase.

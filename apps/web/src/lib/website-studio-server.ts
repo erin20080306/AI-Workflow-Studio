@@ -38,6 +38,7 @@ export type WebsiteStudioErrorCode =
   | 'WEBSITE_INVALID'
   | 'WEBSITE_NOT_FOUND'
   | 'WEBSITE_PROVIDER_UNAVAILABLE'
+  | 'WEBSITE_RATE_LIMITED'
   | 'WEBSITE_STATE_CONFLICT';
 
 export class WebsiteStudioError extends Error {
