@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkspaceContext } from './auth/context';
 import {
+  consumeMeteredAllowance,
   getTenantUsageSnapshot,
   recordReservedAssistantUsage,
   reserveAssistantUsage,
@@ -72,5 +73,70 @@ describe('website delivery usage acceptance', () => {
       costMicrounits: settled.ai.usedMicrounits - before.ai.usedMicrounits,
       provider: 'gemini',
     });
+  });
+
+  it('keeps platform-admin acceptance available after tenant allowances are exhausted', async () => {
+    const adminContext: WorkspaceContext = {
+      ...context,
+      actor: {
+        ...context.actor,
+        tenantId: '10000000-0000-4000-8000-000000004103',
+      },
+      platformAdmin: true,
+      tenant: {
+        ...context.tenant,
+        id: '10000000-0000-4000-8000-000000004103',
+      },
+    };
+    const usageGlobal = globalThis as typeof globalThis & {
+      __aiWorkflowUsageState?: {
+        records: {
+          costMicrounits: number;
+          inputUnits: number;
+          operation: string;
+          provider: string;
+          tenantId: string;
+        }[];
+        requestTimes: { createdAt: number; tenantId: string }[];
+        reservations: Map<string, { costMicrounits: number; createdAt: number; tenantId: string }>;
+      };
+    };
+    usageGlobal.__aiWorkflowUsageState ??= {
+      records: [],
+      requestTimes: [],
+      reservations: new Map(),
+    };
+    usageGlobal.__aiWorkflowUsageState.records.push(
+      {
+        costMicrounits: 2_000_000_000,
+        inputUnits: 1,
+        operation: 'chat',
+        provider: 'openai',
+        tenantId: adminContext.actor.tenantId,
+      },
+      {
+        costMicrounits: 0,
+        inputUnits: 60_000_000_000,
+        operation: 'source_upload',
+        provider: 'platform',
+        tenantId: adminContext.actor.tenantId,
+      },
+    );
+
+    const exhausted = await getTenantUsageSnapshot(adminContext);
+    expect(exhausted.ai.level).toBe('blocked');
+    expect(exhausted.source.usedBytes).toBeGreaterThan(exhausted.source.limitBytes);
+
+    const reservation = await reserveAssistantUsage(adminContext, {
+      inputCharacters: 120,
+      maxAttempts: 1,
+      maxOutputTokens: 200,
+      operation: 'workflow_plan',
+      provider: 'openai',
+    });
+    await consumeMeteredAllowance(adminContext, 'source_upload', 10, {
+      acceptance: 'platform-admin',
+    });
+    await reservation.release();
   });
 });

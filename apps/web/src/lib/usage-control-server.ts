@@ -293,7 +293,7 @@ export async function reserveAssistantUsage(
   const costMultiplier = input.costMultiplier ?? 1;
   if (getEnvironment().mockMode) {
     const snapshot = await getTenantUsageSnapshot(context);
-    if (!canReserveUsage(snapshot.ai, maximumCostMicrounits)) {
+    if (!context.platformAdmin && !canReserveUsage(snapshot.ai, maximumCostMicrounits)) {
       throw new UsageControlError(
         'USAGE_BUDGET_EXCEEDED',
         'The workspace monthly AI cost allowance was reached.',
@@ -381,7 +381,7 @@ export async function reserveWebsiteImageUsage(
 
   if (getEnvironment().mockMode) {
     const snapshot = await getTenantUsageSnapshot(context);
-    if (!canReserveUsage(snapshot.ai, maximumCostMicrounits)) {
+    if (!context.platformAdmin && !canReserveUsage(snapshot.ai, maximumCostMicrounits)) {
       throw new UsageControlError(
         'USAGE_BUDGET_EXCEEDED',
         'The workspace monthly AI cost allowance was reached.',
@@ -545,7 +545,7 @@ export async function consumeMeteredAllowance(
       operation === 'source_upload' ? snapshot.source.usedBytes : snapshot.toolCalls.used;
     const limit =
       operation === 'source_upload' ? snapshot.source.limitBytes : snapshot.toolCalls.limit;
-    if (used + units > limit) {
+    if (!context.platformAdmin && used + units > limit) {
       throw new UsageControlError(
         'USAGE_ALLOWANCE_EXCEEDED',
         'The workspace monthly file or tool allowance was reached.',

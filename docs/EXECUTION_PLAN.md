@@ -584,7 +584,10 @@ The platform administrator may choose any configured, account-verified model
 provider and allowlisted model level. The selected provider and level must be
 stored in the validated AI summary node so execution uses the reviewed model,
 not a hidden fallback. Ordinary members remain subject to Microsoft Store plan
-entitlements, monthly allowances, and cost controls.
+entitlements, monthly allowances, and cost controls. An enabled platform
+administrator may bypass Tenant monthly AI and metered-source allowances for
+acceptance and support, but every request must still pass the provider,
+allowlist, rate-limit, per-request cap, audit, and usage-recording boundaries.
 
 Acceptance requires a real natural-language Gmail-to-AI-to-report run in
 Production, approval and successful per-step completion, confirmation that no

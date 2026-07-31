@@ -3406,6 +3406,9 @@ Status: in progress
   used again during execution. Platform administrators receive the complete
   configured Business model-level matrix; ordinary members retain Store plan
   and budget enforcement.
+- Added a server and database platform-administrator override for monthly AI
+  and metered-source allowances. It does not bypass provider health, model
+  allowlists, per-request bounds, rate limits, audit events, or usage records.
 - Added bounded Gmail body extraction, Google Forms response retrieval, Gmail
   draft creation, professional Slides generation with optional image and
   reference inputs, and three reviewed Apps Script templates. Arbitrary user or
@@ -3424,20 +3427,35 @@ Status: in progress
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
 - `pnpm typecheck`: passed after the model-routing and Gmail body changes
-- `pnpm test`: passed — 270 tests across 63 files
+- `pnpm test`: passed — 271 tests across 63 files, including an over-budget
+  platform-administrator reservation and metered-source acceptance test
 - `pnpm build:web`: passed — 47 application pages and all Work, Google, run,
   approval, schedule, and Website routes compiled successfully
 - `pnpm build:desktop`: passed — main, preload, and renderer bundles compiled
 - `pnpm security:scan-client`: passed — 35 generated client files scanned
-- Supabase remote migration dry-run: passed and identified four pending ordered
-  migrations, including `202608010001_google_workspace_connections.sql`
+- The four explicitly authorized Supabase migrations were applied to
+  Production and local/remote migration versions matched through
+  `202608010001_google_workspace_connections.sql`.
+- Commit `9794f24` was pushed to `codex/ai-workflow-platform`; Vercel Production
+  deployment `dpl_AgBDuPZttxsdEk6nnDdURRwCJ83D` completed and was aliased to
+  `https://www.erin-aiworkflowstudio.com`.
+- Authenticated Production acceptance reached the Work planner with the
+  platform administrator and verified that all configured providers and model
+  levels were selectable. The request exposed a real quota defect:
+  `USAGE_BUDGET_EXCEEDED` was returned for the administrator. The tested fix is
+  contained in the pending `202608010002_platform_admin_usage_override.sql`
+  migration and matching server checks.
 
 ### Pending production acceptance
 
-- The production database migration requires explicit authorization because it
-  changes live schema. It has not been applied.
+- The additional platform-administrator usage-override migration requires its
+  own explicit Production authorization. It has not been applied.
 - The isolated database test could not start because the local Docker daemon is
   not running; no test was disabled or bypassed.
-- Commit, push, Vercel Production deployment, Google Workspace reconnection, and
-  the authenticated Gmail-to-report live run remain pending. The phase must not
-  be described as complete until these steps pass.
+- Production does not currently contain `GOOGLE_CLIENT_ID`,
+  `GOOGLE_CLIENT_SECRET`, or `GOOGLE_REDIRECT_URI`; therefore a real Google
+  Workspace reconnection and Gmail-to-report live run cannot yet pass.
+- The quota fix commit, migration application, replacement Vercel Production
+  deployment, Google Workspace reconnection, and authenticated Gmail-to-report
+  live run remain pending. The phase must not be described as complete until
+  these steps pass.

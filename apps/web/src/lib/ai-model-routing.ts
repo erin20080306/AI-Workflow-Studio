@@ -212,7 +212,7 @@ export async function resolveAiModelRoute(
       'The selected AI model level is not included in this subscription.',
     );
   }
-  if (snapshot.ai.level === 'blocked') {
+  if (!context.platformAdmin && snapshot.ai.level === 'blocked') {
     throw new AiGatewayError('AI_REQUEST_INVALID', 'The monthly AI allowance has been reached.');
   }
 
