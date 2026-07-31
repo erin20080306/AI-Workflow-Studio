@@ -116,6 +116,7 @@ export async function listAccountAvailableAiModelMappings(): Promise<readonly Ai
 }
 
 function effectivePlan(context: WorkspaceContext): PlanCode {
+  if (context.platformAdmin) return 'business';
   return ['active', 'past_due', 'trialing'].includes(context.subscription.status)
     ? context.subscription.plan
     : 'free';
@@ -199,7 +200,9 @@ export async function resolveAiModelRoute(
   const environment = getEnvironment();
   const plan = effectivePlan(context);
   const snapshot = await getTenantUsageSnapshot(context);
-  const budgetMaximum = maximumTierForBudget(plan, snapshot.ai.level);
+  const budgetMaximum = context.platformAdmin
+    ? ('flagship' as const)
+    : maximumTierForBudget(plan, snapshot.ai.level);
   const requestedTier =
     input.tier === 'auto' ? lowerTier(recommendedTier(input.operation), budgetMaximum) : input.tier;
 

@@ -69,6 +69,9 @@ export class MockAiAdapter implements AiProviderAdapter, AiChatAdapter {
     }
     const { executionTarget } = request.plannerRequest.context;
     const folderAliasId = request.plannerRequest.context.allowedFolderAliasIds[0];
+    const googleConnectionId = request.plannerRequest.context.googleConnectionIds[0];
+    const prompt = request.plannerRequest.prompt;
+    const gmailSummaryRequested = /gmail|郵件|電子郵件|信箱/iu.test(prompt);
     const workflow =
       executionTarget.type === 'desktop' && folderAliasId !== undefined
         ? {
@@ -120,25 +123,72 @@ export class MockAiAdapter implements AiProviderAdapter, AiChatAdapter {
             schemaVersion: 1,
             trigger: { config: {}, type: 'manual.trigger' },
           }
-        : {
-            description: '驗證輸入資料中的必要欄位。',
-            edges: [],
-            executionTarget,
-            name: '資料品質檢查',
-            nodes: [
-              {
-                config: {
-                  onInvalid: 'separate',
-                  rules: [{ dataType: 'string', field: 'id', required: true }],
+        : googleConnectionId !== undefined && gmailSummaryRequested
+          ? {
+              description: '安全讀取今日 Gmail，建立專業繁體中文摘要與待核准報告。',
+              edges: [
+                { from: 'read_gmail', to: 'summarize_gmail' },
+                { from: 'summarize_gmail', to: 'compose_report' },
+              ],
+              executionTarget,
+              name: '每日 Gmail 摘要報告',
+              nodes: [
+                {
+                  config: {
+                    connectionId: googleConnectionId,
+                    includeBody: true,
+                    maxMessages: 50,
+                    timeRange: 'today',
+                  },
+                  id: 'read_gmail',
+                  type: 'gmail.read',
+                  version: 1,
                 },
-                id: 'validate_input',
-                type: 'data.validate',
-                version: 1,
-              },
-            ],
-            schemaVersion: 1,
-            trigger: { config: {}, type: 'manual.trigger' },
-          };
+                {
+                  config: {
+                    includeCaseStudy: false,
+                    includeRecommendations: true,
+                    language: 'zh-Hant',
+                    maxCharacters: 6_000,
+                    style: 'professional',
+                  },
+                  id: 'summarize_gmail',
+                  type: 'ai.summarize',
+                  version: 1,
+                },
+                {
+                  config: {
+                    format: 'markdown',
+                    includeReferences: true,
+                    title: '每日 Gmail 摘要報告',
+                  },
+                  id: 'compose_report',
+                  type: 'report.compose',
+                  version: 1,
+                },
+              ],
+              schemaVersion: 1,
+              trigger: { config: {}, type: 'manual.trigger' },
+            }
+          : {
+              description: '驗證輸入資料中的必要欄位。',
+              edges: [],
+              executionTarget,
+              name: '資料品質檢查',
+              nodes: [
+                {
+                  config: {
+                    onInvalid: 'separate',
+                    rules: [{ dataType: 'string', field: 'id', required: true }],
+                  },
+                  id: 'validate_input',
+                  type: 'data.validate',
+                  version: 1,
+                },
+              ],
+              schemaVersion: 1,
+              trigger: { config: {}, type: 'manual.trigger' },
+            };
     const text = JSON.stringify({
       assumptions: ['使用者已確認 Mock 執行裝置與資料夾別名。'],
       explanation: `先列出與讀取受限 Excel，再做確定性的訂單編號去重，最後建立不覆寫既有檔案的新報表。${request.userPrompt.includes('[S1]') ? ' 參考來源 [S1]。' : ''}`,

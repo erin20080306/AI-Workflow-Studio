@@ -19,6 +19,15 @@ export const GOOGLE_SHEETS_SCOPES = [
   'https://www.googleapis.com/auth/drive.metadata.readonly',
   'https://www.googleapis.com/auth/spreadsheets',
 ] as const;
+export const GOOGLE_WORKSPACE_SCOPES = [
+  ...GOOGLE_SHEETS_SCOPES,
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/forms.responses.readonly',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/presentations',
+  'https://www.googleapis.com/auth/script.projects',
+] as const;
 
 export interface GoogleOAuthClientOptions {
   readonly authorizationUrl?: string;
@@ -115,7 +124,7 @@ export class GoogleOAuthClient {
     url.searchParams.set('prompt', 'consent');
     url.searchParams.set('redirect_uri', this.redirectUri);
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', GOOGLE_SHEETS_SCOPES.join(' '));
+    url.searchParams.set('scope', GOOGLE_WORKSPACE_SCOPES.join(' '));
     url.searchParams.set('state', state);
     return url.toString();
   }

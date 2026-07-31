@@ -132,8 +132,50 @@ describe('WorkflowSchema', () => {
 
   it('registers exactly the first-version allowlist with no duplicate type/version pairs', () => {
     const keys = NODE_CATALOG.map((node) => `${node.type}@${node.version}`);
-    expect(NODE_CATALOG).toHaveLength(26);
-    expect(new Set(keys).size).toBe(26);
+    expect(NODE_CATALOG).toHaveLength(33);
+    expect(new Set(keys).size).toBe(33);
+  });
+
+  it('keeps the selected AI provider and model level inside a validated summary node', () => {
+    const workflow = WorkflowSchema.parse({
+      description: 'Read Gmail and summarize the selected messages.',
+      edges: [
+        { from: 'read_mail', to: 'summarize' },
+        { from: 'summarize', to: 'compose_report' },
+      ],
+      executionTarget: { type: 'cloud' },
+      name: 'Gmail summary',
+      nodes: [
+        {
+          config: {
+            connectionId: '00000000-0000-4000-8000-000000000009',
+            timeRange: 'today',
+          },
+          id: 'read_mail',
+          type: 'gmail.read',
+          version: 1,
+        },
+        {
+          config: { provider: 'anthropic', tier: 'flagship' },
+          id: 'summarize',
+          type: 'ai.summarize',
+          version: 1,
+        },
+        {
+          config: { title: 'Daily summary' },
+          id: 'compose_report',
+          type: 'report.compose',
+          version: 1,
+        },
+      ],
+      schemaVersion: 1,
+      trigger: { config: {}, type: 'manual.trigger' },
+    });
+
+    expect(workflow.nodes[1]).toMatchObject({
+      config: { provider: 'anthropic', tier: 'flagship' },
+      type: 'ai.summarize',
+    });
   });
 });
 

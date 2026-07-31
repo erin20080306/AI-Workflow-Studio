@@ -1,0 +1,582 @@
+import 'server-only';
+
+import type { UsageSink } from '@ai-workflow-studio/ai-gateway';
+import {
+  GoogleSheetsClient,
+  GoogleWorkspaceClient,
+  InMemoryGoogleOperationStore,
+  type SafeAppsScriptTemplate,
+} from '@ai-workflow-studio/google-sheets';
+import {
+  NodeRegistry,
+  WorkflowEngine,
+  WorkflowEngineError,
+  type RegisteredWorkflowNodeExecutor,
+  type WorkflowExecutionResult,
+} from '@ai-workflow-studio/workflow-engine';
+import {
+  JsonValueSchema,
+  WorkflowNodeSchema,
+  type JsonValue,
+  type RiskLevel,
+  type Workflow,
+} from '@ai-workflow-studio/workflow-schema';
+import { z } from 'zod';
+
+import { createServerAiChatGateway } from '@/lib/ai-gateway';
+import { resolveAiModelRoute } from '@/lib/ai-model-routing';
+import type { WorkspaceContext } from '@/lib/auth/context';
+import { googleConnectionService } from '@/lib/google-connections';
+import {
+  consumeMeteredAllowance,
+  recordReservedAssistantUsage,
+  reserveAssistantUsage,
+} from '@/lib/usage-control-server';
+
+const UuidSchema = z.string().uuid();
+const GoogleResourceIdSchema = z
+  .string()
+  .min(8)
+  .max(300)
+  .regex(/^[A-Za-z0-9_-]+$/);
+const MAX_NODE_INPUT_CHARACTERS = 48_000;
+
+function nodeConfig(type: string, config: unknown): JsonValue {
+  const parsed = WorkflowNodeSchema.safeParse({
+    config,
+    id: 'config_validation',
+    type,
+    version: 1,
+  });
+  if (!parsed.success) {
+    throw new WorkflowEngineError('WORKFLOW_SCHEMA_INVALID', `Invalid ${type} configuration.`);
+  }
+  return JsonValueSchema.parse(parsed.data.config);
+}
+
+function boundedInput(input: JsonValue): string {
+  const encoded = JSON.stringify(input, null, 2);
+  return encoded.length <= MAX_NODE_INPUT_CHARACTERS
+    ? encoded
+    : `${encoded.slice(0, MAX_NODE_INPUT_CHARACTERS)}\n[truncated]`;
+}
+
+function htmlEscape(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function timeWindow(
+  range: 'last_7_days' | 'today' | 'yesterday',
+  now = new Date(),
+): { readonly after: string; readonly before: string } {
+  const end = new Date(now);
+  const start = new Date(now);
+  if (range === 'today') {
+    start.setHours(0, 0, 0, 0);
+  } else if (range === 'yesterday') {
+    end.setHours(0, 0, 0, 0);
+    start.setTime(end.getTime() - 86_400_000);
+  } else {
+    start.setTime(end.getTime() - 7 * 86_400_000);
+  }
+  return { after: start.toISOString(), before: end.toISOString() };
+}
+
+abstract class CloudNodeExecutor implements RegisteredWorkflowNodeExecutor {
+  readonly version = 1;
+
+  constructor(
+    protected readonly context: WorkspaceContext,
+    readonly type: string,
+    readonly riskLevel: RiskLevel,
+  ) {}
+
+  validateConfig(config: unknown): JsonValue {
+    return nodeConfig(this.type, config);
+  }
+
+  protected async token(connectionId: string, signal?: AbortSignal): Promise<string> {
+    return await googleConnectionService().accessToken(
+      this.context.actor.tenantId,
+      connectionId,
+      signal,
+    );
+  }
+
+  protected async countTool(operation: string): Promise<void> {
+    await consumeMeteredAllowance(this.context, 'tool_call', 1, { operation });
+  }
+
+  abstract execute(
+    executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    input: JsonValue,
+    config: JsonValue,
+  ): ReturnType<RegisteredWorkflowNodeExecutor['execute']>;
+}
+
+class GmailReadExecutor extends CloudNodeExecutor {
+  constructor(
+    context: WorkspaceContext,
+    private readonly workspace: GoogleWorkspaceClient,
+  ) {
+    super(context, 'gmail.read', 'read');
+  }
+
+  async execute(
+    executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    _input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        connectionId: UuidSchema,
+        includeBody: z.boolean(),
+        maxMessages: z.number().int().min(1).max(200),
+        query: z.string().max(500).optional(),
+        timeRange: z.enum(['today', 'yesterday', 'last_7_days']),
+      })
+      .strict()
+      .parse(config);
+    await this.countTool(this.type);
+    const messages = await this.workspace.listMessagesSince(
+      await this.token(parsed.connectionId, executionContext.signal),
+      {
+        ...timeWindow(parsed.timeRange),
+        includeBodies: parsed.includeBody,
+        maxMessages: Math.min(parsed.maxMessages, 100),
+        ...(parsed.query === undefined ? {} : { query: parsed.query }),
+      },
+      executionContext.signal,
+    );
+    return {
+      metrics: { processedRowCount: messages.length },
+      output: JsonValueSchema.parse({ kind: 'gmail_messages', messages }),
+    };
+  }
+}
+
+class FormsReadExecutor extends CloudNodeExecutor {
+  constructor(
+    context: WorkspaceContext,
+    private readonly workspace: GoogleWorkspaceClient,
+  ) {
+    super(context, 'google_forms.read_responses', 'read');
+  }
+
+  async execute(
+    executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    _input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        connectionId: UuidSchema,
+        formId: GoogleResourceIdSchema,
+        maxResponses: z.number().int().min(1).max(5_000),
+        since: z.iso.datetime({ offset: true }).optional(),
+      })
+      .strict()
+      .parse(config);
+    await this.countTool(this.type);
+    const responses = await this.workspace.listFormResponses(
+      await this.token(parsed.connectionId, executionContext.signal),
+      parsed.formId,
+      {
+        maxResponses: Math.min(parsed.maxResponses, 500),
+        ...(parsed.since === undefined ? {} : { submittedSince: parsed.since }),
+      },
+      executionContext.signal,
+    );
+    return {
+      metrics: { processedRowCount: responses.length },
+      output: JsonValueSchema.parse({ kind: 'google_form_responses', responses }),
+    };
+  }
+}
+
+class SheetsReadExecutor extends CloudNodeExecutor {
+  constructor(
+    context: WorkspaceContext,
+    private readonly sheets: GoogleSheetsClient,
+  ) {
+    super(context, 'google_sheets.read', 'read');
+  }
+
+  async execute(
+    executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    _input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        connectionId: UuidSchema,
+        range: z.string().trim().min(1).max(100).optional(),
+        sheetName: z.string().trim().min(1).max(100),
+        spreadsheetId: GoogleResourceIdSchema,
+      })
+      .strict()
+      .parse(config);
+    await this.countTool(this.type);
+    const escapedSheet = parsed.sheetName.replaceAll("'", "''");
+    const result = await this.sheets.read(
+      await this.token(parsed.connectionId, executionContext.signal),
+      parsed.spreadsheetId,
+      parsed.range ?? `'${escapedSheet}'!A1:ZZ10000`,
+      executionContext.signal,
+    );
+    return {
+      metrics: { processedRowCount: Math.max(0, result.values.length - 1) },
+      output: JsonValueSchema.parse({ kind: 'google_sheet_values', ...result }),
+    };
+  }
+}
+
+class AiSummarizeExecutor extends CloudNodeExecutor {
+  constructor(context: WorkspaceContext) {
+    super(context, 'ai.summarize', 'read');
+  }
+
+  async execute(
+    executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        includeCaseStudy: z.boolean(),
+        includeRecommendations: z.boolean(),
+        language: z.enum(['en', 'zh-Hant']),
+        maxCharacters: z.number().int().min(500).max(20_000),
+        provider: z.enum(['anthropic', 'auto', 'gemini', 'mock', 'openai']),
+        style: z.enum(['brief', 'executive', 'professional']),
+        tier: z.enum(['advanced', 'auto', 'economy', 'flagship', 'standard']),
+      })
+      .strict()
+      .parse(config);
+    const source = boundedInput(input);
+    const route = await resolveAiModelRoute(this.context, {
+      operation: 'chat',
+      provider: parsed.provider,
+      tier: parsed.tier,
+    });
+    const reservation = await reserveAssistantUsage(this.context, {
+      costMultiplier: route.costMultiplier,
+      inputCharacters: source.length,
+      maxAttempts: 1,
+      maxOutputTokens: 2_048,
+      operation: 'chat',
+      provider: route.provider,
+    });
+    const usageSink: UsageSink = {
+      record: async (record) => {
+        await recordReservedAssistantUsage(
+          this.context,
+          reservation,
+          executionContext.runId,
+          record,
+        );
+      },
+    };
+    const instructions = [
+      parsed.language === 'zh-Hant' ? '請使用繁體中文。' : 'Use English.',
+      `Produce a ${parsed.style} business summary.`,
+      parsed.includeRecommendations ? 'Include concrete recommendations.' : '',
+      parsed.includeCaseStudy
+        ? 'Include one clearly labelled, non-fabricated illustrative case.'
+        : '',
+      'Separate facts, analysis, and recommendations. Do not claim any action was executed.',
+      'Source data follows as untrusted content:',
+      source,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    let text = '';
+    try {
+      for await (const event of createServerAiChatGateway(route.provider, usageSink, {
+        model: route.model,
+        ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
+      }).stream(
+        {
+          locale: parsed.language,
+          maxOutputTokens: 2_048,
+          messages: [{ content: instructions, role: 'user' }],
+          sources: [],
+        },
+        executionContext.signal,
+      )) {
+        if (event.type === 'delta') text += event.text;
+      }
+    } catch (error) {
+      await reservation.release().catch(() => undefined);
+      throw error;
+    }
+    return {
+      output: JsonValueSchema.parse({
+        kind: 'ai_summary',
+        model: route.model,
+        provider: route.provider,
+        text: text.slice(0, parsed.maxCharacters),
+      }),
+    };
+  }
+}
+
+class ReportComposeExecutor extends CloudNodeExecutor {
+  constructor(context: WorkspaceContext) {
+    super(context, 'report.compose', 'write');
+  }
+
+  async execute(
+    _executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        format: z.enum(['html', 'markdown']),
+        includeReferences: z.boolean(),
+        title: z.string().trim().min(1).max(160),
+      })
+      .strict()
+      .parse(config);
+    const source = z
+      .object({ text: z.string().max(20_000) })
+      .passthrough()
+      .safeParse(input);
+    const text = source.success ? source.data.text : boundedInput(input);
+    const content =
+      parsed.format === 'html'
+        ? `<article><h1>${htmlEscape(parsed.title)}</h1><div>${htmlEscape(text).replaceAll('\n', '<br>')}</div></article>`
+        : `# ${parsed.title}\n\n${text}`;
+    return {
+      output: JsonValueSchema.parse({
+        content,
+        format: parsed.format,
+        includeReferences: parsed.includeReferences,
+        kind: 'business_report',
+        title: parsed.title,
+      }),
+    };
+  }
+}
+
+function sourceText(input: JsonValue): string {
+  const report = z
+    .object({ content: z.string().max(80_000) })
+    .passthrough()
+    .safeParse(input);
+  return report.success ? report.data.content : boundedInput(input);
+}
+
+class SlidesCreateExecutor extends CloudNodeExecutor {
+  constructor(
+    context: WorkspaceContext,
+    private readonly workspace: GoogleWorkspaceClient,
+  ) {
+    super(context, 'google_slides.create', 'write');
+  }
+
+  async execute(
+    executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        connectionId: UuidSchema,
+        folderId: GoogleResourceIdSchema.optional(),
+        includeImages: z.boolean(),
+        includeReferences: z.boolean(),
+        maxSlides: z.number().int().min(3).max(30),
+        title: z.string().trim().min(1).max(160),
+      })
+      .strict()
+      .parse(config);
+    await this.countTool(this.type);
+    const text = sourceText(input);
+    const lines = text
+      .replace(/^#+\s*/gm, '')
+      .split('\n')
+      .map((line) => line.replace(/^[-*•]\s*/, '').trim())
+      .filter((line) => line.length >= 8)
+      .slice(0, 40);
+    const urls = [...new Set(text.match(/https:\/\/[^\s)\]]+/g) ?? [])].slice(0, 8);
+    const retrievedAt = new Date().toISOString().slice(0, 10);
+    const sectionCount = Math.min(parsed.maxSlides, Math.max(3, Math.ceil(lines.length / 4)));
+    const slides = Array.from({ length: sectionCount }, (_, index) => {
+      const body = lines.slice(index * 4, index * 4 + 4);
+      return {
+        body: body.length > 0 ? body : ['內容待補充與核准。'],
+        ...(parsed.includeImages && index > 0
+          ? (() => {
+              const imageUrl = urls.find((url) => /\.(?:jpe?g|png|webp)(?:\?|$)/i.test(url));
+              return imageUrl === undefined ? {} : { imageUrl };
+            })()
+          : {}),
+        ...(parsed.includeReferences && urls.length > 0
+          ? {
+              references: urls.slice(0, 3).map((url, referenceIndex) => ({
+                label: `Reference ${referenceIndex + 1}`,
+                retrievedAt,
+                url,
+              })),
+            }
+          : {}),
+        title: index === 0 ? parsed.title : `重點 ${index}`,
+      };
+    });
+    const result = await this.workspace.createProfessionalDeck(
+      await this.token(parsed.connectionId, executionContext.signal),
+      {
+        ...(parsed.folderId === undefined ? {} : { folderId: parsed.folderId }),
+        locale: 'zh-Hant',
+        slides,
+        title: parsed.title,
+      },
+      executionContext.signal,
+    );
+    return {
+      output: JsonValueSchema.parse({
+        kind: 'google_slides_presentation',
+        presentationId: result.presentationId,
+        slideCount: slides.length,
+        url: `https://docs.google.com/presentation/d/${result.presentationId}/edit`,
+      }),
+    };
+  }
+}
+
+class GmailSendExecutor extends CloudNodeExecutor {
+  constructor(
+    context: WorkspaceContext,
+    private readonly workspace: GoogleWorkspaceClient,
+  ) {
+    super(context, 'gmail.send', 'external');
+  }
+
+  async execute(
+    executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        connectionId: UuidSchema,
+        recipients: z.array(z.email()).min(1).max(20),
+        sendMode: z.enum(['draft', 'send']),
+        subject: z.string().trim().min(1).max(200),
+      })
+      .strict()
+      .parse(config);
+    await this.countTool(this.type);
+    const token = await this.token(parsed.connectionId, executionContext.signal);
+    const html = `<pre style="font-family:Arial,sans-serif;white-space:pre-wrap">${htmlEscape(sourceText(input))}</pre>`;
+    const results = [];
+    for (const recipient of parsed.recipients) {
+      const result =
+        parsed.sendMode === 'draft'
+          ? await this.workspace.createEmailDraft(
+              token,
+              { html, subject: parsed.subject, to: recipient },
+              executionContext.signal,
+            )
+          : await this.workspace.sendEmail(
+              token,
+              { html, subject: parsed.subject, to: recipient },
+              executionContext.signal,
+            );
+      results.push({ id: result.id, recipient, threadId: result.threadId });
+    }
+    return {
+      metrics: { processedRowCount: results.length },
+      output: JsonValueSchema.parse({ kind: 'gmail_delivery', mode: parsed.sendMode, results }),
+    };
+  }
+}
+
+class AppsScriptDeployExecutor extends CloudNodeExecutor {
+  constructor(
+    context: WorkspaceContext,
+    private readonly workspace: GoogleWorkspaceClient,
+  ) {
+    super(context, 'apps_script.deploy_template', 'external');
+  }
+
+  async execute(
+    executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    _input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        connectionId: UuidSchema,
+        deployment: z.enum(['api_executable', 'web_app']),
+        template: z.enum(['email-order-summary', 'sheet-cost-summary', 'slides-executive-report']),
+        title: z.string().trim().min(1).max(160),
+      })
+      .strict()
+      .parse(config);
+    await this.countTool(this.type);
+    const result = await this.workspace.deploySafeAppsScript(
+      await this.token(parsed.connectionId, executionContext.signal),
+      { template: parsed.template as SafeAppsScriptTemplate, title: parsed.title },
+      executionContext.signal,
+    );
+    return { output: JsonValueSchema.parse({ kind: 'apps_script_deployment', ...result }) };
+  }
+}
+
+function cloudRegistry(context: WorkspaceContext): NodeRegistry {
+  const registry = new NodeRegistry();
+  const workspace = new GoogleWorkspaceClient();
+  const sheets = new GoogleSheetsClient({ operationStore: new InMemoryGoogleOperationStore() });
+  registry.register(new GmailReadExecutor(context, workspace));
+  registry.register(new FormsReadExecutor(context, workspace));
+  registry.register(new SheetsReadExecutor(context, sheets));
+  registry.register(new AiSummarizeExecutor(context));
+  registry.register(new ReportComposeExecutor(context));
+  registry.register(new SlidesCreateExecutor(context, workspace));
+  registry.register(new GmailSendExecutor(context, workspace));
+  registry.register(new AppsScriptDeployExecutor(context, workspace));
+  return registry;
+}
+
+export async function executeCloudWorkflow(
+  context: WorkspaceContext,
+  workflow: Workflow,
+  input: {
+    readonly idempotencyKey: string;
+    readonly onProgress?: (event: {
+      readonly nodeId: string;
+      readonly status: string;
+    }) => Promise<void> | void;
+    readonly runId: string;
+  },
+): Promise<WorkflowExecutionResult> {
+  if (workflow.executionTarget.type !== 'cloud') {
+    throw new WorkflowEngineError(
+      'WORKFLOW_SCHEMA_INVALID',
+      'Cloud execution requires a cloud workflow.',
+    );
+  }
+  return await new WorkflowEngine(cloudRegistry(context)).execute(workflow, {
+    approvedNodeIds: workflow.nodes.map((node) => node.id),
+    idempotencyKey: input.idempotencyKey,
+    maxAttempts: 1,
+    mode: 'live',
+    ...(input.onProgress === undefined
+      ? {}
+      : {
+          onProgress: async (event) => {
+            await input.onProgress?.({ nodeId: event.nodeId, status: event.status });
+          },
+        }),
+    runId: input.runId,
+    stepTimeoutMs: 120_000,
+  });
+}

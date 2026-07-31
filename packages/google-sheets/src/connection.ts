@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { GoogleTokenCipher } from './cipher';
 import { GoogleSheetsClient } from './client';
 import { GoogleSheetsError } from './errors';
-import { GOOGLE_SHEETS_SCOPES, GoogleOAuthClient } from './oauth';
+import { GOOGLE_WORKSPACE_SCOPES, GoogleOAuthClient } from './oauth';
 import type { GoogleOAuthTokens, GoogleSheetSummary, GoogleSpreadsheetSummary } from './types';
 
 const UuidSchema = z.string().uuid();
@@ -209,7 +209,7 @@ export class GoogleConnectionService {
     const name = NameSchema.parse(nameInput);
     if (
       tokens.refreshToken === undefined ||
-      !GOOGLE_SHEETS_SCOPES.every((scope) => tokens.scopes.includes(scope))
+      !GOOGLE_WORKSPACE_SCOPES.every((scope) => tokens.scopes.includes(scope))
     ) {
       throw new GoogleSheetsError(
         'GOOGLE_AUTHORIZATION_INVALID',

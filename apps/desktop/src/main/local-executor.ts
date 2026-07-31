@@ -1,17 +1,24 @@
 import {
   ProcessingLedger,
   SafeFolderWatcher,
+  aggregateRows,
   deduplicateRows,
   filterRows,
+  groupRows,
   mapColumns,
   mergeTables,
   readSpreadsheet,
   writeSpreadsheetAtomic,
+  sortRows,
+  validateRows,
+  type AggregateOperation,
   type FilterCondition,
   type SafeFileWatchEvent,
+  type SortField,
   type SpreadsheetReadOptions,
   type SpreadsheetTable,
   type SpreadsheetWriteResult,
+  type ValidationRule,
 } from '@ai-workflow-studio/local-executor';
 import { lstat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -26,6 +33,7 @@ export interface AuthorizedInput {
 export interface AuthorizedOutput {
   readonly folderAliasId: string;
   readonly outputName: string;
+  readonly reportTitle?: string;
 }
 
 export interface AuthorizedFileList {
@@ -48,8 +56,12 @@ export class DesktopSpreadsheetExecutor {
       'excel.write',
       'excel.create_report',
       'data.filter',
+      'data.sort',
+      'data.group',
+      'data.aggregate',
       'data.map_columns',
       'data.deduplicate',
+      'data.validate',
       'folder.file_created',
       'folder.file_changed',
     ];
@@ -101,13 +113,19 @@ export class DesktopSpreadsheetExecutor {
     tables: readonly SpreadsheetTable[],
     options: {
       readonly columnMode?: 'strict' | 'union';
+      readonly aggregate?: {
+        readonly groupBy: readonly string[];
+        readonly operations: readonly AggregateOperation[];
+      };
       readonly deduplicate?: { readonly keep?: 'first' | 'last'; readonly keys: readonly string[] };
       readonly filter?: {
         readonly conditions: readonly FilterCondition[];
         readonly match?: 'all' | 'any';
       };
+      readonly groupBy?: readonly string[];
       readonly mappings?: Readonly<Record<string, string>>;
       readonly preserveUnmapped?: boolean;
+      readonly sort?: readonly SortField[];
     },
   ): SpreadsheetTable {
     let table = mergeTables(tables, options.columnMode);
@@ -120,7 +138,19 @@ export class DesktopSpreadsheetExecutor {
     if (options.deduplicate !== undefined) {
       table = deduplicateRows(table, options.deduplicate.keys, options.deduplicate.keep);
     }
+    if (options.sort !== undefined) table = sortRows(table, options.sort);
+    if (options.groupBy !== undefined) table = groupRows(table, options.groupBy);
+    if (options.aggregate !== undefined) {
+      table = aggregateRows(table, options.aggregate.groupBy, options.aggregate.operations);
+    }
     return table;
+  }
+
+  validate(
+    tables: readonly SpreadsheetTable[],
+    rules: readonly ValidationRule[],
+  ): { readonly invalid: SpreadsheetTable; readonly valid: SpreadsheetTable } {
+    return validateRows(mergeTables(tables), rules);
   }
 
   async writeOnce(
@@ -143,6 +173,7 @@ export class DesktopSpreadsheetExecutor {
       const result = await writeSpreadsheetAtomic(tables, {
         outputPath,
         overwrite: false,
+        ...(output.reportTitle === undefined ? {} : { reportTitle: output.reportTitle }),
       });
       await this.ledger.complete(contextKey, inputHashes, result.fileHash);
       return { duplicate: false, result };

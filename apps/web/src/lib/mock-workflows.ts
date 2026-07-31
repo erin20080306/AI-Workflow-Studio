@@ -20,6 +20,14 @@ export const NODE_PRESENTATION: Readonly<
     }
   >
 > = {
+  'ai.summarize': {
+    category: { en: 'AI', zhHant: 'AI' },
+    label: { en: 'Summarize with AI', zhHant: 'AI 智慧摘要' },
+  },
+  'apps_script.deploy_template': {
+    category: { en: 'Apps Script', zhHant: 'Apps Script' },
+    label: { en: 'Deploy approved template', zhHant: '部署核准範本' },
+  },
   'data.aggregate': {
     category: { en: 'Data transform', zhHant: '資料轉換' },
     label: { en: 'Aggregate data', zhHant: '彙總資料' },
@@ -92,6 +100,18 @@ export const NODE_PRESENTATION: Readonly<
     category: { en: 'Local files', zhHant: '本機檔案' },
     label: { en: 'Rename file', zhHant: '重新命名檔案' },
   },
+  'gmail.read': {
+    category: { en: 'Gmail', zhHant: 'Gmail' },
+    label: { en: 'Read Gmail messages', zhHant: '讀取 Gmail 郵件' },
+  },
+  'gmail.send': {
+    category: { en: 'Gmail', zhHant: 'Gmail' },
+    label: { en: 'Send approved email', zhHant: '寄送核准郵件' },
+  },
+  'google_forms.read_responses': {
+    category: { en: 'Google Forms', zhHant: 'Google 表單' },
+    label: { en: 'Read form responses', zhHant: '讀取表單回覆' },
+  },
   'google_sheets.append': {
     category: { en: 'Google Sheets', zhHant: 'Google Sheets' },
     label: { en: 'Append spreadsheet data', zhHant: '附加試算表資料' },
@@ -108,6 +128,10 @@ export const NODE_PRESENTATION: Readonly<
     category: { en: 'Google Sheets', zhHant: 'Google Sheets' },
     label: { en: 'Update spreadsheet', zhHant: '更新試算表' },
   },
+  'google_slides.create': {
+    category: { en: 'Google Slides', zhHant: 'Google 簡報' },
+    label: { en: 'Create professional deck', zhHant: '建立專業簡報' },
+  },
   'manual.trigger': {
     category: { en: 'Trigger', zhHant: '觸發器' },
     label: { en: 'Run manually', zhHant: '手動執行' },
@@ -115,6 +139,10 @@ export const NODE_PRESENTATION: Readonly<
   'notification.desktop': {
     category: { en: 'Output', zhHant: '輸出' },
     label: { en: 'Desktop notification', zhHant: '桌面通知' },
+  },
+  'report.compose': {
+    category: { en: 'Report', zhHant: '報告' },
+    label: { en: 'Compose auditable report', zhHant: '建立可稽核報告' },
   },
   'schedule.trigger': {
     category: { en: 'Trigger', zhHant: '觸發器' },

@@ -13,6 +13,13 @@ const SpreadsheetIdSchema = z
   .max(200)
   .regex(/^[A-Za-z0-9_-]+$/);
 const SheetNameSchema = z.string().trim().min(1).max(100);
+const GoogleResourceIdSchema = z
+  .string()
+  .trim()
+  .min(10)
+  .max(240)
+  .regex(/^[A-Za-z0-9_-]+$/);
+const EmailAddressSchema = z.string().trim().email().max(254);
 const CronSchema = z
   .string()
   .trim()
@@ -111,7 +118,22 @@ const ValidationRuleSchema = z
   .refine((rule) => rule.min === undefined || rule.max === undefined || rule.min <= rule.max, {
     message: 'Validation min must be less than or equal to max',
     path: ['min'],
-  });
+  })
+  .refine(
+    (rule) => {
+      if (rule.pattern === undefined) return true;
+      try {
+        new RegExp(rule.pattern, 'u');
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    {
+      message: 'Validation pattern must be a valid regular expression',
+      path: ['pattern'],
+    },
+  );
 
 const node = <TType extends string, TConfig extends z.ZodType>(type: TType, config: TConfig) =>
   z
@@ -197,7 +219,9 @@ export const ExcelReadNodeSchema = node(
   'excel.read',
   z
     .object({
+      headerMode: z.enum(['auto', 'fixed']).default('auto'),
       headerRow: z.number().int().min(1).max(100).default(1),
+      headerScanRows: z.number().int().min(1).max(100).default(30),
       maxFileSizeBytes: z.number().int().min(1).max(200_000_000).default(50_000_000),
       maxRows: z.number().int().min(1).max(1_000_000).default(100_000),
       maxSheets: z.number().int().min(1).max(200).default(50),
@@ -374,6 +398,89 @@ export const GoogleSheetsSyncNodeSchema = node(
   }).strict(),
 );
 
+export const GmailReadNodeSchema = node(
+  'gmail.read',
+  z
+    .object({
+      connectionId: UuidSchema,
+      includeBody: z.boolean().default(true),
+      maxMessages: z.number().int().min(1).max(200).default(50),
+      query: z.string().trim().min(1).max(500).optional(),
+      timeRange: z.enum(['today', 'yesterday', 'last_7_days']).default('today'),
+    })
+    .strict(),
+);
+export const GoogleFormsReadResponsesNodeSchema = node(
+  'google_forms.read_responses',
+  z
+    .object({
+      connectionId: UuidSchema,
+      formId: GoogleResourceIdSchema,
+      maxResponses: z.number().int().min(1).max(5_000).default(1_000),
+      since: z.string().datetime({ offset: true }).optional(),
+    })
+    .strict(),
+);
+export const AiSummarizeNodeSchema = node(
+  'ai.summarize',
+  z
+    .object({
+      includeCaseStudy: z.boolean().default(false),
+      includeRecommendations: z.boolean().default(true),
+      language: z.enum(['en', 'zh-Hant']).default('zh-Hant'),
+      maxCharacters: z.number().int().min(500).max(20_000).default(6_000),
+      provider: z.enum(['anthropic', 'auto', 'gemini', 'mock', 'openai']).default('auto'),
+      style: z.enum(['brief', 'executive', 'professional']).default('professional'),
+      tier: z.enum(['advanced', 'auto', 'economy', 'flagship', 'standard']).default('auto'),
+    })
+    .strict(),
+);
+export const ReportComposeNodeSchema = node(
+  'report.compose',
+  z
+    .object({
+      format: z.enum(['html', 'markdown']).default('markdown'),
+      includeReferences: z.boolean().default(true),
+      title: NonEmptyLabelSchema,
+    })
+    .strict(),
+);
+export const GoogleSlidesCreateNodeSchema = node(
+  'google_slides.create',
+  z
+    .object({
+      connectionId: UuidSchema,
+      folderId: GoogleResourceIdSchema.optional(),
+      includeImages: z.boolean().default(true),
+      includeReferences: z.boolean().default(true),
+      maxSlides: z.number().int().min(3).max(30).default(10),
+      title: NonEmptyLabelSchema,
+    })
+    .strict(),
+);
+export const GmailSendNodeSchema = node(
+  'gmail.send',
+  z
+    .object({
+      connectionId: UuidSchema,
+      recipients: z.array(EmailAddressSchema).min(1).max(20),
+      sendMode: z.enum(['draft', 'send']).default('draft'),
+      subject: z.string().trim().min(1).max(200),
+    })
+    .strict(),
+);
+export const AppsScriptDeployTemplateNodeSchema = node(
+  'apps_script.deploy_template',
+  z
+    .object({
+      connectionId: UuidSchema,
+      deployment: z.enum(['api_executable', 'web_app']).default('api_executable'),
+      template: z.enum(['email-order-summary', 'sheet-cost-summary', 'slides-executive-report']),
+      title: NonEmptyLabelSchema,
+    })
+    .strict(),
+);
+
 export const NotificationDesktopNodeSchema = node(
   'notification.desktop',
   z
@@ -424,6 +531,13 @@ export const WorkflowNodeSchema = z.discriminatedUnion('type', [
   GoogleSheetsAppendNodeSchema,
   GoogleSheetsUpdateNodeSchema,
   GoogleSheetsSyncNodeSchema,
+  GmailReadNodeSchema,
+  GoogleFormsReadResponsesNodeSchema,
+  AiSummarizeNodeSchema,
+  ReportComposeNodeSchema,
+  GoogleSlidesCreateNodeSchema,
+  GmailSendNodeSchema,
+  AppsScriptDeployTemplateNodeSchema,
   NotificationDesktopNodeSchema,
   WebhookCallNodeSchema,
 ]);

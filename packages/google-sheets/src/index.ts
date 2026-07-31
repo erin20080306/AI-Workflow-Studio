@@ -18,6 +18,7 @@ export {
 export { GoogleSheetsError, type GoogleSheetsErrorCode } from './errors';
 export {
   GOOGLE_SHEETS_SCOPES,
+  GOOGLE_WORKSPACE_SCOPES,
   GoogleOAuthClient,
   createGooglePkcePair,
   type GoogleOAuthClientOptions,
@@ -35,3 +36,12 @@ export type {
   GoogleValueRows,
   GoogleWriteResult,
 } from './types';
+export {
+  GoogleWorkspaceClient,
+  type GmailMessageSummary,
+  type GoogleFormResponse,
+  type GoogleWorkspaceClientOptions,
+  type ProfessionalDeckInput,
+  type ProfessionalSlide,
+  type SafeAppsScriptTemplate,
+} from './workspace';

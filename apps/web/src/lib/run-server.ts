@@ -10,6 +10,7 @@ import {
 import { z } from 'zod';
 
 import { getAgentServerState, getWebActor } from './agent-server';
+import { requireWorkspaceContext } from './auth/context';
 import { getEnvironment } from './env';
 import { MOCK_DEVICE_ID, MOCK_VERSION_ID, MOCK_WORKFLOW, MOCK_WORKFLOW_ID } from './mock-workflows';
 import {
@@ -157,9 +158,10 @@ export async function resolveRunApproval(
   approvalId: string,
   decision: 'approve' | 'reject',
 ): Promise<WorkflowRunView> {
-  const actor = await getWebActor();
+  const context = await requireWorkspaceContext();
+  const actor = context.actor;
   if (!getEnvironment().mockMode) {
-    return await resolveProductionRunApproval(actor, runId, approvalId, decision);
+    return await resolveProductionRunApproval(context, runId, approvalId, decision);
   }
   return decision === 'approve'
     ? await getRunOrchestrator().approve(actor, runId, approvalId)
@@ -174,10 +176,11 @@ export async function cancelRun(runId: string): Promise<WorkflowRunView> {
 }
 
 export async function retryRun(runId: string): Promise<WorkflowRunView> {
-  const actor = await getWebActor();
+  const context = await requireWorkspaceContext();
+  const actor = context.actor;
   return getEnvironment().mockMode
     ? await getRunOrchestrator().retry(actor, runId)
-    : await retryProductionRun(actor, runId);
+    : await retryProductionRun(context, runId);
 }
 
 export async function syncAgentProgress(job: AgentJob, input: unknown): Promise<void> {

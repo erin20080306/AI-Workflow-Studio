@@ -83,7 +83,7 @@ export const WorkflowRunViewSchema = z
     audit: z.array(RunAuditEntrySchema).max(2_000),
     completedAt: TimestampSchema.optional(),
     createdAt: TimestampSchema,
-    deviceId: UuidSchema,
+    deviceId: UuidSchema.optional(),
     error: z
       .object({
         code: z.string().min(1).max(120),

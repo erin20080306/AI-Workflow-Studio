@@ -24,7 +24,10 @@ export default async function AssistantPage() {
     <AssistantWorkspace
       models={buildAssistantModelOptions(environment)}
       executionTargets={executionTargets}
-      tiers={buildAiTierOptions(context.subscription.plan, mappings)}
+      tiers={buildAiTierOptions(
+        context.platformAdmin ? 'business' : context.subscription.plan,
+        mappings,
+      )}
     />
   );
 }

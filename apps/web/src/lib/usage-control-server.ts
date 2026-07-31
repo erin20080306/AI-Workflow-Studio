@@ -121,6 +121,7 @@ export interface AssistantUsageReservation {
 }
 
 function effectivePlanCode(context: WorkspaceContext): WorkspaceContext['subscription']['plan'] {
+  if (context.platformAdmin) return 'business';
   return ['active', 'past_due', 'trialing'].includes(context.subscription.status)
     ? context.subscription.plan
     : 'free';

@@ -13,6 +13,7 @@ import {
 } from '@ai-workflow-studio/run-orchestrator';
 import {
   StepResultSchema,
+  ExecutionTargetSchema,
   WorkflowSchema,
   summarizeWorkflowRisks,
   validateWorkflow,
@@ -20,6 +21,8 @@ import {
 } from '@ai-workflow-studio/workflow-schema';
 import { z } from 'zod';
 
+import type { WorkspaceContext } from '@/lib/auth/context';
+import { executeCloudWorkflow } from '@/lib/cloud-workflow-executor';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
 const UuidSchema = z.string().uuid();
@@ -386,7 +389,7 @@ async function runView(tenantId: string, runId: string): Promise<WorkflowRunView
     workflowRow.id !== version.workflow_id ||
     workflowRow.tenant_id !== tenantId ||
     version.tenant_id !== tenantId ||
-    workflow.executionTarget.type !== 'desktop'
+    workflow.executionTarget.type !== ExecutionTargetSchema.parse(workflowRow.execution_target).type
   ) {
     throw new RunOrchestrationError('RUN_STATE_CONFLICT', 'The workflow run target is invalid.');
   }
@@ -425,7 +428,9 @@ async function runView(tenantId: string, runId: string): Promise<WorkflowRunView
     })),
     ...(run.completed_at === null ? {} : { completedAt: run.completed_at }),
     createdAt: run.created_at,
-    deviceId: workflow.executionTarget.deviceId,
+    ...(workflow.executionTarget.type === 'desktop'
+      ? { deviceId: workflow.executionTarget.deviceId }
+      : {}),
     ...(run.error_code === null
       ? {}
       : {
@@ -611,6 +616,241 @@ export async function startProductionRun(
   return { duplicate: false, run: await runView(actor.tenantId, runId) };
 }
 
+function outputSummary(output: unknown): Readonly<Record<string, unknown>> {
+  if (output !== null && typeof output === 'object' && !Array.isArray(output)) {
+    return z.record(z.string(), z.unknown()).parse(output);
+  }
+  return { value: output ?? null };
+}
+
+async function executeQueuedCloudRun(
+  context: WorkspaceContext,
+  row: z.infer<typeof RunRowSchema>,
+  workflow: Workflow,
+): Promise<WorkflowRunView> {
+  if (workflow.executionTarget.type !== 'cloud') {
+    throw new RunOrchestrationError('RUN_INVALID', 'The workflow is not a cloud workflow.');
+  }
+  const actor = context.actor;
+  const admin = createSupabaseAdminClient();
+  const initializedResult = await admin
+    .from('workflow_runs')
+    .update({ attempt: Math.max(1, row.attempt) })
+    .eq('tenant_id', actor.tenantId)
+    .eq('id', row.id)
+    .eq('status', 'queued')
+    .select('*')
+    .single();
+  if (initializedResult.error !== null) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The cloud workflow attempt could not be initialized.',
+    );
+  }
+  const initialized = RunRowSchema.parse(initializedResult.data);
+  await transition(actor, actor.tenantId, row.id, 'queued', 'running');
+  try {
+    const result = await executeCloudWorkflow(context, workflow, {
+      idempotencyKey: row.idempotency_key,
+      async onProgress(event) {
+        if (event.status !== 'running') return;
+        await admin
+          .from('workflow_run_steps')
+          .update({ started_at: new Date().toISOString(), status: 'running' })
+          .eq('tenant_id', actor.tenantId)
+          .eq('workflow_run_id', row.id)
+          .eq('node_id', event.nodeId)
+          .eq('attempt', Math.max(1, initialized.attempt));
+      },
+      runId: row.id,
+    });
+    for (const step of result.steps) {
+      const update = await admin
+        .from('workflow_run_steps')
+        .update({
+          completed_at: step.completedAt,
+          error_code: step.error?.code ?? null,
+          error_message: step.error?.message ?? null,
+          output_summary: outputSummary(step.output),
+          processed_file_count: step.metrics.processedFileCount ?? 0,
+          processed_row_count: step.metrics.processedRowCount ?? 0,
+          started_at: step.startedAt,
+          status: step.status,
+          updated_at: step.completedAt,
+        })
+        .eq('tenant_id', actor.tenantId)
+        .eq('workflow_run_id', row.id)
+        .eq('node_id', step.nodeId)
+        .eq('attempt', Math.max(1, initialized.attempt));
+      if (update.error !== null) {
+        throw new RunOrchestrationError(
+          'RUN_STATE_CONFLICT',
+          'A cloud workflow step result could not be saved.',
+        );
+      }
+    }
+    if (result.status === 'succeeded') {
+      await transition(actor, actor.tenantId, row.id, 'running', 'succeeded');
+      await admin.from('notifications').insert({
+        kind: 'success',
+        message: 'The cloud workflow completed all validated steps.',
+        resource_id: row.id,
+        resource_type: 'workflow_run',
+        tenant_id: actor.tenantId,
+        title: 'Cloud workflow completed',
+        user_id: actor.userId,
+      });
+    } else {
+      const failed = result.steps.find(
+        (step) => step.status === 'failed' || step.status === 'timed_out',
+      );
+      await transition(actor, actor.tenantId, row.id, 'running', 'failed', {
+        errorCode: failed?.error?.code ?? 'CLOUD_WORKFLOW_FAILED',
+        errorMessage: failed?.error?.message ?? 'The cloud workflow did not complete.',
+      });
+    }
+    await admin.from('audit_logs').insert({
+      action: `cloud_run.${result.status}`,
+      actor_user_id: actor.userId,
+      correlation_id: row.id,
+      metadata: { completedSteps: result.steps.length },
+      resource_id: row.id,
+      resource_type: 'workflow_run',
+      tenant_id: actor.tenantId,
+    });
+    return await runView(actor.tenantId, row.id);
+  } catch (error) {
+    const current = await runView(actor.tenantId, row.id);
+    if (current.status === 'running') {
+      await transition(actor, actor.tenantId, row.id, 'running', 'failed', {
+        errorCode: 'CLOUD_WORKFLOW_FAILED',
+        errorMessage:
+          error instanceof Error
+            ? error.message.slice(0, 500)
+            : 'The cloud workflow could not be completed.',
+      });
+    }
+    throw error;
+  }
+}
+
+export async function startProductionCloudRun(
+  context: WorkspaceContext,
+  inputValue: {
+    readonly idempotencyKey: string;
+    readonly maxAttempts?: number;
+    readonly timeoutSeconds?: number;
+    readonly workflow: Workflow;
+    readonly workflowId: string;
+    readonly workflowVersionId: string;
+  },
+): Promise<RunStartResult> {
+  const actor = context.actor;
+  assertCanMutate(actor);
+  const input = z
+    .object({
+      idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,200}$/),
+      maxAttempts: z.number().int().min(1).max(5).default(2),
+      timeoutSeconds: z.number().int().min(30).max(86_400).default(1_800),
+      workflow: WorkflowSchema,
+      workflowId: UuidSchema,
+      workflowVersionId: UuidSchema,
+    })
+    .strict()
+    .parse(inputValue);
+  const validation = validateWorkflow(input.workflow);
+  if (!validation.success || input.workflow.executionTarget.type !== 'cloud') {
+    throw new RunOrchestrationError('RUN_INVALID', 'The cloud workflow version is invalid.');
+  }
+  const existing = await findRunByIdempotency(actor.tenantId, input.idempotencyKey);
+  if (existing !== undefined) {
+    if (
+      existing.workflowId !== input.workflowId ||
+      existing.workflowVersionId !== input.workflowVersionId ||
+      existing.deviceId !== undefined
+    ) {
+      throw new RunOrchestrationError(
+        'RUN_CONFLICT',
+        'The run idempotency key is already bound to different input.',
+      );
+    }
+    return { duplicate: true, run: existing };
+  }
+  const admin = createSupabaseAdminClient();
+  const runId = crypto.randomUUID();
+  const now = new Date();
+  const risk = summarizeWorkflowRisks(input.workflow);
+  const insert = await admin
+    .from('workflow_runs')
+    .insert({
+      id: runId,
+      idempotency_key: input.idempotencyKey,
+      max_attempts: input.maxAttempts,
+      status: 'pending',
+      tenant_id: actor.tenantId,
+      timeout_at: new Date(now.getTime() + input.timeoutSeconds * 1_000).toISOString(),
+      triggered_by: actor.userId,
+      workflow_id: input.workflowId,
+      workflow_version_id: input.workflowVersionId,
+    })
+    .select('*')
+    .single();
+  if (insert.error !== null) {
+    const raced = await findRunByIdempotency(actor.tenantId, input.idempotencyKey);
+    if (raced !== undefined) return { duplicate: true, run: raced };
+    throw new RunOrchestrationError('RUN_STATE_CONFLICT', 'The cloud run could not be created.');
+  }
+  RunRowSchema.parse(insert.data);
+  const [stepInsert, auditInsert] = await Promise.all([
+    admin.from('workflow_run_steps').insert(
+      input.workflow.nodes.map((node) => ({
+        attempt: 1,
+        node_id: node.id,
+        node_type: node.type,
+        status: 'pending',
+        tenant_id: actor.tenantId,
+        workflow_run_id: runId,
+      })),
+    ),
+    admin.from('audit_logs').insert({
+      action: 'cloud_run.created',
+      actor_user_id: actor.userId,
+      correlation_id: runId,
+      metadata: { requiresApproval: risk.requiresApproval },
+      resource_id: runId,
+      resource_type: 'workflow_run',
+      tenant_id: actor.tenantId,
+    }),
+  ]);
+  if (stepInsert.error !== null || auditInsert.error !== null) {
+    await admin.from('workflow_runs').delete().eq('tenant_id', actor.tenantId).eq('id', runId);
+    throw new RunOrchestrationError('RUN_STATE_CONFLICT', 'The cloud run could not be audited.');
+  }
+  if (risk.requiresApproval) {
+    const approvalInsert = await admin.from('workflow_approvals').insert({
+      expires_at: new Date(now.getTime() + 15 * 60_000).toISOString(),
+      id: crypto.randomUUID(),
+      requested_by: actor.userId,
+      risk_summary: risk,
+      status: 'pending',
+      tenant_id: actor.tenantId,
+      workflow_run_id: runId,
+      workflow_version_id: input.workflowVersionId,
+    });
+    if (approvalInsert.error !== null) {
+      await admin.from('workflow_runs').delete().eq('tenant_id', actor.tenantId).eq('id', runId);
+      throw new RunOrchestrationError(
+        'RUN_STATE_CONFLICT',
+        'The cloud run approval could not be created.',
+      );
+    }
+    await transition(actor, actor.tenantId, runId, 'pending', 'awaiting_approval');
+    return { duplicate: false, run: await runView(actor.tenantId, runId) };
+  }
+  const queued = await transition(actor, actor.tenantId, runId, 'pending', 'queued');
+  return { duplicate: false, run: await executeQueuedCloudRun(context, queued, input.workflow) };
+}
+
 export async function listProductionRuns(actor: RunActor): Promise<readonly WorkflowRunView[]> {
   await sweepProductionRuns(actor);
   const result = await createSupabaseAdminClient()
@@ -633,11 +873,12 @@ export async function getProductionRun(actor: RunActor, runId: string): Promise<
 }
 
 export async function resolveProductionRunApproval(
-  actor: RunActor,
+  context: WorkspaceContext,
   runIdInput: string,
   approvalIdInput: string,
   decision: 'approve' | 'reject',
 ): Promise<WorkflowRunView> {
+  const actor = context.actor;
   assertCanApprove(actor);
   const runId = UuidSchema.parse(runIdInput);
   const approvalId = UuidSchema.parse(approvalIdInput);
@@ -698,6 +939,23 @@ export async function resolveProductionRunApproval(
   const workflow = WorkflowSchema.parse(
     z.object({ definition: z.unknown() }).parse(versionResult.data).definition,
   );
+  if (workflow.executionTarget.type === 'cloud') {
+    const attemptUpdate = await admin
+      .from('workflow_runs')
+      .update({ attempt: Math.max(1, queued.attempt) })
+      .eq('tenant_id', actor.tenantId)
+      .eq('id', runId)
+      .select('*')
+      .single();
+    if (attemptUpdate.error !== null) {
+      await transition(actor, actor.tenantId, runId, 'queued', 'cancelled');
+      throw new RunOrchestrationError(
+        'RUN_STATE_CONFLICT',
+        'The approved cloud workflow attempt could not be initialized.',
+      );
+    }
+    return await executeQueuedCloudRun(context, RunRowSchema.parse(attemptUpdate.data), workflow);
+  }
   const target = await requireProductionTarget(actor.tenantId, workflow);
   const attemptUpdate = await admin
     .from('workflow_runs')
@@ -732,9 +990,10 @@ export async function cancelProductionRun(
 }
 
 export async function retryProductionRun(
-  actor: RunActor,
+  context: WorkspaceContext,
   runIdInput: string,
 ): Promise<WorkflowRunView> {
+  const actor = context.actor;
   assertCanMutate(actor);
   const view = await runView(actor.tenantId, UuidSchema.parse(runIdInput));
   if (
@@ -759,7 +1018,6 @@ export async function retryProductionRun(
   const workflow = WorkflowSchema.parse(
     z.object({ definition: z.unknown() }).parse(versionResult.data).definition,
   );
-  const target = await requireProductionTarget(actor.tenantId, workflow);
   const stepInsert = await createSupabaseAdminClient()
     .from('workflow_run_steps')
     .insert(
@@ -779,6 +1037,10 @@ export async function retryProductionRun(
       'The retried workflow steps could not be initialized.',
     );
   }
+  if (workflow.executionTarget.type === 'cloud') {
+    return await executeQueuedCloudRun(context, queued, workflow);
+  }
+  const target = await requireProductionTarget(actor.tenantId, workflow);
   await enqueueProductionJob(actor, queued, workflow, target.deviceId);
   return await runView(actor.tenantId, view.id);
 }

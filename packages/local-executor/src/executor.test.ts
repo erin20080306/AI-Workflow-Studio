@@ -9,6 +9,7 @@ import { hashFile } from './hash';
 import { ProcessingLedger } from './ledger';
 import { readSpreadsheet } from './read';
 import { deduplicateRows, filterRows, mapColumns, mergeTables } from './transform';
+import { aggregateRows, sortRows, validateRows } from './transform';
 import { SafeFolderWatcher } from './watcher';
 import { writeSpreadsheetAtomic } from './write';
 
@@ -43,6 +44,27 @@ afterEach(async () => {
 });
 
 describe('local spreadsheet executor', () => {
+  it('detects a table header below title rows without manual configuration', async () => {
+    const directory = await temporaryDirectory();
+    const sourcePath = join(directory, 'shifted-header.xlsx');
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Orders');
+    sheet.addRow(['July order report']);
+    sheet.addRow(['Generated for Operations']);
+    sheet.addRow([]);
+    sheet.addRow(['Order ID', 'Customer', 'Amount', 'Order date']);
+    sheet.addRow(['A-1', 'Acme', 12, '2026-07-31']);
+    sheet.addRow(['B-2', 'Beta', 20, '2026-07-31']);
+    await workbook.xlsx.writeFile(sourcePath);
+
+    const document = await readSpreadsheet(sourcePath, { headerMode: 'auto' });
+    expect(document.sheets[0]).toMatchObject({
+      columns: ['Order ID', 'Customer', 'Amount', 'Order date'],
+      headerRow: 4,
+    });
+    expect(document.sheets[0]?.rows).toHaveLength(2);
+  });
+
   it('reads a bounded fixture, transforms it, and creates a verified new workbook', async () => {
     const directory = await temporaryDirectory();
     const sourcePath = join(directory, 'orders.xlsx');
@@ -158,6 +180,55 @@ describe('local spreadsheet executor', () => {
       { outputPath },
     );
     expect(await readFile(outputPath, 'utf8')).toContain(`'=SUM(1,2)`);
+  });
+
+  it('sorts, aggregates, validates, and writes a styled report deterministically', async () => {
+    const directory = await temporaryDirectory();
+    const outputPath = join(directory, 'summary.xlsx');
+    const source = {
+      columns: ['Region', 'Amount', 'Order ID'],
+      name: 'Orders',
+      rows: [
+        { Amount: 20, 'Order ID': 'B-2', Region: 'South' },
+        { Amount: 10, 'Order ID': 'A-1', Region: 'North' },
+        { Amount: null, 'Order ID': '', Region: 'North' },
+      ],
+    } as const;
+    const validated = validateRows(source, [
+      { field: 'Order ID', required: true },
+      { dataType: 'number', field: 'Amount', required: true },
+    ]);
+    expect(validated.valid.rows).toHaveLength(2);
+    expect(validated.invalid.rows[0]).toMatchObject({
+      _validation_errors: 'Order ID:required,Amount:required',
+    });
+    const sorted = sortRows(validated.valid, [
+      { direction: 'desc', field: 'Amount', nulls: 'last' },
+    ]);
+    expect(sorted.rows[0]?.Amount).toBe(20);
+    const summary = aggregateRows(
+      sorted,
+      ['Region'],
+      [
+        { alias: 'Orders', operation: 'count' },
+        { alias: 'Total', field: 'Amount', operation: 'sum' },
+        { alias: 'Average', field: 'Amount', operation: 'average' },
+      ],
+    );
+    expect(summary.rows).toEqual([
+      { Average: 20, Orders: 1, Region: 'South', Total: 20 },
+      { Average: 10, Orders: 1, Region: 'North', Total: 10 },
+    ]);
+
+    await writeSpreadsheetAtomic([summary], {
+      outputPath,
+      reportTitle: 'Daily order summary',
+    });
+    const report = new ExcelJS.Workbook();
+    await report.xlsx.readFile(outputPath);
+    expect(report.title).toBe('Daily order summary');
+    expect(report.worksheets[0]?.views[0]?.state).toBe('frozen');
+    expect(report.worksheets[0]?.autoFilter).toBeDefined();
   });
 
   it('persists successful input hashes and suppresses duplicate processing after restart', async () => {

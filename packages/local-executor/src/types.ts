@@ -3,6 +3,7 @@ export type SpreadsheetRow = Readonly<Record<string, SpreadsheetCell>>;
 
 export interface SpreadsheetTable {
   readonly columns: readonly string[];
+  readonly headerRow?: number;
   readonly name: string;
   readonly rows: readonly SpreadsheetRow[];
 }
@@ -20,7 +21,9 @@ export interface SpreadsheetDocument {
 }
 
 export interface SpreadsheetReadOptions {
+  readonly headerMode?: 'auto' | 'fixed';
   readonly headerRow?: number;
+  readonly headerScanRows?: number;
   readonly maxColumns?: number;
   readonly maxCompressionRatio?: number;
   readonly maxFileSizeBytes?: number;
@@ -32,7 +35,9 @@ export interface SpreadsheetReadOptions {
 }
 
 export interface ResolvedSpreadsheetReadOptions {
+  readonly headerMode: 'auto' | 'fixed';
   readonly headerRow: number;
+  readonly headerScanRows: number;
   readonly maxColumns: number;
   readonly maxCompressionRatio: number;
   readonly maxFileSizeBytes: number;
@@ -50,6 +55,7 @@ export interface SpreadsheetWriteOptions {
   readonly maxSheets?: number;
   readonly outputPath: string;
   readonly overwrite?: boolean;
+  readonly reportTitle?: string;
 }
 
 export interface SpreadsheetWriteResult {

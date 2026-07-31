@@ -13,6 +13,7 @@ import type {
 } from './types';
 import { PlannerRequestSchema } from './types';
 import { recordUsage } from './usage';
+import { validateWorkflowIntentCoverage } from './workflow-intent';
 
 function addUsage(left: ProviderTokenUsage, right: ProviderTokenUsage): ProviderTokenUsage {
   return {
@@ -78,10 +79,18 @@ export class AiGateway {
       }
 
       aggregateUsage = addUsage(aggregateUsage, completion.usage);
-      const validation = parseStrictPlannerOutput(completion.text);
+      const parsedOutput = parseStrictPlannerOutput(completion.text);
+      const intentIssues =
+        parsedOutput.success && parsedOutput.output !== undefined
+          ? validateWorkflowIntentCoverage(request, parsedOutput.output)
+          : [];
+      const validation =
+        parsedOutput.success && intentIssues.length > 0
+          ? { issues: intentIssues, success: false as const }
+          : parsedOutput;
       const validationCodes = [...new Set(validation.issues.map((issue) => issue.code))].sort();
       const fallback =
-        !validation.success && attempt === maxAttempts
+        !validation.success && intentIssues.length === 0 && attempt === maxAttempts
           ? buildPlannerSafeFallback(request, validation.issues)
           : undefined;
       await recordUsage(this.usageSink, {

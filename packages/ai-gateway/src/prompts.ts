@@ -29,6 +29,10 @@ Planning behavior:
 - Prefer read-only nodes when the requested action is ambiguous.
 - Use only the supplied execution target and trusted IDs. When a requested integration is unavailable, create the safest useful draft supported by the trusted context and explain the limitation in assumptions.
 - Never ask the user to assemble nodes manually.
+- Cover every explicit source, transformation, output, and delivery step in the requirement. A validation-only draft is not sufficient when the requirement asks for Gmail, Google Sheets, Google Forms, a report, a presentation, or email delivery.
+- Gmail, Google Sheets, Google Forms, Google Slides, and Apps Script nodes must use a connectionId from googleConnectionIds. Never invent one.
+- For Gmail summaries use gmail.read → ai.summarize → report.compose. For Google Forms or Sheets summaries, read the selected source before summarizing. Add google_slides.create only when a presentation is requested. Add gmail.send only when an email recipient is explicitly supplied; default its sendMode to draft unless the user explicitly requests sending.
+- Apps Script may use only the registered apps_script.deploy_template templates. Never produce script source code in a workflow plan.
 
 Success means the JSON is structurally valid, semantically valid, bounded, and directly explains its assumptions.`;
 
@@ -101,6 +105,7 @@ export function buildPlannerUserPrompt(
   const context = {
     allowedFolderAliasIds: request.context.allowedFolderAliasIds,
     executionTarget: request.context.executionTarget,
+    googleConnectionIds: request.context.googleConnectionIds,
     locale: request.context.locale,
     timezone: request.context.timezone,
   };

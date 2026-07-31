@@ -1,8 +1,13 @@
-import { AiGatewayError, PlannerRequestSchema } from '@ai-workflow-studio/ai-gateway';
+import {
+  AiGatewayError,
+  PlannerRequestSchema,
+  detectWorkflowIntent,
+} from '@ai-workflow-studio/ai-gateway';
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   renderPreparedSources,
 } from '@ai-workflow-studio/tool-registry';
+import { AIPlannerOutputSchema } from '@ai-workflow-studio/workflow-schema';
 import { z } from 'zod';
 
 import { assistantErrorDetails } from '@/lib/assistant-api';
@@ -21,9 +26,12 @@ import {
   type WorkspaceContext,
 } from '@/lib/auth/context';
 import { createServerAiGateway } from '@/lib/ai-gateway';
+import { listAssistantExecutionTargets } from '@/lib/assistant-execution-targets';
 import { plannerAccessDecision } from '@/lib/control-plane-access';
 import { getEnvironment } from '@/lib/env';
+import { listGoogleConnections } from '@/lib/google-connections';
 import { reserveAssistantUsage, type AssistantUsageReservation } from '@/lib/usage-control-server';
+import { selectWorkflowPlanningContext } from '@/lib/workflow-planning-context';
 
 const MAX_REQUEST_BYTES = 20_000;
 const ApiPlannerRequestSchema = PlannerRequestSchema.extend({
@@ -134,6 +142,46 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  const serverPlanningContext = selectWorkflowPlanningContext(
+    await listAssistantExecutionTargets(workspace),
+  );
+  const googleConnectionIds = await listGoogleConnections()
+    .then((connections) => connections.map((connection) => connection.id))
+    .catch(() => [] as readonly string[]);
+  const intent = detectWorkflowIntent(validatedPlannerRequest.prompt);
+  if (intent.needsGoogleConnection && googleConnectionIds.length === 0) {
+    return Response.json(
+      {
+        error: {
+          code: 'AI_GOOGLE_CONNECTION_REQUIRED',
+          message: 'Connect an approved Google Workspace account before planning this workflow.',
+        },
+      },
+      { headers: { 'cache-control': 'no-store' }, status: 409 },
+    );
+  }
+  if (intent.needsDesktop && serverPlanningContext.executionTarget.type !== 'desktop') {
+    return Response.json(
+      {
+        error: {
+          code: 'AI_DESKTOP_REQUIRED',
+          message:
+            'Pair an online Desktop Agent and approve a folder before planning this workflow.',
+        },
+      },
+      { headers: { 'cache-control': 'no-store' }, status: 409 },
+    );
+  }
+  const trustedPlannerRequest = {
+    ...validatedPlannerRequest,
+    context: {
+      ...validatedPlannerRequest.context,
+      allowedFolderAliasIds: serverPlanningContext.allowedFolderAliasIds,
+      executionTarget: serverPlanningContext.executionTarget,
+      googleConnectionIds,
+    },
+  };
+
   let conversation: AssistantConversationSummary | undefined;
   let usageReservation: AssistantUsageReservation | undefined;
   try {
@@ -143,10 +191,10 @@ export async function POST(request: Request): Promise<Response> {
       mode: 'plan',
       model,
       provider: route.provider,
-      title: validatedPlannerRequest.prompt,
+      title: trustedPlannerRequest.prompt,
     });
     const userMessage = await appendAssistantMessage(workspace, {
-      body: validatedPlannerRequest.prompt,
+      body: trustedPlannerRequest.prompt,
       conversationId: conversation.id,
       role: 'user',
     });
@@ -156,10 +204,10 @@ export async function POST(request: Request): Promise<Response> {
       maxCharacters: 4_000,
       messageId: userMessage.id,
     });
-    const boundedPrompt = renderPreparedSources(validatedPlannerRequest.prompt, sources, 8_000);
+    const boundedPrompt = renderPreparedSources(trustedPlannerRequest.prompt, sources, 8_000);
     usageReservation = await reserveAssistantUsage(workspace, {
       inputCharacters: boundedPrompt.length,
-      maxAttempts: validatedPlannerRequest.maxRepairAttempts + 1,
+      maxAttempts: trustedPlannerRequest.maxRepairAttempts + 1,
       maxOutputTokens: 4_096,
       operation: 'workflow_plan',
       provider: route.provider,
@@ -174,18 +222,36 @@ export async function POST(request: Request): Promise<Response> {
       },
     ).plan(
       {
-        ...validatedPlannerRequest,
+        ...trustedPlannerRequest,
         prompt: boundedPrompt,
       },
       request.signal,
     );
+    const routedOutput = AIPlannerOutputSchema.parse({
+      ...result.output,
+      workflow: {
+        ...result.output.workflow,
+        nodes: result.output.workflow.nodes.map((node) =>
+          node.type === 'ai.summarize'
+            ? {
+                ...node,
+                config: {
+                  ...node.config,
+                  provider: providerSelection,
+                  tier,
+                },
+              }
+            : node,
+        ),
+      },
+    });
     const assistantMessage = await appendAssistantMessage(workspace, {
-      body: result.output.explanation,
+      body: routedOutput.explanation,
       conversationId: conversation.id,
       inputUnits: result.usage.inputTokens,
       model: result.model,
       outputUnits: result.usage.outputTokens,
-      plan: result.output,
+      plan: routedOutput,
       provider: result.provider,
       role: 'assistant',
     });
@@ -195,7 +261,7 @@ export async function POST(request: Request): Promise<Response> {
         attempts: result.attempts,
         conversationId: conversation.id,
         model: result.model,
-        output: result.output,
+        output: routedOutput,
         provider: result.provider,
         usage: result.usage,
         userMessage,

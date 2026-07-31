@@ -72,7 +72,9 @@ describe('DesktopWorkflowJobExecutor', () => {
           },
           {
             config: {
+              headerMode: 'auto',
               headerRow: 1,
+              headerScanRows: 30,
               maxFileSizeBytes: 1_000_000,
               maxRows: 1_000,
               maxSheets: 10,

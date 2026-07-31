@@ -560,3 +560,35 @@ administrator sessions. Cover protected routes, role denial, content publishing,
 forms, collections, files, workflow triggers, quota settlement, audit trails,
 version recovery, public rendering, and the absence of secrets or arbitrary
 executable output before describing the builder as full-stack complete.
+
+## Phase 47 — Intelligent Work cloud automation
+
+Turn the natural-language Work planner into an executable source-to-result
+system for the approved desktop and Google Workspace boundaries. A request for
+Gmail, Google Forms, Google Sheets, Excel, a business summary, a professional
+report, Google Slides, a Gmail draft, or an allowlisted Apps Script template
+must include every required source, transformation, and output node. A
+validation-only draft must not be accepted as fulfillment of an action request.
+
+Persist Google OAuth credentials only as encrypted server-side records and
+reconstruct every trusted connection and folder identifier from the signed-in
+Tenant. Cloud runs must use the same versioned runner, idempotency, approval,
+usage reservation, per-step progress, audit, and error boundaries as desktop
+runs. Email delivery, Google Slides creation, Google Sheets writes, Apps Script
+deployment, and every other external mutation require explicit approval. Gmail
+must default to a draft when delivery is requested, and Apps Script is limited
+to reviewed templates; AI output may never introduce arbitrary JavaScript,
+Python, shell commands, SQL, or credentials.
+
+The platform administrator may choose any configured, account-verified model
+provider and allowlisted model level. The selected provider and level must be
+stored in the validated AI summary node so execution uses the reviewed model,
+not a hidden fallback. Ordinary members remain subject to Microsoft Store plan
+entitlements, monthly allowances, and cost controls.
+
+Acceptance requires a real natural-language Gmail-to-AI-to-report run in
+Production, approval and successful per-step completion, confirmation that no
+email was sent, plus a real bounded Excel consolidation and professional report
+artifact. Do not mark the phase complete until the database migration, source
+deployment, production model route, Google connection, audit trail, and final
+result have all been verified.

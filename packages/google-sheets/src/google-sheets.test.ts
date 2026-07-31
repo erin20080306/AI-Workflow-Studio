@@ -5,7 +5,7 @@ import { GoogleTokenCipher } from './cipher';
 import { GoogleSheetsClient, InMemoryGoogleOperationStore, mergeSyncRows } from './client';
 import { GoogleConnectionService, InMemoryGoogleConnectionRepository } from './connection';
 import { GoogleSheetsError } from './errors';
-import { GOOGLE_SHEETS_SCOPES, GoogleOAuthClient, createGooglePkcePair } from './oauth';
+import { GOOGLE_WORKSPACE_SCOPES, GoogleOAuthClient, createGooglePkcePair } from './oauth';
 import type { GoogleFetch } from './types';
 
 const TENANT_ID = '10000000-0000-4000-8000-000000000901';
@@ -88,7 +88,7 @@ describe('Google OAuth web-server flow', () => {
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');
     expect(url.searchParams.get('code_challenge')).toBe(pkce.challenge);
     expect(url.searchParams.get('state')).toBe(state);
-    expect(url.searchParams.get('scope')?.split(' ')).toEqual(GOOGLE_SHEETS_SCOPES);
+    expect(url.searchParams.get('scope')?.split(' ')).toEqual(GOOGLE_WORKSPACE_SCOPES);
     expect(url.toString()).not.toContain('google-client-secret-fixture-value');
   });
 
@@ -105,7 +105,7 @@ describe('Google OAuth web-server flow', () => {
         access_token: isRefresh ? 'refreshed-access-token-1234567890' : ACCESS_TOKEN,
         expires_in: 3600,
         ...(isRefresh ? {} : { refresh_token: REFRESH_TOKEN }),
-        scope: GOOGLE_SHEETS_SCOPES.join(' '),
+        scope: GOOGLE_WORKSPACE_SCOPES.join(' '),
         token_type: 'Bearer',
       });
     };
@@ -351,7 +351,7 @@ describe('Google connection service', () => {
       return jsonResponse({
         access_token: 'service-refreshed-access-token-12345',
         expires_in: 3600,
-        scope: GOOGLE_SHEETS_SCOPES.join(' '),
+        scope: GOOGLE_WORKSPACE_SCOPES.join(' '),
         token_type: 'Bearer',
       });
     });
@@ -375,7 +375,7 @@ describe('Google connection service', () => {
         accessToken: ACCESS_TOKEN,
         expiresAt: '2026-07-26T07:59:00.000Z',
         refreshToken: REFRESH_TOKEN,
-        scopes: GOOGLE_SHEETS_SCOPES,
+        scopes: GOOGLE_WORKSPACE_SCOPES,
       },
       CONNECTION_ID,
     );

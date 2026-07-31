@@ -17,7 +17,9 @@ import { inspectXlsxArchive } from './zip-safety';
 
 const ReadOptionsSchema = z
   .object({
+    headerMode: z.enum(['auto', 'fixed']).default('auto'),
     headerRow: z.number().int().min(1).max(100).default(1),
+    headerScanRows: z.number().int().min(1).max(100).default(30),
     maxColumns: z.number().int().min(1).max(2_000).default(500),
     maxCompressionRatio: z.number().min(1).max(1_000).default(100),
     maxFileSizeBytes: z.number().int().min(1).max(200_000_000).default(50_000_000),
@@ -52,7 +54,9 @@ interface CellConversionState {
 function resolvedOptions(options: SpreadsheetReadOptions): ResolvedSpreadsheetReadOptions {
   const parsed = ReadOptionsSchema.parse(options);
   return {
+    headerMode: parsed.headerMode,
     headerRow: parsed.headerRow,
+    headerScanRows: parsed.headerScanRows,
     maxColumns: parsed.maxColumns,
     maxCompressionRatio: parsed.maxCompressionRatio,
     maxFileSizeBytes: parsed.maxFileSizeBytes,
@@ -100,7 +104,11 @@ function scalarCell(value: unknown, state: CellConversionState): SpreadsheetCell
   return null;
 }
 
-function uniqueHeaders(worksheet: ExcelJS.Worksheet, options: ResolvedSpreadsheetReadOptions) {
+function uniqueHeaders(
+  worksheet: ExcelJS.Worksheet,
+  options: ResolvedSpreadsheetReadOptions,
+  headerRow: number,
+) {
   if (worksheet.columnCount > options.maxColumns) {
     throw new LocalExecutorError(
       'FILE_LIMIT_EXCEEDED',
@@ -111,7 +119,7 @@ function uniqueHeaders(worksheet: ExcelJS.Worksheet, options: ResolvedSpreadshee
   const headers: string[] = [];
   const state: CellConversionState = { formulaCellCount: 0 };
   for (let column = 1; column <= worksheet.columnCount; column += 1) {
-    const value = scalarCell(worksheet.getRow(options.headerRow).getCell(column).value, state);
+    const value = scalarCell(worksheet.getRow(headerRow).getCell(column).value, state);
     const base =
       String(value ?? '')
         .trim()
@@ -123,18 +131,111 @@ function uniqueHeaders(worksheet: ExcelJS.Worksheet, options: ResolvedSpreadshee
   return headers;
 }
 
+const HEADER_TERMS = [
+  'amount',
+  'cost',
+  'customer',
+  'date',
+  'id',
+  'name',
+  'order',
+  'price',
+  'quantity',
+  'total',
+  '品名',
+  '單價',
+  '客戶',
+  '成本',
+  '日期',
+  '料號',
+  '數量',
+  '訂單',
+  '金額',
+] as const;
+
+function headerCandidateScore(worksheet: ExcelJS.Worksheet, rowNumber: number): number {
+  const state: CellConversionState = { formulaCellCount: 0 };
+  const values = Array.from({ length: worksheet.columnCount }, (_, index) =>
+    scalarCell(worksheet.getRow(rowNumber).getCell(index + 1).value, state),
+  ).filter((value) => value !== null && String(value).trim() !== '');
+  if (values.length < 2) return Number.NEGATIVE_INFINITY;
+
+  const normalized = values.map((value) => String(value).trim().toLocaleLowerCase());
+  const uniqueCount = new Set(normalized).size;
+  const textCount = values.filter((value) => typeof value === 'string').length;
+  const keywordCount = normalized.filter((value) =>
+    HEADER_TERMS.some((term) => value.includes(term)),
+  ).length;
+  const shortLabelCount = normalized.filter((value) => value.length <= 80).length;
+  let followingDataRows = 0;
+  for (
+    let candidate = rowNumber + 1;
+    candidate <= Math.min(worksheet.rowCount, rowNumber + 5);
+    candidate += 1
+  ) {
+    let populated = 0;
+    for (let column = 1; column <= worksheet.columnCount; column += 1) {
+      const value = scalarCell(worksheet.getRow(candidate).getCell(column).value, state);
+      if (value !== null && String(value).trim() !== '') populated += 1;
+    }
+    if (populated >= Math.min(2, values.length)) followingDataRows += 1;
+  }
+
+  return (
+    values.length * 4 +
+    uniqueCount * 2 +
+    textCount * 2 +
+    keywordCount * 8 +
+    shortLabelCount +
+    followingDataRows * 3 -
+    (values.length - uniqueCount) * 4 -
+    rowNumber * 0.05
+  );
+}
+
+function detectedHeaderRow(
+  worksheet: ExcelJS.Worksheet,
+  options: ResolvedSpreadsheetReadOptions,
+): number {
+  if (worksheet.columnCount > options.maxColumns) {
+    throw new LocalExecutorError(
+      'FILE_LIMIT_EXCEEDED',
+      'The spreadsheet contains more columns than the configured limit.',
+    );
+  }
+  if (options.headerMode === 'fixed') return options.headerRow;
+  const lastCandidate = Math.min(
+    worksheet.rowCount,
+    options.headerScanRows,
+    options.headerRow + options.headerScanRows - 1,
+  );
+  let bestRow = options.headerRow;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (let rowNumber = options.headerRow; rowNumber <= lastCandidate; rowNumber += 1) {
+    const score = headerCandidateScore(worksheet, rowNumber);
+    if (score > bestScore) {
+      bestRow = rowNumber;
+      bestScore = score;
+    }
+  }
+  return bestRow;
+}
+
 function worksheetToTable(
   worksheet: ExcelJS.Worksheet,
   options: ResolvedSpreadsheetReadOptions,
   state: CellConversionState,
 ): SpreadsheetTable {
-  const columns = uniqueHeaders(worksheet, options);
+  if (worksheet.rowCount > options.maxRows + options.headerRow + options.headerScanRows) {
+    throw new LocalExecutorError(
+      'FILE_LIMIT_EXCEEDED',
+      'The spreadsheet contains rows beyond the configured processing limit.',
+    );
+  }
+  const headerRow = detectedHeaderRow(worksheet, options);
+  const columns = uniqueHeaders(worksheet, options, headerRow);
   const rows: SpreadsheetRow[] = [];
-  for (
-    let rowNumber = options.headerRow + 1;
-    rowNumber <= worksheet.actualRowCount;
-    rowNumber += 1
-  ) {
+  for (let rowNumber = headerRow + 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
     const excelRow = worksheet.getRow(rowNumber);
     const entries = columns.map(
       (column, columnIndex) =>
@@ -147,6 +248,7 @@ function worksheetToTable(
   }
   return {
     columns,
+    headerRow,
     name: worksheet.name.slice(0, 100),
     rows,
   };

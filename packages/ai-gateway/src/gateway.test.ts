@@ -21,6 +21,7 @@ const plannerRequest = {
       deviceId: DEVICE_ID,
       type: 'desktop' as const,
     },
+    googleConnectionIds: [],
     locale: 'zh-Hant',
     timezone: 'Asia/Taipei',
   },
@@ -187,6 +188,7 @@ describe('AiGateway', () => {
       context: {
         allowedFolderAliasIds: [],
         executionTarget: { type: 'cloud' },
+        googleConnectionIds: [],
         locale: 'zh-Hant',
         timezone: 'Asia/Taipei',
       },

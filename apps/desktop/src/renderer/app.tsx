@@ -6,6 +6,7 @@ import type {
   FolderGrantView,
   LogEntry,
 } from '../shared/contracts';
+import { defaultControlPlaneOrigin } from './control-plane';
 
 type View = 'activity' | 'folders' | 'overview' | 'settings';
 type DesktopLocale = 'en' | 'zh-Hant';
@@ -170,7 +171,7 @@ export function DesktopAgentApp() {
   const [folders, setFolders] = useState<readonly FolderGrantView[]>([]);
   const [logs, setLogs] = useState<readonly LogEntry[]>([]);
   const [pairingCode, setPairingCode] = useState('');
-  const [agentBaseUrl, setAgentBaseUrl] = useState('http://127.0.0.1:3000');
+  const [agentBaseUrl, setAgentBaseUrl] = useState(defaultControlPlaneOrigin);
   const [folderPermissions, setFolderPermissions] = useState({
     read: true,
     watch: true,

@@ -64,7 +64,10 @@ export default async function WebsiteBriefPage({
         initialProject={project}
         initialVersions={versions.map(websiteSpecClientView)}
         modelOptions={buildWebsiteGenerationModelOptions(environment)}
-        tierOptions={buildAiTierOptions(context.subscription.plan, mappings)}
+        tierOptions={buildAiTierOptions(
+          context.platformAdmin ? 'business' : context.subscription.plan,
+          mappings,
+        )}
       />
     );
   } catch (error) {

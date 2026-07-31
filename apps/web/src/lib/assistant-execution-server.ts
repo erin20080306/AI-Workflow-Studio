@@ -16,7 +16,7 @@ import {
 import { getAssistantConversation } from '@/lib/assistant-conversation-server';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
-import { startProductionRun } from '@/lib/production-run-server';
+import { startProductionCloudRun, startProductionRun } from '@/lib/production-run-server';
 import { getRunOrchestrator } from '@/lib/run-server';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
@@ -281,14 +281,7 @@ export async function startAssistantWorkflowDraftRun(context: WorkspaceContext, 
     : await productionDraft(context, draftId);
   if (draft === undefined || draft.tenantId !== context.actor.tenantId)
     throw new RunOrchestrationError('RUN_NOT_FOUND', 'The reviewed workflow draft was not found.');
-  if (draft.workflow.executionTarget.type !== 'desktop') {
-    throw new RunOrchestrationError(
-      'RUN_INVALID',
-      'Only a reviewed Desktop workflow can be dispatched to the Agent.',
-    );
-  }
-  const input = {
-    deviceId: draft.workflow.executionTarget.deviceId,
+  const sharedInput = {
     idempotencyKey: `assistant:${draft.summary.id}`,
     maxAttempts: 3,
     timeoutSeconds: 1_800,
@@ -296,9 +289,25 @@ export async function startAssistantWorkflowDraftRun(context: WorkspaceContext, 
     workflowId: draft.summary.workflowId,
     workflowVersionId: draft.summary.workflowVersionId,
   };
-  const started = getEnvironment().mockMode
-    ? await getRunOrchestrator().start(context.actor, input)
-    : await startProductionRun(context.actor, input);
+  const started =
+    draft.workflow.executionTarget.type === 'cloud'
+      ? getEnvironment().mockMode
+        ? (() => {
+            throw new RunOrchestrationError(
+              'RUN_INVALID',
+              'Mock cloud execution is not available; use a configured production workspace.',
+            );
+          })()
+        : await startProductionCloudRun(context, sharedInput)
+      : getEnvironment().mockMode
+        ? await getRunOrchestrator().start(context.actor, {
+            ...sharedInput,
+            deviceId: draft.workflow.executionTarget.deviceId,
+          })
+        : await startProductionRun(context.actor, {
+            ...sharedInput,
+            deviceId: draft.workflow.executionTarget.deviceId,
+          });
   return {
     draft: draft.summary,
     duplicate: started.duplicate,

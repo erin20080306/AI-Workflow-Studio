@@ -34,6 +34,7 @@ export const PlannerRequestSchema = z
       .object({
         allowedFolderAliasIds: z.array(z.string().uuid()).max(20).default([]),
         executionTarget: ExecutionTargetSchema,
+        googleConnectionIds: z.array(z.string().uuid()).max(20).default([]),
         locale: z.string().trim().min(2).max(20).default('zh-Hant'),
         timezone: z.string().trim().min(1).max(100).default('Asia/Taipei'),
       })

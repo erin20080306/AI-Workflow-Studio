@@ -3379,3 +3379,65 @@ Status: completed
 - Private file uploads, analytics, and their site-level controls remain Phase 45. Combined public visitor, site-member, operator, workspace, and platform
   administrator acceptance remains Phase 46.
 - Phase 44 has not been pushed or deployed to Production in this phase.
+
+## Phase 47 — Intelligent Work cloud automation
+
+Status: in progress
+
+### Implemented
+
+- Expanded the versioned workflow allowlist with bounded Gmail read, Google
+  Forms response read, AI summary, report composition, professional Google
+  Slides creation, Gmail draft/send, and allowlisted Apps Script deployment
+  nodes. Workflow intent coverage rejects drafts that omit a requested source or
+  result.
+- Rebuilt planning context on the server from Tenant-owned Google connections
+  and paired Desktop folder aliases. Model output cannot inject a connection,
+  device, or folder identifier supplied by the browser.
+- Added encrypted, service-role-only Google Workspace connection persistence.
+  OAuth scopes are explicit and cover only the implemented Gmail, Forms,
+  Sheets, Slides, Drive-file, and reviewed Apps Script capabilities.
+- Added production cloud execution through the versioned workflow engine with
+  step timeouts, idempotency, progress records, approvals, usage controls,
+  notifications, and metadata-only audit events. External mutations are never
+  executed before approval.
+- Added real provider-backed AI summaries. The Work model provider and model
+  level selected by the user are written into the validated summary node and
+  used again during execution. Platform administrators receive the complete
+  configured Business model-level matrix; ordinary members retain Store plan
+  and budget enforcement.
+- Added bounded Gmail body extraction, Google Forms response retrieval, Gmail
+  draft creation, professional Slides generation with optional image and
+  reference inputs, and three reviewed Apps Script templates. Arbitrary user or
+  model-generated code is never deployed.
+- Extended the Desktop Excel executor with automatic header discovery,
+  multi-sheet and multi-workbook consolidation, deterministic data transforms,
+  and styled Excel reporting.
+- Ran the consolidation implementation against 481 actual `.xlsx` workbooks:
+  776 worksheets and 3,911 detail rows were processed with 0 read failures; 533
+  sheets exposed a numeric total. The verified workbook is stored locally at
+  `outputs/phase47-cost-automation/成本單整合與分析報告.xlsx` and remains outside
+  Git.
+
+### Validation to date
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed after the model-routing and Gmail body changes
+- `pnpm test`: passed — 270 tests across 63 files
+- `pnpm build:web`: passed — 47 application pages and all Work, Google, run,
+  approval, schedule, and Website routes compiled successfully
+- `pnpm build:desktop`: passed — main, preload, and renderer bundles compiled
+- `pnpm security:scan-client`: passed — 35 generated client files scanned
+- Supabase remote migration dry-run: passed and identified four pending ordered
+  migrations, including `202608010001_google_workspace_connections.sql`
+
+### Pending production acceptance
+
+- The production database migration requires explicit authorization because it
+  changes live schema. It has not been applied.
+- The isolated database test could not start because the local Docker daemon is
+  not running; no test was disabled or bypassed.
+- Commit, push, Vercel Production deployment, Google Workspace reconnection, and
+  the authenticated Gmail-to-report live run remain pending. The phase must not
+  be described as complete until these steps pass.

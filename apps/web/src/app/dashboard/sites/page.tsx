@@ -22,7 +22,10 @@ export default async function WebsiteStudioPage() {
     <WebsiteStudioHome
       initialProjects={projects}
       modelOptions={buildWebsiteGenerationModelOptions(getEnvironment())}
-      tierOptions={buildAiTierOptions(context.subscription.plan, mappings)}
+      tierOptions={buildAiTierOptions(
+        context.platformAdmin ? 'business' : context.subscription.plan,
+        mappings,
+      )}
     />
   );
 }

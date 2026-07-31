@@ -18,6 +18,7 @@ const completionRequest: ProviderCompletionRequest = {
     context: {
       allowedFolderAliasIds: [FOLDER_ID],
       executionTarget: { deviceId: DEVICE_ID, type: 'desktop' },
+      googleConnectionIds: [],
       locale: 'zh-Hant',
       timezone: 'Asia/Taipei',
     },

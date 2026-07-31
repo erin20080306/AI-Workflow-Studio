@@ -36,3 +36,8 @@ export {
   type UsageSink,
 } from './types';
 export { InMemoryUsageSink, RedactedConsoleUsageSink } from './usage';
+export {
+  detectWorkflowIntent,
+  validateWorkflowIntentCoverage,
+  type WorkflowIntent,
+} from './workflow-intent';

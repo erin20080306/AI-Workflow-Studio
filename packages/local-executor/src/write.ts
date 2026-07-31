@@ -56,8 +56,12 @@ async function writeTemporary(
   temporaryPath: string,
   format: 'csv' | 'xlsx',
   tables: readonly SpreadsheetTable[],
+  reportTitle?: string,
 ): Promise<void> {
   const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'AI Workflow Studio';
+  workbook.created = new Date();
+  if (reportTitle !== undefined) workbook.title = reportTitle.slice(0, 200);
   const usedNames = new Set<string>();
   for (const table of tables) {
     const worksheet = workbook.addWorksheet(safeSheetName(table.name, usedNames));
@@ -69,6 +73,36 @@ async function writeTemporary(
           return format === 'csv' ? safeCsvCell(value) : value;
         }),
       );
+    }
+    if (format === 'xlsx' && table.columns.length > 0) {
+      worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+      worksheet.autoFilter = {
+        from: { column: 1, row: 1 },
+        to: { column: table.columns.length, row: 1 },
+      };
+      const header = worksheet.getRow(1);
+      header.height = 24;
+      header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      header.fill = { pattern: 'solid', type: 'pattern', fgColor: { argb: 'FF111827' } };
+      header.alignment = { horizontal: 'center', vertical: 'middle' };
+      for (let column = 1; column <= table.columns.length; column += 1) {
+        const observed = table.rows
+          .slice(0, 200)
+          .map((row) => String(row[table.columns[column - 1] ?? ''] ?? '').length);
+        worksheet.getColumn(column).width = Math.min(
+          42,
+          Math.max(12, table.columns[column - 1]?.length ?? 0, ...observed) + 2,
+        );
+      }
+      for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+        if (rowNumber % 2 === 0) {
+          worksheet.getRow(rowNumber).fill = {
+            pattern: 'solid',
+            type: 'pattern',
+            fgColor: { argb: 'FFF8FAFC' },
+          };
+        }
+      }
     }
   }
   if (workbook.worksheets.length === 0) {
@@ -200,7 +234,7 @@ export async function writeSpreadsheetAtomic(
   let lockHandle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     lockHandle = await open(lockPath, 'wx', 0o600);
-    await writeTemporary(temporaryPath, format, tables);
+    await writeTemporary(temporaryPath, format, tables, options.reportTitle);
     await chmod(temporaryPath, 0o600);
     const temporaryHandle = await open(temporaryPath, 'r');
     try {

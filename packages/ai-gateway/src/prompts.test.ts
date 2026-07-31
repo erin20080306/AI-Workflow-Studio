@@ -12,6 +12,7 @@ const request: PlannerRequest = {
   context: {
     allowedFolderAliasIds: [],
     executionTarget: { type: 'cloud' },
+    googleConnectionIds: [],
     locale: 'zh-Hant',
     timezone: 'Asia/Taipei',
   },

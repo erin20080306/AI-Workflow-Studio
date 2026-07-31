@@ -1,6 +1,7 @@
 'use client';
 
 import { AIPlannerOutputSchema, type Workflow } from '@ai-workflow-studio/workflow-schema';
+import type { AiModelTierSelection } from '@ai-workflow-studio/usage-control';
 import Link from 'next/link';
 import { useMemo, useState, type FormEvent } from 'react';
 import { z } from 'zod';
@@ -16,6 +17,7 @@ import {
 import { useLanguage } from '@/components/language-provider';
 import { AssistantWorkflowDraftCreateResponseSchema } from '@/lib/assistant-execution-schema';
 import type { AssistantExecutionTarget } from '@/lib/assistant-execution-targets';
+import type { AiProviderSelection, AiTierOption } from '@/lib/ai-model-selection';
 import { selectWorkflowPlanningContext } from '@/lib/workflow-planning-context';
 
 import { WorkflowReview } from './workflow-review';
@@ -35,6 +37,9 @@ const copy = {
     draft: 'Validated workflow draft',
     error:
       'AI could not create a validated workflow right now. Nothing was saved or executed. Please try again.',
+    googleRequired: 'Connect Google Workspace before creating this cloud workflow.',
+    desktopRequired:
+      'Pair an online Desktop Agent and approve a folder before creating this workflow.',
     example: 'Organize orders every day and create a summary.',
     folderCount: (count: number) => `${count} approved folder ${count === 1 ? 'alias' : 'aliases'}`,
     help: 'Start with a short phrase. Add a source, timing, or output only when you want more control.',
@@ -43,6 +48,7 @@ const copy = {
     noFolders: 'No local folder access',
     openWorkflow: 'Open workflow',
     planner: 'Automatic AI planner',
+    provider: 'Model provider',
     planning: 'Planning, validating, and saving…',
     prompt: 'What should be automated?',
     retrySave: 'The plan is valid, but the draft was not saved. Retry saving it below.',
@@ -50,6 +56,7 @@ const copy = {
     targetHelp:
       'Only the displayed Agent and folder aliases are shared with the planner. Absolute paths stay on the Desktop Agent.',
     title: 'Describe the work in a few words',
+    tier: 'Model level',
     useExample: 'Use example',
   },
   'zh-Hant': {
@@ -64,6 +71,8 @@ const copy = {
     device: '執行目標',
     draft: '已驗證的工作流草稿',
     error: 'AI 目前無法建立通過驗證的工作流；沒有儲存或執行任何內容，請稍後再試。',
+    googleRequired: '請先連線 Google Workspace，才能建立這個雲端工作流。',
+    desktopRequired: '請先配對在線 Desktop Agent 並核准資料夾，才能建立這個工作流。',
     example: '每天整理訂單並建立摘要',
     folderCount: (count: number) => `${count} 個已核准資料夾別名`,
     help: '先輸入短句即可；若想更精準，再補上來源、時間或輸出方式。',
@@ -72,12 +81,14 @@ const copy = {
     noFolders: '沒有本機資料夾權限',
     openWorkflow: '開啟工作流',
     planner: 'AI 自動規劃器',
+    provider: '模型提供者',
     planning: 'AI 正在規劃、驗證並儲存…',
     prompt: '想自動處理什麼？',
     retrySave: '規劃已通過驗證，但草稿尚未儲存；請在下方重新儲存。',
     savedHelp: '目前仍未啟用，沒有變更任何檔案、服務或外部資料。',
     targetHelp: '規劃器只能看見畫面所列的 Agent 與資料夾別名；實際路徑仍只保存在桌面 Agent。',
     title: '用幾個字描述想自動化的工作',
+    tier: '模型等級',
     useExample: '使用範例',
   },
 } as const;
@@ -110,8 +121,12 @@ type DraftStatus =
 
 export function WorkflowComposer({
   executionTargets,
+  platformAdmin,
+  tierOptions,
 }: Readonly<{
   executionTargets: readonly AssistantExecutionTarget[];
+  platformAdmin: boolean;
+  tierOptions: readonly AiTierOption[];
 }>) {
   const { locale } = useLanguage();
   const text = copy[locale];
@@ -120,7 +135,11 @@ export function WorkflowComposer({
     [executionTargets],
   );
   const [prompt, setPrompt] = useState('');
-  const [promptError, setPromptError] = useState<'invalid' | 'unavailable'>();
+  const [promptError, setPromptError] = useState<
+    'desktop_required' | 'google_required' | 'invalid' | 'unavailable'
+  >();
+  const [provider, setProvider] = useState<AiProviderSelection>('auto');
+  const [tier, setTier] = useState<AiModelTierSelection>('auto');
   const [workflow, setWorkflow] = useState<Workflow>();
   const [plannedModel, setPlannedModel] = useState<PlannedModel>();
   const [planReference, setPlanReference] = useState<PlanReference>();
@@ -164,18 +183,37 @@ export function WorkflowComposer({
           context: {
             allowedFolderAliasIds: planningContext.allowedFolderAliasIds,
             executionTarget: planningContext.executionTarget,
+            googleConnectionIds: [],
             locale,
             timezone: 'Asia/Taipei',
           },
           maxRepairAttempts: 2,
           prompt: requestPrompt,
-          provider: 'auto',
-          tier: 'auto',
+          provider,
+          tier,
         }),
         headers: { 'content-type': 'application/json' },
         method: 'POST',
       });
-      const parsed = PlannerApiResponseSchema.safeParse(await response.json());
+      const responseBody = (await response.json()) as unknown;
+      if (!response.ok) {
+        const error = z
+          .object({ error: z.object({ code: z.string() }).passthrough() })
+          .safeParse(responseBody);
+        if (error.success && error.data.error.code === 'AI_GOOGLE_CONNECTION_REQUIRED') {
+          setWorkflow(undefined);
+          setPlannedModel(undefined);
+          setPromptError('google_required');
+          return;
+        }
+        if (error.success && error.data.error.code === 'AI_DESKTOP_REQUIRED') {
+          setWorkflow(undefined);
+          setPlannedModel(undefined);
+          setPromptError('desktop_required');
+          return;
+        }
+      }
+      const parsed = PlannerApiResponseSchema.safeParse(responseBody);
       if (!response.ok || !parsed.success) {
         throw new Error('Invalid planning response');
       }
@@ -236,9 +274,54 @@ export function WorkflowComposer({
               </p>
             ) : (
               <p className="mt-2 text-xs font-medium text-rose-700" id="prompt-error" role="alert">
-                {promptError === 'invalid' ? text.minLength : text.error}
+                {promptError === 'invalid'
+                  ? text.minLength
+                  : promptError === 'google_required'
+                    ? text.googleRequired
+                    : promptError === 'desktop_required'
+                      ? text.desktopRequired
+                      : text.error}
               </p>
             )}
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-semibold text-slate-700">
+                {text.provider}
+                <select
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-950"
+                  onChange={(event) => setProvider(event.target.value as AiProviderSelection)}
+                  value={provider}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Claude</option>
+                  <option value="gemini">Gemini</option>
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-700">
+                {text.tier}
+                <select
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-950"
+                  onChange={(event) => setTier(event.target.value as AiModelTierSelection)}
+                  value={tier}
+                >
+                  <option value="auto">Auto</option>
+                  {tierOptions.map((option) => (
+                    <option disabled={!option.enabled} key={option.id} value={option.id}>
+                      {option.label[locale === 'zh-Hant' ? 'zhHant' : 'en']} ·{' '}
+                      {option.models.map((model) => model.model).join(' / ')}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {platformAdmin ? (
+              <p className="mt-2 text-xs font-medium text-emerald-700">
+                {locale === 'zh-Hant'
+                  ? '平台管理者可使用所有已設定且通過 allowlist 的模型等級。'
+                  : 'Platform administrators may use every configured allowlisted model level.'}
+              </p>
+            ) : null}
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button

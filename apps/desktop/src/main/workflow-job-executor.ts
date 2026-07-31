@@ -21,10 +21,17 @@ const CellSchema = z.union([z.string(), z.number().finite(), z.boolean(), z.null
 const TableSchema = z
   .object({
     columns: z.array(z.string().max(200)).max(5_000),
+    headerRow: z.number().int().min(1).max(100).optional(),
     name: z.string().min(1).max(200),
     rows: z.array(z.record(z.string(), CellSchema)).max(1_000_000),
   })
-  .strict();
+  .strict()
+  .transform((table): SpreadsheetTable => ({
+    columns: table.columns,
+    ...(table.headerRow === undefined ? {} : { headerRow: table.headerRow }),
+    name: table.name,
+    rows: table.rows,
+  }));
 const EnvelopeSchema = z
   .object({
     folderAliasId: z.string().uuid().optional(),
@@ -73,6 +80,10 @@ const SUPPORTED_NODE_TYPES = [
   'data.filter',
   'data.map_columns',
   'data.deduplicate',
+  'data.sort',
+  'data.group',
+  'data.aggregate',
+  'data.validate',
 ] as const;
 
 class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
@@ -156,7 +167,9 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
                 relativePath,
               },
               {
+                headerMode: parsed.config.headerMode,
                 headerRow: parsed.config.headerRow,
+                headerScanRows: parsed.config.headerScanRows,
                 maxFileSizeBytes: parsed.config.maxFileSizeBytes,
                 maxRows: parsed.config.maxRows,
                 maxSheets: parsed.config.maxSheets,
@@ -217,6 +230,59 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
         });
         return transformed(envelope, table);
       }
+      case 'data.sort': {
+        const table = this.spreadsheet.transform(envelope.tables, {
+          sort: parsed.config.fields,
+        });
+        return transformed(envelope, table);
+      }
+      case 'data.group': {
+        const table = this.spreadsheet.transform(envelope.tables, {
+          groupBy: parsed.config.keys,
+        });
+        return transformed(envelope, table);
+      }
+      case 'data.aggregate': {
+        const table = this.spreadsheet.transform(envelope.tables, {
+          aggregate: {
+            groupBy: parsed.config.groupBy,
+            operations: parsed.config.operations.map((operation) => ({
+              alias: operation.alias,
+              ...(operation.field === undefined ? {} : { field: operation.field }),
+              operation: operation.operation,
+            })),
+          },
+        });
+        return transformed(envelope, table);
+      }
+      case 'data.validate': {
+        const validated = this.spreadsheet.validate(
+          envelope.tables,
+          parsed.config.rules.map((rule) => ({
+            ...(rule.dataType === undefined ? {} : { dataType: rule.dataType }),
+            field: rule.field,
+            ...(rule.max === undefined ? {} : { max: rule.max }),
+            ...(rule.min === undefined ? {} : { min: rule.min }),
+            ...(rule.pattern === undefined ? {} : { pattern: rule.pattern }),
+            required: rule.required,
+          })),
+        );
+        if (parsed.config.onInvalid === 'fail' && validated.invalid.rows.length > 0) {
+          throw new Error('Spreadsheet validation found invalid rows.');
+        }
+        return {
+          metrics: {
+            processedRowCount: validated.valid.rows.length + validated.invalid.rows.length,
+          },
+          output: jsonEnvelope({
+            ...envelope,
+            tables:
+              parsed.config.onInvalid === 'separate'
+                ? [validated.valid, validated.invalid]
+                : [validated.valid],
+          }),
+        };
+      }
       case 'excel.create_report':
       case 'excel.write': {
         if (envelope.tables.length === 0) {
@@ -229,6 +295,9 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
           {
             folderAliasId: parsed.config.folderAliasId,
             outputName: parsed.config.outputName,
+            ...(parsed.type === 'excel.create_report' && parsed.config.reportTitle !== undefined
+              ? { reportTitle: parsed.config.reportTitle }
+              : {}),
           },
           envelope.tables,
         );

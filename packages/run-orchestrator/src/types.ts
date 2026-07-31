@@ -56,7 +56,7 @@ export interface WorkflowRunView {
   readonly audit: readonly RunAuditEntry[];
   readonly completedAt?: string;
   readonly createdAt: string;
-  readonly deviceId: string;
+  readonly deviceId?: string;
   readonly error?: {
     readonly code: string;
     readonly message: string;
