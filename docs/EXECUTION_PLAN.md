@@ -623,6 +623,12 @@ are parsed as inert data without evaluating formulas or embedded code; legacy
 `.xls` workbooks may be converted only through temporary app-created Google
 Sheets and must be cleaned up after reading. File, sheet, row, and byte limits
 must fail closed.
+Large Drive folders must run as durable, resumable Cloud batches. Each bounded
+invocation must acquire an optimistic lease, persist a validated checkpoint,
+and let the authenticated Production scheduler resume the next batch without a
+browser session or repeated user action. A completed source checkpoint may be
+restored only into the same immutable workflow node; downstream Excel, report,
+Slides, and GAS nodes must not begin before every source file is processed.
 The OAuth connection must include read-only Drive content access and be
 re-authorized when the scope set changes. Auto model routing may downgrade to a
 lower-cost configured tier after a bounded provider/model failure, while an

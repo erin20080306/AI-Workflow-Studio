@@ -12,18 +12,26 @@ import {
   type WorkflowRunView,
 } from '@ai-workflow-studio/run-orchestrator';
 import {
+  JsonValueSchema,
   StepResultSchema,
   ExecutionTargetSchema,
   WorkflowSchema,
   summarizeWorkflowRisks,
   validateWorkflow,
+  type JsonValue,
   type Workflow,
 } from '@ai-workflow-studio/workflow-schema';
 import { z } from 'zod';
 
 import type { WorkspaceContext } from '@/lib/auth/context';
-import { executeCloudWorkflow } from '@/lib/cloud-workflow-executor';
+import { advanceDriveExcelBatch, executeCloudWorkflow } from '@/lib/cloud-workflow-executor';
+import {
+  DriveExcelCheckpointSchema,
+  DriveExcelFolderOutputSchema,
+  type DriveExcelCheckpoint,
+} from '@/lib/cloud-drive-excel-checkpoint';
 import { nextRetryTimeoutAt } from '@/lib/production-run-timeout';
+import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
 const UuidSchema = z.string().uuid();
@@ -86,6 +94,25 @@ const StepRowSchema = z.object({
     'timed_out',
   ]),
 });
+const DriveStepRowSchema = z
+  .object({
+    input_summary: z.record(z.string(), z.unknown()),
+    output_summary: z.record(z.string(), z.unknown()),
+    processed_file_count: z.number().int().nonnegative(),
+    processed_row_count: z.number().int().nonnegative(),
+    started_at: TimestampSchema.nullable(),
+    status: z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled', 'timed_out']),
+    updated_at: TimestampSchema,
+  })
+  .strict();
+const DriveBatchLeaseSchema = z
+  .object({
+    claimId: UuidSchema,
+    kind: z.literal('cloud_drive_batch_lease'),
+    leaseUntil: TimestampSchema,
+  })
+  .strict();
+const DRIVE_BATCH_LEASE_MS = 10 * 60_000;
 const ApprovalRowSchema = z.object({
   created_at: TimestampSchema,
   expires_at: TimestampSchema.nullable(),
@@ -120,6 +147,23 @@ const DeviceRowSchema = z.object({
   id: UuidSchema,
   status: z.enum(['offline', 'online', 'pairing', 'revoked']),
 });
+const SystemMembershipSchema = z.object({
+  role: z.enum(['owner', 'admin', 'editor', 'viewer']),
+});
+const SystemTenantSchema = z.object({
+  id: UuidSchema,
+  name: z.string().min(1).max(120),
+  slug: z.string().min(3).max(63),
+});
+const SystemProfileSchema = z
+  .object({ display_name: z.string().min(1).max(120).nullable() })
+  .nullable();
+const SystemSubscriptionSchema = z
+  .object({
+    plan_code: z.enum(['free', 'pro', 'team', 'business']),
+    status: z.enum(['trialing', 'active', 'past_due', 'canceled', 'incomplete']),
+  })
+  .nullable();
 
 function assertCanMutate(actor: RunActor): void {
   if (actor.role === 'viewer') {
@@ -657,34 +701,191 @@ function outputSummary(output: unknown): Readonly<Record<string, unknown>> {
   return { value: output ?? null };
 }
 
+type DriveBatchContinuation =
+  | { readonly kind: 'busy' }
+  | { readonly checkpoint: DriveExcelCheckpoint; readonly kind: 'pending' }
+  | {
+      readonly kind: 'completed';
+      readonly output: NonNullable<
+        Awaited<ReturnType<typeof advanceDriveExcelBatch>>['completedOutput']
+      >;
+    };
+
+async function continueDriveExcelBatch(
+  context: WorkspaceContext,
+  run: z.infer<typeof RunRowSchema>,
+  node: Workflow['nodes'][number],
+): Promise<DriveBatchContinuation> {
+  const admin = createSupabaseAdminClient();
+  const attempt = Math.max(1, run.attempt);
+  const selected = await admin
+    .from('workflow_run_steps')
+    .select(
+      'input_summary, output_summary, processed_file_count, processed_row_count, started_at, status, updated_at',
+    )
+    .eq('tenant_id', context.actor.tenantId)
+    .eq('workflow_run_id', run.id)
+    .eq('node_id', node.id)
+    .eq('attempt', attempt)
+    .single();
+  if (selected.error !== null) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The Drive Excel batch checkpoint could not be read.',
+    );
+  }
+  const step = DriveStepRowSchema.parse(selected.data);
+  if (step.status === 'succeeded') {
+    return {
+      kind: 'completed',
+      output: DriveExcelFolderOutputSchema.parse(step.output_summary),
+    };
+  }
+  if (step.status !== 'pending' && step.status !== 'running') {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The Drive Excel source step cannot be continued.',
+    );
+  }
+  const existingLease = DriveBatchLeaseSchema.safeParse(step.input_summary);
+  if (existingLease.success && new Date(existingLease.data.leaseUntil).getTime() > Date.now()) {
+    return { kind: 'busy' };
+  }
+  const claimId = crypto.randomUUID();
+  const claimedAt = new Date();
+  const lease = DriveBatchLeaseSchema.parse({
+    claimId,
+    kind: 'cloud_drive_batch_lease',
+    leaseUntil: new Date(claimedAt.getTime() + DRIVE_BATCH_LEASE_MS).toISOString(),
+  });
+  const claim = await admin
+    .from('workflow_run_steps')
+    .update({
+      input_summary: lease,
+      started_at: step.started_at ?? claimedAt.toISOString(),
+      status: 'running',
+      updated_at: claimedAt.toISOString(),
+    })
+    .eq('tenant_id', context.actor.tenantId)
+    .eq('workflow_run_id', run.id)
+    .eq('node_id', node.id)
+    .eq('attempt', attempt)
+    .eq('updated_at', step.updated_at)
+    .in('status', ['pending', 'running'])
+    .select('updated_at')
+    .maybeSingle();
+  if (claim.error !== null) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The Drive Excel batch lease could not be created.',
+    );
+  }
+  if (claim.data === null) return { kind: 'busy' };
+
+  const parsedCheckpoint = DriveExcelCheckpointSchema.safeParse(step.output_summary);
+  const advanced = await advanceDriveExcelBatch(
+    context,
+    JsonValueSchema.parse(node.config),
+    parsedCheckpoint.success ? parsedCheckpoint.data : undefined,
+  );
+  const savedAt = new Date().toISOString();
+  const saved = await admin
+    .from('workflow_run_steps')
+    .update({
+      input_summary: {},
+      output_summary: advanced.checkpoint,
+      processed_file_count: advanced.checkpoint.nextFileIndex,
+      processed_row_count: advanced.checkpoint.rows.length,
+      status: 'running',
+      updated_at: savedAt,
+    })
+    .eq('tenant_id', context.actor.tenantId)
+    .eq('workflow_run_id', run.id)
+    .eq('node_id', node.id)
+    .eq('attempt', attempt)
+    .eq('input_summary->>claimId', claimId)
+    .select('updated_at')
+    .maybeSingle();
+  if (saved.error !== null || saved.data === null) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The Drive Excel batch checkpoint changed before it could be saved.',
+    );
+  }
+  await admin.from('audit_logs').insert({
+    action: 'cloud_run.batch_completed',
+    actor_user_id: context.actor.userId,
+    correlation_id: run.id,
+    metadata: {
+      completedFiles: advanced.checkpoint.nextFileIndex,
+      totalFiles: advanced.checkpoint.manifest.files.length,
+    },
+    resource_id: run.id,
+    resource_type: 'workflow_run',
+    tenant_id: context.actor.tenantId,
+  });
+  if (advanced.completedOutput === undefined) {
+    return { checkpoint: advanced.checkpoint, kind: 'pending' };
+  }
+  return {
+    kind: 'completed',
+    output: advanced.completedOutput,
+  };
+}
+
 async function executeQueuedCloudRun(
   context: WorkspaceContext,
   row: z.infer<typeof RunRowSchema>,
   workflow: Workflow,
+  alreadyRunning = false,
 ): Promise<WorkflowRunView> {
   if (workflow.executionTarget.type !== 'cloud') {
     throw new RunOrchestrationError('RUN_INVALID', 'The workflow is not a cloud workflow.');
   }
   const actor = context.actor;
   const admin = createSupabaseAdminClient();
-  const initializedResult = await admin
-    .from('workflow_runs')
-    .update({ attempt: Math.max(1, row.attempt) })
-    .eq('tenant_id', actor.tenantId)
-    .eq('id', row.id)
-    .eq('status', 'queued')
-    .select('*')
-    .single();
-  if (initializedResult.error !== null) {
-    throw new RunOrchestrationError(
-      'RUN_STATE_CONFLICT',
-      'The cloud workflow attempt could not be initialized.',
-    );
+  let initialized = row;
+  if (!alreadyRunning) {
+    const initializedResult = await admin
+      .from('workflow_runs')
+      .update({ attempt: Math.max(1, row.attempt) })
+      .eq('tenant_id', actor.tenantId)
+      .eq('id', row.id)
+      .eq('status', 'queued')
+      .select('*')
+      .single();
+    if (initializedResult.error !== null) {
+      throw new RunOrchestrationError(
+        'RUN_STATE_CONFLICT',
+        'The cloud workflow attempt could not be initialized.',
+      );
+    }
+    initialized = RunRowSchema.parse(initializedResult.data);
+    initialized = await transition(actor, actor.tenantId, row.id, 'queued', 'running');
   }
-  const initialized = RunRowSchema.parse(initializedResult.data);
-  await transition(actor, actor.tenantId, row.id, 'queued', 'running');
   try {
+    const driveNodes = workflow.nodes.filter(
+      (node) => node.type === 'google_drive.read_excel_folder',
+    );
+    if (driveNodes.length > 1) {
+      throw new RunOrchestrationError(
+        'RUN_INVALID',
+        'A resumable cloud workflow may contain only one Drive Excel source.',
+      );
+    }
+    let completedNodeOutputs: Readonly<Record<string, JsonValue>> | undefined;
+    const driveNode = driveNodes[0];
+    if (driveNode !== undefined) {
+      const continuation = await continueDriveExcelBatch(context, initialized, driveNode);
+      if (continuation.kind === 'busy' || continuation.kind === 'pending') {
+        return await runView(actor.tenantId, row.id);
+      }
+      completedNodeOutputs = {
+        [driveNode.id]: JsonValueSchema.parse(continuation.output),
+      };
+    }
     const result = await executeCloudWorkflow(context, workflow, {
+      ...(completedNodeOutputs === undefined ? {} : { completedNodeOutputs }),
       idempotencyKey: row.idempotency_key,
       async onProgress(event) {
         if (event.status !== 'running') return;
@@ -1246,6 +1447,150 @@ export async function syncProductionAgentFailure(input: AgentFailureInput): Prom
     errorCode: parsed.error.code,
     errorMessage: parsed.error.message,
   });
+}
+
+async function systemWorkspaceContextForRun(
+  run: z.infer<typeof RunRowSchema>,
+): Promise<WorkspaceContext> {
+  if (run.triggered_by === null) {
+    throw new RunOrchestrationError(
+      'RUN_FORBIDDEN',
+      'The resumable cloud workflow has no authorized owner.',
+    );
+  }
+  const admin = createSupabaseAdminClient();
+  const [membership, tenant, profile, subscription, platformAdmin] = await Promise.all([
+    admin
+      .from('memberships')
+      .select('role')
+      .eq('tenant_id', run.tenant_id)
+      .eq('user_id', run.triggered_by)
+      .maybeSingle(),
+    admin.from('tenants').select('id, name, slug').eq('id', run.tenant_id).single(),
+    admin.from('profiles').select('display_name').eq('id', run.triggered_by).maybeSingle(),
+    admin
+      .from('tenant_subscriptions')
+      .select('plan_code, status')
+      .eq('tenant_id', run.tenant_id)
+      .maybeSingle(),
+    admin
+      .from('platform_admins')
+      .select('user_id')
+      .eq('user_id', run.triggered_by)
+      .eq('active', true)
+      .maybeSingle(),
+  ]);
+  if (
+    membership.error !== null ||
+    tenant.error !== null ||
+    profile.error !== null ||
+    subscription.error !== null ||
+    platformAdmin.error !== null
+  ) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The resumable cloud workflow owner could not be verified.',
+    );
+  }
+  const parsedMembership = SystemMembershipSchema.safeParse(membership.data);
+  const parsedTenant = SystemTenantSchema.safeParse(tenant.data);
+  const parsedProfile = SystemProfileSchema.safeParse(profile.data);
+  const parsedSubscription = SystemSubscriptionSchema.safeParse(subscription.data);
+  if (
+    !parsedMembership.success ||
+    !parsedTenant.success ||
+    !parsedProfile.success ||
+    !parsedSubscription.success
+  ) {
+    throw new RunOrchestrationError(
+      'RUN_FORBIDDEN',
+      'The resumable cloud workflow owner is no longer authorized.',
+    );
+  }
+  return {
+    actor: {
+      role: parsedMembership.data.role,
+      tenantId: run.tenant_id,
+      userId: run.triggered_by,
+    },
+    displayName: parsedProfile.data?.display_name ?? 'Workflow owner',
+    platformAdmin: platformAdmin.data !== null,
+    subscription: {
+      plan: parsedSubscription.data?.plan_code ?? 'free',
+      status: parsedSubscription.data?.status ?? 'incomplete',
+    },
+    tenant: parsedTenant.data,
+  };
+}
+
+export interface CloudBatchTickResult {
+  readonly continuedCount: number;
+  readonly failedCount: number;
+  readonly inspectedCount: number;
+}
+
+export async function resumeProductionCloudRuns(
+  at = new Date(),
+  limit = 1,
+): Promise<CloudBatchTickResult> {
+  if (getEnvironment().mockMode) {
+    return { continuedCount: 0, failedCount: 0, inspectedCount: 0 };
+  }
+  const parsedLimit = z.number().int().min(1).max(5).parse(limit);
+  const admin = createSupabaseAdminClient();
+  const candidates = await admin
+    .from('workflow_run_steps')
+    .select('tenant_id, workflow_run_id')
+    .eq('node_type', 'google_drive.read_excel_folder')
+    .in('status', ['running', 'succeeded'])
+    .order('updated_at')
+    .limit(parsedLimit);
+  if (candidates.error !== null) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'Resumable cloud workflow batches could not be listed.',
+    );
+  }
+  const rows = z
+    .array(z.object({ tenant_id: UuidSchema, workflow_run_id: UuidSchema }))
+    .parse(candidates.data);
+  let continuedCount = 0;
+  let failedCount = 0;
+  for (const candidate of rows) {
+    try {
+      const runResult = await admin
+        .from('workflow_runs')
+        .select('*')
+        .eq('tenant_id', candidate.tenant_id)
+        .eq('id', candidate.workflow_run_id)
+        .eq('status', 'running')
+        .gt('timeout_at', at.toISOString())
+        .maybeSingle();
+      if (runResult.error !== null || runResult.data === null) continue;
+      const run = RunRowSchema.parse(runResult.data);
+      const versionResult = await admin
+        .from('workflow_versions')
+        .select('definition')
+        .eq('tenant_id', run.tenant_id)
+        .eq('id', run.workflow_version_id)
+        .single();
+      if (versionResult.error !== null) {
+        throw new RunOrchestrationError(
+          'RUN_STATE_CONFLICT',
+          'The resumable cloud workflow version could not be read.',
+        );
+      }
+      const workflow = WorkflowSchema.parse(
+        z.object({ definition: z.unknown() }).parse(versionResult.data).definition,
+      );
+      const context = await systemWorkspaceContextForRun(run);
+      await executeQueuedCloudRun(context, run, workflow, true);
+      continuedCount += 1;
+    } catch {
+      failedCount += 1;
+    }
+  }
+  return { continuedCount, failedCount, inspectedCount: rows.length };
 }
 
 async function sweepProductionRuns(actor: RunActor, runId?: string): Promise<void> {

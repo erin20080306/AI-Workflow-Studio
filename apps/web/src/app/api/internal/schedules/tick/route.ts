@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
 import { getEnvironment } from '@/lib/env';
+import { resumeProductionCloudRuns } from '@/lib/production-run-server';
 import { MOCK_SCHEDULE_CRON_SECRET, tickSchedules } from '@/lib/schedule-server';
 
 const CronSecretSchema = z.string().min(24).max(500);
@@ -40,9 +41,14 @@ export async function GET(request: Request): Promise<Response> {
         { headers: { 'cache-control': 'no-store' }, status: 400 },
       );
     }
-    return Response.json(await tickSchedules(at), {
-      headers: { 'cache-control': 'no-store' },
-    });
+    const schedules = await tickSchedules(at);
+    const cloudBatches = await resumeProductionCloudRuns(at);
+    return Response.json(
+      { cloudBatches, schedules },
+      {
+        headers: { 'cache-control': 'no-store' },
+      },
+    );
   } catch {
     return Response.json(
       {

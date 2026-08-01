@@ -6,6 +6,7 @@ import {
   GoogleSheetsClient,
   GoogleWorkspaceClient,
   InMemoryGoogleOperationStore,
+  type DriveExcelFolderResult,
   type SafeAppsScriptTemplate,
 } from '@ai-workflow-studio/google-sheets';
 import {
@@ -27,6 +28,16 @@ import { z } from 'zod';
 import { createServerAiChatGateway } from '@/lib/ai-gateway';
 import { resolveAiModelRoute } from '@/lib/ai-model-routing';
 import type { WorkspaceContext } from '@/lib/auth/context';
+import {
+  DriveExcelCheckpointSchema,
+  DriveExcelReadConfigSchema,
+  completedDriveExcelOutput,
+  createDriveExcelCheckpoint,
+  driveExcelReadOptions,
+  mergeDriveExcelCheckpoint,
+  nextDriveExcelBatchManifest,
+  type DriveExcelCheckpoint,
+} from '@/lib/cloud-drive-excel-checkpoint';
 import { safeGoogleNodeFailure } from '@/lib/cloud-workflow-errors';
 import { buildCloudAiSummaryInstructions } from '@/lib/cloud-workflow-input';
 import { appsScriptParentId, buildProfessionalSlides } from '@/lib/cloud-workflow-output';
@@ -306,19 +317,7 @@ class DriveExcelFolderReadExecutor extends CloudNodeExecutor {
     _input: JsonValue,
     config: JsonValue,
   ) {
-    const parsed = z
-      .object({
-        connectionId: UuidSchema,
-        folderId: GoogleResourceIdSchema,
-        headerScanRows: z.number().int().min(1).max(100),
-        includeSubfolders: z.boolean(),
-        maxFileSizeBytes: z.number().int().min(1).max(20_000_000),
-        maxFiles: z.number().int().min(1).max(500),
-        maxRows: z.number().int().min(1).max(100_000),
-        maxSheets: z.number().int().min(1).max(2_000),
-      })
-      .strict()
-      .parse(config);
+    const parsed = DriveExcelReadConfigSchema.parse(config);
     await this.countTool(this.type);
     await googleConnectionService().assertScopes(this.context.actor.tenantId, parsed.connectionId, [
       GOOGLE_DRIVE_READONLY_SCOPE,
@@ -685,6 +684,7 @@ export async function executeCloudWorkflow(
   context: WorkspaceContext,
   workflow: Workflow,
   input: {
+    readonly completedNodeOutputs?: Readonly<Record<string, JsonValue>>;
     readonly idempotencyKey: string;
     readonly onProgress?: (event: {
       readonly nodeId: string;
@@ -701,6 +701,9 @@ export async function executeCloudWorkflow(
   }
   return await new WorkflowEngine(cloudRegistry(context)).execute(workflow, {
     approvedNodeIds: workflow.nodes.map((node) => node.id),
+    ...(input.completedNodeOutputs === undefined
+      ? {}
+      : { completedNodeOutputs: input.completedNodeOutputs }),
     idempotencyKey: input.idempotencyKey,
     maxAttempts: 1,
     mode: 'live',
@@ -714,4 +717,61 @@ export async function executeCloudWorkflow(
     runId: input.runId,
     stepTimeoutMs: CLOUD_STEP_TIMEOUT_MS,
   });
+}
+
+export interface DriveExcelBatchAdvanceResult {
+  readonly checkpoint: DriveExcelCheckpoint;
+  readonly completedOutput?: DriveExcelFolderResult;
+}
+
+export async function advanceDriveExcelBatch(
+  context: WorkspaceContext,
+  configInput: JsonValue,
+  checkpointInput?: DriveExcelCheckpoint,
+  signal?: AbortSignal,
+): Promise<DriveExcelBatchAdvanceResult> {
+  const config = DriveExcelReadConfigSchema.parse(configInput);
+  await consumeMeteredAllowance(context, 'tool_call', 1, {
+    operation: 'google_drive.read_excel_folder.batch',
+  });
+  await googleConnectionService().assertScopes(context.actor.tenantId, config.connectionId, [
+    GOOGLE_DRIVE_READONLY_SCOPE,
+  ]);
+  const accessToken = await googleConnectionService().accessToken(
+    context.actor.tenantId,
+    config.connectionId,
+    signal,
+  );
+  const sheets = new GoogleSheetsClient({ operationStore: new InMemoryGoogleOperationStore() });
+  const driveExcel = new GoogleDriveExcelClient({ sheetsClient: sheets });
+  const checkpoint =
+    checkpointInput === undefined
+      ? createDriveExcelCheckpoint(
+          await driveExcel.discoverExcelFolder(
+            accessToken,
+            config.folderId,
+            driveExcelReadOptions(config),
+            signal,
+          ),
+        )
+      : DriveExcelCheckpointSchema.parse(checkpointInput);
+  const batchManifest = nextDriveExcelBatchManifest(checkpoint);
+  if (batchManifest === undefined) {
+    const completedOutput = completedDriveExcelOutput(checkpoint);
+    return {
+      checkpoint,
+      ...(completedOutput === undefined ? {} : { completedOutput }),
+    };
+  }
+  const batch = await driveExcel
+    .readExcelManifest(accessToken, batchManifest, driveExcelReadOptions(config), signal)
+    .catch((error: unknown) => {
+      throw safeGoogleNodeFailure(error, 'drive_excel_source');
+    });
+  const nextCheckpoint = mergeDriveExcelCheckpoint(checkpoint, batch, config);
+  const completedOutput = completedDriveExcelOutput(nextCheckpoint);
+  return {
+    checkpoint: nextCheckpoint,
+    ...(completedOutput === undefined ? {} : { completedOutput }),
+  };
 }

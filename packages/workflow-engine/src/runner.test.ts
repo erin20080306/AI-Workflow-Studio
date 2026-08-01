@@ -176,6 +176,46 @@ describe('WorkflowEngine', () => {
     expect(duplicate.steps).toEqual(first.steps);
   });
 
+  it('restores a validated completed-node output without executing that node again', async () => {
+    let calls = 0;
+    const executor: RegisteredWorkflowNodeExecutor = {
+      async execute(): Promise<NodeExecutionResult<JsonValue>> {
+        calls += 1;
+        return { output: { unexpected: true } };
+      },
+      riskLevel: 'read',
+      type: 'data.filter',
+      validateConfig: (config: unknown) => JsonValueSchema.parse(config),
+      version: 1,
+    };
+    const registry = new NodeRegistry();
+    registry.register(executor);
+    const result = await new WorkflowEngine(registry).execute(singleDataNodeWorkflow(), {
+      ...baseOptions,
+      completedNodeOutputs: { filter_rows: { restored: true } },
+      idempotencyKey: 'workflow-run-restored-output',
+      mode: 'live',
+    });
+
+    expect(calls).toBe(0);
+    expect(result.steps[0]).toMatchObject({
+      attempts: 0,
+      output: { restored: true },
+      status: 'succeeded',
+    });
+  });
+
+  it('rejects a restored output for a node outside the validated workflow', async () => {
+    const engine = new WorkflowEngine(createMockNodeRegistry());
+
+    await expect(
+      engine.execute(singleDataNodeWorkflow(), {
+        ...baseOptions,
+        completedNodeOutputs: { unknown_node: { restored: true } },
+      }),
+    ).rejects.toMatchObject({ code: 'WORKFLOW_EXECUTION_OPTIONS_INVALID' });
+  });
+
   it('rejects a valid workflow if the executor registry is incomplete', async () => {
     const engine = new WorkflowEngine(new NodeRegistry());
 

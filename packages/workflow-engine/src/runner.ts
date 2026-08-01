@@ -64,6 +64,7 @@ export interface WorkflowProgressEvent {
 
 export interface WorkflowExecutionOptions {
   readonly approvedNodeIds?: readonly string[];
+  readonly completedNodeOutputs?: Readonly<Record<string, JsonValue>>;
   readonly idempotencyKey: string;
   readonly initialInput?: JsonValue;
   readonly longTermApprovedNodeIds?: readonly string[];
@@ -265,6 +266,18 @@ export class WorkflowEngine {
       });
     }
     const workflow = validation.workflow;
+    const workflowNodeIds = new Set(workflow.nodes.map((node) => node.id));
+    const completedNodeOutputs = new Map<string, JsonValue>();
+    for (const [nodeId, output] of Object.entries(options.completedNodeOutputs ?? {})) {
+      if (!workflowNodeIds.has(nodeId)) {
+        throw new WorkflowEngineError(
+          'WORKFLOW_EXECUTION_OPTIONS_INVALID',
+          'Completed workflow output references an unknown node.',
+          { details: { nodeId } },
+        );
+      }
+      completedNodeOutputs.set(nodeId, JsonValueSchema.parse(output));
+    }
 
     for (const workflowNode of workflow.nodes) {
       if (!this.registry.has(workflowNode.type, workflowNode.version)) {
@@ -296,7 +309,7 @@ export class WorkflowEngine {
     const riskSummary = summarizeWorkflowRisks(workflow);
     const orderedNodes = topologicalOrder(workflow);
     const predecessors = predecessorIds(workflow);
-    const outputs = new Map<string, JsonValue>();
+    const outputs = new Map<string, JsonValue>(completedNodeOutputs);
     const steps: WorkflowExecutionStep[] = [];
     const initialInput = JsonValueSchema.parse(options.initialInput ?? null);
     const maxAttempts = options.maxAttempts ?? 2;
@@ -332,6 +345,29 @@ export class WorkflowEngine {
 
       const stepStartedAt = now();
       const nodeInput = inputForNode(workflowNode.id, predecessors, outputs, initialInput);
+
+      const completedOutput = completedNodeOutputs.get(workflowNode.id);
+      if (completedOutput !== undefined) {
+        const completedAt = now();
+        steps.push({
+          attempts: 0,
+          completedAt: completedAt.toISOString(),
+          durationMs: Math.max(0, completedAt.getTime() - stepStartedAt.getTime()),
+          metrics: {},
+          nodeId: workflowNode.id,
+          nodeType: workflowNode.type,
+          output: completedOutput,
+          startedAt: stepStartedAt.toISOString(),
+          status: 'succeeded',
+          warnings: ['Restored from a validated durable checkpoint.'],
+        });
+        await options.onProgress?.({
+          nodeId: workflowNode.id,
+          runId: options.runId,
+          status: 'succeeded',
+        });
+        continue;
+      }
 
       await options.onProgress?.({
         nodeId: workflowNode.id,

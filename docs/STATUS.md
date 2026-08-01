@@ -3670,16 +3670,31 @@ Status: implementation complete; Production acceptance pending
   email was produced. Production acceptance therefore remains blocked on a
   resumable cloud-batch architecture; a single Vercel invocation is not an
   accepted execution strategy for this 481-workbook folder.
+- Replaced that single-invocation boundary with an unattended, resumable Cloud
+  source. Drive discovery creates a deterministic manifest; each invocation
+  reads at most 40 files, obtains an optimistic ten-minute lease, and persists
+  the validated cursor, rows, columns, source provenance, and bounded progress
+  into the current Run step. Vercel Pro now invokes the secured scheduler every
+  minute and resumes at most one eligible Drive batch per tick. The browser may
+  close after the Run starts; no member retry is required between batches.
+- The workflow engine can restore only validated outputs for node IDs present in
+  the same immutable workflow. Restored source nodes are recorded as succeeded
+  with zero new attempts, and downstream report, Slides, and approved GAS nodes
+  execute only after the durable Drive source reaches its manifest boundary.
+  Unknown node IDs, malformed checkpoints, cursor/file mismatches, overlapping
+  leases, row/sheet/file limits, and oversized durable state fail closed.
 
 ### Local validation
 
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
 - `pnpm typecheck`: passed
-- `pnpm test`: passed — 309 tests across 67 files, including Drive workbook
+- `pnpm test`: passed — 314 tests across 68 files, including Drive workbook
   conversion/merge/export, value-only streaming at the 500-workbook hard limit,
-  six-node planning, approval catalog, exact Slides count, GAS presentation
-  binding, model-tier fallback, and fresh retry timeout-window initialization
+  three-batch checkpoint continuation, cursor-conflict rejection, restored-node
+  execution boundaries, six-node planning, approval catalog, exact Slides
+  count, GAS presentation binding, model-tier fallback, and fresh retry
+  timeout-window initialization
 - `pnpm build:web`: passed — all 47 application pages compiled successfully.
   The sandboxed Turbopack attempt could not bind its worker port; the identical
   permitted retry passed.

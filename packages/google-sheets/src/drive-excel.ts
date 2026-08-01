@@ -47,6 +47,28 @@ export interface DriveExcelSource {
   readonly sheetCount: number;
 }
 
+export interface DriveExcelManifestFile {
+  readonly id: string;
+  readonly mimeType: string;
+  readonly name: string;
+  readonly size?: number;
+}
+
+export interface DriveExcelFolderManifest {
+  readonly files: readonly DriveExcelManifestFile[];
+  readonly folderId: string;
+  readonly kind: 'google_drive_excel_manifest';
+}
+
+export interface DriveExcelReadOptions {
+  readonly headerScanRows: number;
+  readonly includeSubfolders: boolean;
+  readonly maxFileSizeBytes: number;
+  readonly maxFiles: number;
+  readonly maxRows: number;
+  readonly maxSheets: number;
+}
+
 export interface DriveExcelFolderResult {
   readonly columns: readonly string[];
   readonly files: readonly DriveExcelSource[];
@@ -70,7 +92,7 @@ export interface GoogleDriveExcelClientOptions {
   readonly uploadBaseUrl?: string;
 }
 
-interface DriveExcelFile {
+interface DriveExcelFile extends DriveExcelManifestFile {
   readonly id: string;
   readonly mimeType: string;
   readonly name: string;
@@ -586,16 +608,19 @@ export class GoogleDriveExcelClient {
   async readExcelFolder(
     accessToken: string,
     folderIdInput: string,
-    input: {
-      readonly headerScanRows: number;
-      readonly includeSubfolders: boolean;
-      readonly maxFileSizeBytes: number;
-      readonly maxFiles: number;
-      readonly maxRows: number;
-      readonly maxSheets: number;
-    },
+    input: DriveExcelReadOptions,
     signal?: AbortSignal,
   ): Promise<DriveExcelFolderResult> {
+    const manifest = await this.discoverExcelFolder(accessToken, folderIdInput, input, signal);
+    return await this.readExcelManifest(accessToken, manifest, input, signal);
+  }
+
+  async discoverExcelFolder(
+    accessToken: string,
+    folderIdInput: string,
+    input: DriveExcelReadOptions,
+    signal?: AbortSignal,
+  ): Promise<DriveExcelFolderManifest> {
     const folderId = GoogleIdSchema.parse(folderIdInput);
     const limits = z
       .object({
@@ -616,6 +641,76 @@ export class GoogleDriveExcelClient {
       );
     }
     for (const file of files) {
+      if (
+        file.mimeType !== GOOGLE_SHEET_MIME &&
+        file.size !== undefined &&
+        file.size > limits.maxFileSizeBytes
+      ) {
+        throw new GoogleSheetsError(
+          'GOOGLE_REQUEST_INVALID',
+          `Workbook ${file.name} exceeds the configured file-size limit.`,
+        );
+      }
+    }
+    return { files, folderId, kind: 'google_drive_excel_manifest' };
+  }
+
+  async readExcelManifest(
+    accessToken: string,
+    manifestInput: DriveExcelFolderManifest,
+    input: DriveExcelReadOptions,
+    signal?: AbortSignal,
+  ): Promise<DriveExcelFolderResult> {
+    const manifest = z
+      .object({
+        files: z
+          .array(
+            z
+              .object({
+                id: GoogleIdSchema,
+                mimeType: z.string().trim().min(1).max(300),
+                name: z.string().trim().min(1).max(1_000),
+                size: z.number().int().nonnegative().optional(),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(500),
+        folderId: GoogleIdSchema,
+        kind: z.literal('google_drive_excel_manifest'),
+      })
+      .strict()
+      .parse(manifestInput);
+    const limits = z
+      .object({
+        headerScanRows: z.number().int().min(1).max(100),
+        includeSubfolders: z.boolean(),
+        maxFileSizeBytes: z.number().int().min(1).max(20_000_000),
+        maxFiles: z.number().int().min(1).max(500),
+        maxRows: z.number().int().min(1).max(100_000),
+        maxSheets: z.number().int().min(1).max(2_000),
+      })
+      .strict()
+      .parse(input);
+    if (manifest.files.length > limits.maxFiles) {
+      throw new GoogleSheetsError(
+        'GOOGLE_REQUEST_INVALID',
+        'The Drive batch exceeds the configured workbook limit.',
+      );
+    }
+    const files: readonly DriveExcelFile[] = manifest.files.map((file) => ({
+      id: file.id,
+      mimeType: file.mimeType,
+      name: file.name,
+      ...(file.size === undefined ? {} : { size: file.size }),
+    }));
+    for (const file of files) {
+      if (!isExcelFile(file)) {
+        throw new GoogleSheetsError(
+          'GOOGLE_REQUEST_INVALID',
+          'The Drive batch contains an unsupported workbook type.',
+        );
+      }
       if (
         file.mimeType !== GOOGLE_SHEET_MIME &&
         file.size !== undefined &&
@@ -749,7 +844,13 @@ export class GoogleDriveExcelClient {
       }
     }
 
-    return { columns, files: sources, folderId, kind: 'google_drive_excel_folder', rows };
+    return {
+      columns,
+      files: sources,
+      folderId: manifest.folderId,
+      kind: 'google_drive_excel_folder',
+      rows,
+    };
   }
 
   async createExcelReport(
