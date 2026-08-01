@@ -37,6 +37,7 @@ import {
   reserveAssistantUsage,
 } from '@/lib/usage-control-server';
 
+const CLOUD_STEP_TIMEOUT_MS = 240_000;
 const UuidSchema = z.string().uuid();
 const GoogleResourceIdSchema = z
   .string()
@@ -711,6 +712,6 @@ export async function executeCloudWorkflow(
           },
         }),
     runId: input.runId,
-    stepTimeoutMs: 120_000,
+    stepTimeoutMs: CLOUD_STEP_TIMEOUT_MS,
   });
 }

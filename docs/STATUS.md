@@ -3641,6 +3641,10 @@ Status: implementation complete; Production acceptance pending
   the 120-second single-node execution timeout while reading the 481-workbook
   folder. Independent `.xlsx` downloads now use a fixed concurrency ceiling of
   eight, while results remain merged in deterministic filename order.
+- The bounded parallel implementation still reached the former 120-second
+  limit during Production acceptance. Validated Cloud nodes now receive a
+  four-minute ceiling inside the existing five-minute Vercel Pro route window;
+  retry routes declare the same five-minute request duration explicitly.
 
 ### Local validation
 

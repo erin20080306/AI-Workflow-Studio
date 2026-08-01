@@ -16,3 +16,4 @@ export async function POST(
 }
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;

@@ -96,6 +96,10 @@ are merged back in the deterministic Drive filename order. This keeps large
 folders within the Cloud execution window without changing file, worksheet,
 row, or byte limits.
 
+Production Cloud workflow requests are capped at five minutes, while each
+validated node has a four-minute timeout. The remaining minute is reserved for
+persisting step results, audit events, and a bounded failure response.
+
 ## Token protection
 
 Access and refresh tokens are encrypted separately with AES-256-GCM. The
