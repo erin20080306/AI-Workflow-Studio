@@ -15,12 +15,19 @@ export function buildCloudAiSummaryInstructions(
     readonly includeCaseStudy: boolean;
     readonly includeRecommendations: boolean;
     readonly language: 'en' | 'zh-Hant';
+    readonly maxCharacters: number;
     readonly style: 'brief' | 'executive' | 'professional';
   },
 ): string {
+  const requestedCharacters = Math.max(500, Math.min(20_000, options.maxCharacters));
+  const completionCharacters = Math.min(
+    requestedCharacters,
+    options.language === 'zh-Hant' ? 3_000 : 8_000,
+  );
   const prefix = [
     options.language === 'zh-Hant' ? '請使用繁體中文。' : 'Use English.',
     `Produce a ${options.style} business summary.`,
+    `Keep the complete final answer within ${completionCharacters} Unicode characters.`,
     options.includeRecommendations ? 'Include concrete recommendations.' : '',
     options.includeCaseStudy
       ? 'Include one clearly labelled, non-fabricated illustrative case.'

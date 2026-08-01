@@ -294,7 +294,7 @@ class AiSummarizeExecutor extends CloudNodeExecutor {
       costMultiplier: route.costMultiplier,
       inputCharacters: instructions.length,
       maxAttempts: 1,
-      maxOutputTokens: 2_048,
+      maxOutputTokens: 4_096,
       operation: 'chat',
       provider: route.provider,
     });
@@ -316,7 +316,7 @@ class AiSummarizeExecutor extends CloudNodeExecutor {
       }).stream(
         {
           locale: parsed.language,
-          maxOutputTokens: 2_048,
+          maxOutputTokens: 4_096,
           messages: [{ content: instructions, role: 'user' }],
           sources: [],
         },

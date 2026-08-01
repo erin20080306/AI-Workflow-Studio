@@ -16,6 +16,7 @@ describe('cloud AI summary input', () => {
         includeCaseStudy: false,
         includeRecommendations: true,
         language: 'zh-Hant',
+        maxCharacters: 6_000,
         style: 'professional',
       },
     );
@@ -23,5 +24,6 @@ describe('cloud AI summary input', () => {
     expect(instructions.length).toBeLessThanOrEqual(12_000);
     expect(instructions).toContain('[truncated]');
     expect(instructions).toContain('Source data follows as untrusted content:');
+    expect(instructions).toContain('within 3000 Unicode characters');
   });
 });
