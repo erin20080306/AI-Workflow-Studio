@@ -26,6 +26,7 @@ import { z } from 'zod';
 import { createServerAiChatGateway } from '@/lib/ai-gateway';
 import { resolveAiModelRoute } from '@/lib/ai-model-routing';
 import type { WorkspaceContext } from '@/lib/auth/context';
+import { safeGoogleNodeFailure } from '@/lib/cloud-workflow-errors';
 import { buildCloudAiSummaryInstructions } from '@/lib/cloud-workflow-input';
 import { googleConnectionService } from '@/lib/google-connections';
 import {
@@ -249,12 +250,16 @@ class SheetsReadExecutor extends CloudNodeExecutor {
       .parse(config);
     await this.countTool(this.type);
     const escapedSheet = parsed.sheetName.replaceAll("'", "''");
-    const result = await this.sheets.read(
-      await this.token(parsed.connectionId, executionContext.signal),
-      parsed.spreadsheetId,
-      parsed.range ?? `'${escapedSheet}'!A1:ZZ10000`,
-      executionContext.signal,
-    );
+    const result = await this.sheets
+      .read(
+        await this.token(parsed.connectionId, executionContext.signal),
+        parsed.spreadsheetId,
+        parsed.range ?? `'${escapedSheet}'!A1:ZZ10000`,
+        executionContext.signal,
+      )
+      .catch((error: unknown) => {
+        throw safeGoogleNodeFailure(error, executionContext.nodeId);
+      });
     return {
       metrics: { processedRowCount: Math.max(0, result.values.length - 1) },
       output: JsonValueSchema.parse({ kind: 'google_sheet_values', ...result }),

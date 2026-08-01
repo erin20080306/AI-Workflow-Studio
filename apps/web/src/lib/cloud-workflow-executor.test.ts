@@ -1,5 +1,7 @@
+import { GoogleSheetsError } from '@ai-workflow-studio/google-sheets';
 import { describe, expect, it } from 'vitest';
 
+import { safeGoogleNodeFailure } from './cloud-workflow-errors';
 import { buildCloudAiSummaryInstructions } from './cloud-workflow-input';
 
 describe('cloud AI summary input', () => {
@@ -25,5 +27,21 @@ describe('cloud AI summary input', () => {
     expect(instructions).toContain('[truncated]');
     expect(instructions).toContain('Source data follows as untrusted content:');
     expect(instructions).toContain('within 3000 Unicode characters');
+  });
+});
+
+describe('cloud Google node errors', () => {
+  it('exposes only the bounded Google error code to the workflow audit result', () => {
+    const normalized = safeGoogleNodeFailure(
+      new GoogleSheetsError('GOOGLE_AUTHORIZATION_INVALID', 'private provider detail'),
+      'read_sheet',
+    );
+
+    expect(normalized).toMatchObject({
+      code: 'NODE_EXECUTION_FAILED',
+      message: 'Node "read_sheet" failed with GOOGLE_AUTHORIZATION_INVALID.',
+      retryable: false,
+    });
+    expect(JSON.stringify(normalized)).not.toContain('private provider detail');
   });
 });
