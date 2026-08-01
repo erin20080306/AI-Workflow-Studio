@@ -281,6 +281,49 @@ export async function startAssistantWorkflowDraftRun(context: WorkspaceContext, 
     : await productionDraft(context, draftId);
   if (draft === undefined || draft.tenantId !== context.actor.tenantId)
     throw new RunOrchestrationError('RUN_NOT_FOUND', 'The reviewed workflow draft was not found.');
+  if (!getEnvironment().mockMode) {
+    const admin = createSupabaseAdminClient();
+    const activated = await admin
+      .from('workflows')
+      .update({
+        active_version_id: draft.summary.workflowVersionId,
+        status: 'active',
+      })
+      .eq('tenant_id', context.actor.tenantId)
+      .eq('id', draft.summary.workflowId)
+      .neq('status', 'active')
+      .select('id');
+    if (activated.error !== null) {
+      throw new RunOrchestrationError(
+        'RUN_STATE_CONFLICT',
+        'The reviewed workflow could not be activated.',
+      );
+    }
+    if (z.array(z.object({ id: z.string().uuid() })).parse(activated.data).length > 0) {
+      const audit = await admin.from('audit_logs').insert({
+        action: 'assistant.workflow_activated',
+        actor_user_id: context.actor.userId,
+        correlation_id: draft.summary.id,
+        metadata: { workflowVersionId: draft.summary.workflowVersionId },
+        resource_id: draft.summary.workflowId,
+        resource_type: 'workflow',
+        tenant_id: context.actor.tenantId,
+      });
+      if (audit.error !== null) {
+        await admin
+          .from('workflows')
+          .update({ status: 'draft' })
+          .eq('tenant_id', context.actor.tenantId)
+          .eq('id', draft.summary.workflowId)
+          .eq('active_version_id', draft.summary.workflowVersionId)
+          .eq('status', 'active');
+        throw new RunOrchestrationError(
+          'RUN_STATE_CONFLICT',
+          'The workflow activation could not be audited.',
+        );
+      }
+    }
+  }
   const sharedInput = {
     idempotencyKey: `assistant:${draft.summary.id}`,
     maxAttempts: 3,

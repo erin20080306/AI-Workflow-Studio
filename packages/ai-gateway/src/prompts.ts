@@ -6,6 +6,7 @@ import {
 } from '@ai-workflow-studio/workflow-schema';
 
 import type { PlannerRequest } from './types';
+import { detectWorkflowIntent } from './workflow-intent';
 
 const ALLOWED_NODE_TYPES = NODE_CATALOG.map((node) => node.type).join(', ');
 
@@ -48,6 +49,67 @@ function repairFeedback(issues: readonly WorkflowValidationIssue[]): string {
 }
 
 export function buildPlannerShapeExample(request: PlannerRequest): AIPlannerOutput {
+  const intent = detectWorkflowIntent(request.prompt);
+  if (
+    request.context.executionTarget.type === 'cloud' &&
+    intent.requiredNodeTypes.includes('data.inline') &&
+    intent.requiredNodeTypes.includes('ai.summarize') &&
+    intent.requiredNodeTypes.includes('report.compose')
+  ) {
+    return AIPlannerOutputSchema.parse({
+      assumptions: [
+        'The user-provided text is the approved bounded source for this cloud workflow.',
+        'The report is created as a reviewable artifact and is not emailed automatically.',
+      ],
+      explanation:
+        'Use the approved text as the source, create a professional AI summary, then compose a reviewable Markdown report.',
+      mappingProposals: [],
+      workflow: {
+        description:
+          'Process approved text through an AI business summary and a reviewable report artifact.',
+        edges: [
+          { from: 'approved_source', to: 'summarize_source' },
+          { from: 'summarize_source', to: 'compose_report' },
+        ],
+        executionTarget: request.context.executionTarget,
+        name: 'AI 摘要與報告',
+        nodes: [
+          {
+            config: { content: request.prompt },
+            id: 'approved_source',
+            type: 'data.inline',
+            version: 1,
+          },
+          {
+            config: {
+              includeCaseStudy: false,
+              includeRecommendations: true,
+              language: request.context.locale === 'en' ? 'en' : 'zh-Hant',
+              maxCharacters: 6_000,
+              provider: 'auto',
+              style: 'professional',
+              tier: 'auto',
+            },
+            id: 'summarize_source',
+            type: 'ai.summarize',
+            version: 1,
+          },
+          {
+            config: {
+              format: 'markdown',
+              includeReferences: false,
+              title: request.context.locale === 'en' ? 'AI business report' : 'AI 營運摘要報告',
+            },
+            id: 'compose_report',
+            type: 'report.compose',
+            version: 1,
+          },
+        ],
+        schemaVersion: 1,
+        trigger: { config: {}, type: 'manual.trigger' },
+      },
+    });
+  }
   return AIPlannerOutputSchema.parse({
     assumptions: [
       'This shape example uses a manual trigger and a read-only validation node.',
@@ -118,7 +180,7 @@ ${JSON.stringify(context)}
 Use only IDs present in the trusted execution context. Do not invent credentials, connection IDs, device IDs, or folder aliases.
 If the requirement is brief, infer safe defaults and record them in assumptions. Produce the most useful valid draft supported by this context instead of asking the user to assemble workflow nodes.
 
-Canonical valid shape example:
+Canonical valid shape example for this exact requirement:
 ${JSON.stringify(buildPlannerShapeExample(request))}
 
 Keep the exact envelope, node fields, config field names, and executionTarget shape demonstrated above. Adapt the nodes only when their required trusted IDs are available; otherwise return a useful read-only data validation draft and explain the unavailable integration in assumptions.${repairFeedback(issues)}`;

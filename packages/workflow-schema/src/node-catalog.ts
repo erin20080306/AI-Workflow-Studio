@@ -49,6 +49,7 @@ export const NODE_CATALOG = [
   entry('data.aggregate', 'read', 'none', 'either', 'Aggregate rows deterministically.'),
   entry('data.deduplicate', 'read', 'none', 'either', 'Remove duplicate rows.'),
   entry('data.validate', 'read', 'none', 'either', 'Validate data rules.'),
+  entry('data.inline', 'read', 'none', 'cloud', 'Provide bounded user-approved text input.'),
   entry('google_sheets.read', 'read', 'none', 'cloud', 'Read a connected Google Sheet.'),
   entry(
     'google_sheets.append',

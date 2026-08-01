@@ -31,13 +31,26 @@ export const ScheduleRuleSchema = z.discriminatedUnion('cadence', [
 
 export const ScheduleTargetSchema = z
   .object({
-    deviceId: UuidSchema,
-    deviceName: z.string().trim().min(1).max(120),
+    deviceId: UuidSchema.optional(),
+    deviceName: z.string().trim().min(1).max(120).optional(),
+    executionTarget: z.enum(['cloud', 'desktop']).default('desktop'),
     workflowId: UuidSchema,
     workflowName: z.string().trim().min(1).max(160),
     workflowVersionId: UuidSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((target, context) => {
+    if (
+      target.executionTarget === 'desktop' &&
+      (target.deviceId === undefined || target.deviceName === undefined)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Desktop schedules require a paired device.',
+        path: ['deviceId'],
+      });
+    }
+  });
 
 export const ScheduleCreateInputSchema = z
   .object({

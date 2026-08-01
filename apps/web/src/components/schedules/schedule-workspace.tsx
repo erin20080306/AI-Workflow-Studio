@@ -43,7 +43,7 @@ const copy = {
     manageConnector: 'Review connection',
     nextRun: 'Next occurrence',
     noTargets:
-      'No active Desktop workflow version is available. Review and activate a workflow first.',
+      'No active Cloud or Desktop workflow version is available. Run a reviewed plan first.',
     pause: 'Pause',
     paused: 'Paused',
     resume: 'Resume',
@@ -75,7 +75,7 @@ const copy = {
     lastError: '最近安全錯誤代碼',
     manageConnector: '檢查連線',
     nextRun: '下次執行',
-    noTargets: '目前沒有可用的已啟用 Desktop 工作流版本，請先檢查並啟用工作流。',
+    noTargets: '目前沒有可用的已啟用 Cloud 或 Desktop 工作流，請先檢查並自動執行一次計畫。',
     pause: '暫停',
     paused: '已暫停',
     resume: '恢復',
@@ -92,7 +92,11 @@ const copy = {
 const timezones = ['Asia/Taipei', 'Asia/Tokyo', 'UTC', 'America/Los_Angeles'] as const;
 
 function targetKey(target: ScheduleTarget): string {
-  return `${target.workflowId}:${target.workflowVersionId}:${target.deviceId}`;
+  return `${target.workflowId}:${target.workflowVersionId}:${target.deviceId ?? 'cloud'}`;
+}
+
+function targetLabel(target: ScheduleTarget): string {
+  return target.executionTarget === 'cloud' ? 'Cloud Work' : (target.deviceName ?? 'Desktop Agent');
 }
 
 function cadenceLabel(rule: ScheduleRule, text: (typeof copy)[keyof typeof copy]): string {
@@ -225,7 +229,7 @@ export function ScheduleWorkspace({
                 >
                   {targets.map((target) => (
                     <option key={targetKey(target)} value={targetKey(target)}>
-                      {target.workflowName} · {target.deviceName}
+                      {target.workflowName} · {targetLabel(target)}
                     </option>
                   ))}
                 </select>
@@ -350,7 +354,7 @@ export function ScheduleWorkspace({
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
                     {cadenceLabel(schedule.rule, text)} · {schedule.timezone} ·{' '}
-                    {schedule.target.deviceName}
+                    {targetLabel(schedule.target)}
                   </p>
                   {schedule.lastErrorCode !== undefined ? (
                     <p className="mt-2 text-xs font-medium text-red-700">

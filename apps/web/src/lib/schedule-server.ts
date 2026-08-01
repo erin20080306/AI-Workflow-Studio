@@ -8,6 +8,7 @@ import {
   ScheduleSchema,
   ScheduleStatusUpdateSchema,
   ScheduleTargetSchema,
+  ScheduleFireSchema,
   nextScheduleOccurrence,
   scheduleRuleToCron,
   type Schedule,
@@ -15,6 +16,7 @@ import {
   type ScheduleTarget,
   type ScheduleTickResult,
 } from '@ai-workflow-studio/scheduler';
+import { ExecutionTargetSchema, WorkflowSchema } from '@ai-workflow-studio/workflow-schema';
 import { z } from 'zod';
 
 import type { WorkspaceContext } from '@/lib/auth/context';
@@ -22,6 +24,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
 import { getEnvironment } from './env';
 import { MOCK_DEVICE_ID, MOCK_VERSION_ID, MOCK_WORKFLOW, MOCK_WORKFLOW_ID } from './mock-workflows';
+import { startProductionCloudRun, startProductionRun } from './production-run-server';
 import { createMockRun } from './run-server';
 
 export const MOCK_SCHEDULE_CRON_SECRET = 'mock-only-schedule-cron-secret-v1';
@@ -29,6 +32,7 @@ export const MOCK_SCHEDULE_CRON_SECRET = 'mock-only-schedule-cron-secret-v1';
 const MOCK_TARGET = ScheduleTargetSchema.parse({
   deviceId: MOCK_DEVICE_ID,
   deviceName: 'Erin’s MacBook Air',
+  executionTarget: 'desktop',
   workflowId: MOCK_WORKFLOW_ID,
   workflowName: MOCK_WORKFLOW.name,
   workflowVersionId: MOCK_VERSION_ID,
@@ -41,12 +45,6 @@ const WorkflowRowSchema = z.object({
   name: z.string().min(1).max(160),
   status: z.enum(['active', 'archived', 'disabled', 'draft']),
 });
-const DesktopTargetSchema = z
-  .object({
-    deviceId: z.string().uuid(),
-    type: z.literal('desktop'),
-  })
-  .strict();
 const DeviceRowSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(120),
@@ -56,7 +54,8 @@ const ScheduleRowSchema = z.object({
   created_at: z.string().datetime({ offset: true }),
   created_by: z.string().uuid(),
   cron_expression: z.string(),
-  device_id: z.string().uuid(),
+  device_id: z.string().uuid().nullable(),
+  execution_target: z.enum(['cloud', 'desktop']),
   failure_count: z.number().int(),
   id: z.string().uuid(),
   last_error_code: z.string().nullable(),
@@ -71,6 +70,29 @@ const ScheduleRowSchema = z.object({
   workflow_id: z.string().uuid(),
   workflow_version_id: z.string().uuid(),
 });
+const VersionRowSchema = z.object({
+  definition: z.unknown(),
+  id: z.string().uuid(),
+  tenant_id: z.string().uuid(),
+  workflow_id: z.string().uuid(),
+});
+const MembershipRowSchema = z.object({
+  role: z.enum(['owner', 'admin', 'editor', 'viewer']),
+});
+const TenantRowSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(120),
+  slug: z.string().min(3).max(63),
+});
+const ProfileRowSchema = z
+  .object({ display_name: z.string().min(1).max(120).nullable() })
+  .nullable();
+const SubscriptionRowSchema = z
+  .object({
+    plan_code: z.enum(['free', 'pro', 'team', 'business']),
+    status: z.enum(['trialing', 'active', 'past_due', 'canceled', 'incomplete']),
+  })
+  .nullable();
 
 const scheduleGlobal = globalThis as typeof globalThis & {
   __aiWorkflowScheduleService?: InMemoryScheduleService;
@@ -114,15 +136,27 @@ async function productionTargets(context: WorkspaceContext): Promise<readonly Sc
       .map((device) => [device.id, device] as const),
   );
   return workflows.flatMap((workflow) => {
-    const executionTarget = DesktopTargetSchema.safeParse(workflow.execution_target);
-    const device = executionTarget.success ? devices.get(executionTarget.data.deviceId) : undefined;
-    if (device === undefined || workflow.active_version_id === null) {
+    const executionTarget = ExecutionTargetSchema.safeParse(workflow.execution_target);
+    if (!executionTarget.success || workflow.active_version_id === null) {
       return [];
     }
+    if (executionTarget.data.type === 'cloud') {
+      return [
+        ScheduleTargetSchema.parse({
+          executionTarget: 'cloud',
+          workflowId: workflow.id,
+          workflowName: workflow.name,
+          workflowVersionId: workflow.active_version_id,
+        }),
+      ];
+    }
+    const device = devices.get(executionTarget.data.deviceId);
+    if (device === undefined) return [];
     return [
       ScheduleTargetSchema.parse({
         deviceId: device.id,
         deviceName: device.name,
+        executionTarget: 'desktop',
         workflowId: workflow.id,
         workflowName: workflow.name,
         workflowVersionId: workflow.active_version_id,
@@ -144,7 +178,8 @@ function mapSchedule(
   if (
     target.workflowId !== row.workflow_id ||
     target.workflowVersionId !== row.workflow_version_id ||
-    target.deviceId !== row.device_id
+    target.executionTarget !== row.execution_target ||
+    target.deviceId !== (row.device_id ?? undefined)
   ) {
     throw new ScheduleError(
       'SCHEDULE_STATE_CONFLICT',
@@ -194,7 +229,7 @@ async function productionSchedules(context: WorkspaceContext): Promise<readonly 
       .from('devices')
       .select('id, name, status')
       .eq('tenant_id', context.actor.tenantId)
-      .in('id', [...new Set(rows.map((row) => row.device_id))]),
+      .neq('status', 'revoked'),
   ]);
   if (workflowResult.error !== null || deviceResult.error !== null) {
     throw new ScheduleError('SCHEDULE_STATE_CONFLICT', 'Schedule targets could not be loaded.');
@@ -213,18 +248,31 @@ async function productionSchedules(context: WorkspaceContext): Promise<readonly 
   );
   return rows.map((row) => {
     const workflow = workflows.get(row.workflow_id);
-    const device = devices.get(row.device_id);
-    if (workflow === undefined || device === undefined) {
+    if (workflow === undefined) {
       throw new ScheduleError(
         'SCHEDULE_STATE_CONFLICT',
         'A persisted schedule target could not be resolved.',
       );
     }
+    const executionTarget = ExecutionTargetSchema.parse(workflow.execution_target);
+    if (executionTarget.type !== row.execution_target) {
+      throw new ScheduleError(
+        'SCHEDULE_STATE_CONFLICT',
+        'A persisted schedule execution target no longer matches its workflow.',
+      );
+    }
+    const device = row.device_id === null ? undefined : devices.get(row.device_id);
+    if (executionTarget.type === 'desktop' && device === undefined) {
+      throw new ScheduleError(
+        'SCHEDULE_STATE_CONFLICT',
+        'A persisted Desktop schedule device could not be resolved.',
+      );
+    }
     return mapSchedule(
       row,
       ScheduleTargetSchema.parse({
-        deviceId: device.id,
-        deviceName: device.name,
+        ...(device === undefined ? {} : { deviceId: device.id, deviceName: device.name }),
+        executionTarget: executionTarget.type,
         workflowId: workflow.id,
         workflowName: workflow.name,
         workflowVersionId: row.workflow_version_id,
@@ -257,6 +305,7 @@ export async function createSchedule(
     (target) =>
       target.workflowId === input.target.workflowId &&
       target.workflowVersionId === input.target.workflowVersionId &&
+      target.executionTarget === input.target.executionTarget &&
       target.deviceId === input.target.deviceId,
   );
   if (canonicalTarget === undefined) {
@@ -284,7 +333,8 @@ export async function createSchedule(
     .insert({
       created_by: context.actor.userId,
       cron_expression: scheduleRuleToCron(canonicalInput.rule),
-      device_id: canonicalTarget.deviceId,
+      device_id: canonicalTarget.deviceId ?? null,
+      execution_target: canonicalTarget.executionTarget,
       next_run_at: nextRunAt,
       rule: canonicalInput.rule,
       tenant_id: context.actor.tenantId,
@@ -381,14 +431,282 @@ export async function updateScheduleStatus(
   return mapSchedule(row.data, savedSchedule.target);
 }
 
-export async function tickSchedules(at: Date): Promise<ScheduleTickResult> {
-  if (!getEnvironment().mockMode) {
+async function scheduledWorkspaceContext(
+  tenantId: string,
+  userId: string,
+): Promise<WorkspaceContext> {
+  const admin = createSupabaseAdminClient();
+  const [membership, tenant, profile, subscription, platformAdmin] = await Promise.all([
+    admin
+      .from('memberships')
+      .select('role')
+      .eq('tenant_id', tenantId)
+      .eq('user_id', userId)
+      .maybeSingle(),
+    admin.from('tenants').select('id, name, slug').eq('id', tenantId).single(),
+    admin.from('profiles').select('display_name').eq('id', userId).maybeSingle(),
+    admin
+      .from('tenant_subscriptions')
+      .select('plan_code, status')
+      .eq('tenant_id', tenantId)
+      .maybeSingle(),
+    admin
+      .from('platform_admins')
+      .select('user_id')
+      .eq('user_id', userId)
+      .eq('active', true)
+      .maybeSingle(),
+  ]);
+  if (
+    membership.error !== null ||
+    tenant.error !== null ||
+    profile.error !== null ||
+    subscription.error !== null ||
+    platformAdmin.error !== null
+  ) {
     throw new ScheduleError(
       'SCHEDULE_STATE_CONFLICT',
-      'Durable production run dispatch is not configured.',
+      'The scheduled workflow actor could not be verified.',
     );
   }
+  const parsedMembership = MembershipRowSchema.safeParse(membership.data);
+  const parsedTenant = TenantRowSchema.safeParse(tenant.data);
+  const parsedProfile = ProfileRowSchema.safeParse(profile.data);
+  const parsedSubscription = SubscriptionRowSchema.safeParse(subscription.data);
+  if (
+    !parsedMembership.success ||
+    !parsedTenant.success ||
+    !parsedProfile.success ||
+    !parsedSubscription.success
+  ) {
+    throw new ScheduleError(
+      'SCHEDULE_STATE_CONFLICT',
+      'The scheduled workflow actor is no longer authorized.',
+    );
+  }
+  return {
+    actor: {
+      role: parsedMembership.data.role,
+      tenantId,
+      userId,
+    },
+    displayName: parsedProfile.data?.display_name ?? 'Scheduled workflow owner',
+    platformAdmin: platformAdmin.data !== null,
+    subscription: {
+      plan: parsedSubscription.data?.plan_code ?? 'free',
+      status: parsedSubscription.data?.status ?? 'incomplete',
+    },
+    tenant: parsedTenant.data,
+  };
+}
+
+function scheduleFailureCode(error: unknown): string {
+  if (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    typeof error.code === 'string' &&
+    /^[A-Z0-9_]{3,120}$/.test(error.code)
+  ) {
+    return error.code;
+  }
+  return 'SCHEDULE_DISPATCH_FAILED';
+}
+
+async function productionTick(at: Date): Promise<ScheduleTickResult> {
+  const admin = createSupabaseAdminClient();
+  const dueResult = await admin
+    .from('workflow_schedules')
+    .select('*')
+    .eq('status', 'active')
+    .lte('next_run_at', at.toISOString())
+    .order('next_run_at')
+    .limit(25);
+  if (dueResult.error !== null) {
+    throw new ScheduleError('SCHEDULE_STATE_CONFLICT', 'Due schedules could not be loaded.');
+  }
+  const due = z.array(ScheduleRowSchema).parse(dueResult.data);
+  const fires: z.infer<typeof ScheduleFireSchema>[] = [];
+  let duplicateCount = 0;
+  let failedCount = 0;
+  let runCount = 0;
+
+  for (const schedule of due) {
+    const dueAt = schedule.next_run_at;
+    const idempotencyKey = `schedule:${schedule.id}:${dueAt}`;
+    const claim = await admin.rpc('claim_workflow_schedule_fire', {
+      target_due_at: dueAt,
+      target_idempotency_key: idempotencyKey,
+      target_schedule_id: schedule.id,
+      target_tenant_id: schedule.tenant_id,
+    });
+    if (claim.error !== null) {
+      throw new ScheduleError('SCHEDULE_STATE_CONFLICT', 'A schedule fire could not be claimed.');
+    }
+    if (!z.boolean().parse(claim.data)) {
+      duplicateCount += 1;
+      continue;
+    }
+
+    try {
+      const [workflowResult, versionResult] = await Promise.all([
+        admin
+          .from('workflows')
+          .select('id, name, status, active_version_id, execution_target')
+          .eq('tenant_id', schedule.tenant_id)
+          .eq('id', schedule.workflow_id)
+          .single(),
+        admin
+          .from('workflow_versions')
+          .select('id, tenant_id, workflow_id, definition')
+          .eq('tenant_id', schedule.tenant_id)
+          .eq('id', schedule.workflow_version_id)
+          .single(),
+      ]);
+      if (workflowResult.error !== null || versionResult.error !== null) {
+        throw new ScheduleError(
+          'SCHEDULE_STATE_CONFLICT',
+          'The scheduled workflow version could not be loaded.',
+        );
+      }
+      const workflowRow = WorkflowRowSchema.parse(workflowResult.data);
+      const version = VersionRowSchema.parse(versionResult.data);
+      const workflow = WorkflowSchema.parse(version.definition);
+      if (
+        workflowRow.status !== 'active' ||
+        workflowRow.active_version_id !== schedule.workflow_version_id ||
+        version.workflow_id !== schedule.workflow_id ||
+        workflow.executionTarget.type !== schedule.execution_target
+      ) {
+        throw new ScheduleError(
+          'SCHEDULE_STATE_CONFLICT',
+          'The schedule is no longer bound to the active workflow version.',
+        );
+      }
+      const context = await scheduledWorkspaceContext(schedule.tenant_id, schedule.created_by);
+      const sharedInput = {
+        idempotencyKey,
+        maxAttempts: 2,
+        timeoutSeconds: 1_800,
+        workflow,
+        workflowId: schedule.workflow_id,
+        workflowVersionId: schedule.workflow_version_id,
+      };
+      const started =
+        workflow.executionTarget.type === 'cloud'
+          ? await startProductionCloudRun(context, sharedInput)
+          : await startProductionRun(context.actor, {
+              ...sharedInput,
+              deviceId: schedule.device_id ?? workflow.executionTarget.deviceId,
+            });
+      const completedAt = new Date().toISOString();
+      const nextRunAt = nextScheduleOccurrence(
+        ScheduleRuleSchema.parse(schedule.rule),
+        schedule.timezone,
+        dueAt,
+      ).toISOString();
+      const [fireUpdate, scheduleUpdate] = await Promise.all([
+        admin
+          .from('workflow_schedule_fires')
+          .update({
+            completed_at: completedAt,
+            status: 'run_created',
+            workflow_run_id: started.run.id,
+          })
+          .eq('tenant_id', schedule.tenant_id)
+          .eq('idempotency_key', idempotencyKey)
+          .eq('status', 'claimed')
+          .select('id')
+          .single(),
+        admin
+          .from('workflow_schedules')
+          .update({
+            failure_count: 0,
+            last_error_code: null,
+            last_fired_at: dueAt,
+            next_run_at: nextRunAt,
+          })
+          .eq('tenant_id', schedule.tenant_id)
+          .eq('id', schedule.id),
+      ]);
+      if (fireUpdate.error !== null || scheduleUpdate.error !== null) {
+        throw new ScheduleError(
+          'SCHEDULE_STATE_CONFLICT',
+          'The scheduled run result could not be persisted.',
+        );
+      }
+      const fireId = z.object({ id: z.string().uuid() }).parse(fireUpdate.data).id;
+      fires.push(
+        ScheduleFireSchema.parse({
+          dueAt,
+          id: fireId,
+          idempotencyKey,
+          runId: started.run.id,
+          scheduleId: schedule.id,
+          status: 'run_created',
+          tenantId: schedule.tenant_id,
+        }),
+      );
+      runCount += 1;
+    } catch (error) {
+      const failureCount = schedule.failure_count + 1;
+      const errorCode = scheduleFailureCode(error);
+      const completedAt = new Date().toISOString();
+      const nextRunAt = nextScheduleOccurrence(
+        ScheduleRuleSchema.parse(schedule.rule),
+        schedule.timezone,
+        dueAt,
+      ).toISOString();
+      const [fireUpdate, scheduleUpdate] = await Promise.all([
+        admin
+          .from('workflow_schedule_fires')
+          .update({ completed_at: completedAt, error_code: errorCode, status: 'failed' })
+          .eq('tenant_id', schedule.tenant_id)
+          .eq('idempotency_key', idempotencyKey)
+          .eq('status', 'claimed')
+          .select('id')
+          .single(),
+        admin
+          .from('workflow_schedules')
+          .update({
+            failure_count: failureCount,
+            last_error_code: errorCode,
+            next_run_at: nextRunAt,
+            status: failureCount >= schedule.max_failures ? 'paused' : 'active',
+          })
+          .eq('tenant_id', schedule.tenant_id)
+          .eq('id', schedule.id),
+      ]);
+      if (fireUpdate.error !== null || scheduleUpdate.error !== null) {
+        throw new ScheduleError(
+          'SCHEDULE_STATE_CONFLICT',
+          'The failed schedule result could not be persisted.',
+        );
+      }
+      fires.push(
+        ScheduleFireSchema.parse({
+          dueAt,
+          errorCode,
+          id: z.object({ id: z.string().uuid() }).parse(fireUpdate.data).id,
+          idempotencyKey,
+          scheduleId: schedule.id,
+          status: 'failed',
+          tenantId: schedule.tenant_id,
+        }),
+      );
+      failedCount += 1;
+    }
+  }
+
+  return { duplicateCount, failedCount, fires, runCount };
+}
+
+export async function tickSchedules(at: Date): Promise<ScheduleTickResult> {
+  if (!getEnvironment().mockMode) return await productionTick(at);
   return await mockService().tick(at, async (schedule, idempotencyKey) => {
+    if (schedule.target.deviceId === undefined) {
+      throw new ScheduleError('SCHEDULE_INVALID', 'Mock cloud schedules are not available.');
+    }
     const result = await createMockRun({
       deviceId: schedule.target.deviceId,
       idempotencyKey,

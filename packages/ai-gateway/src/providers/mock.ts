@@ -72,6 +72,8 @@ export class MockAiAdapter implements AiProviderAdapter, AiChatAdapter {
     const googleConnectionId = request.plannerRequest.context.googleConnectionIds[0];
     const prompt = request.plannerRequest.prompt;
     const gmailSummaryRequested = /gmail|郵件|電子郵件|信箱/iu.test(prompt);
+    const inlineSummaryRequested =
+      /summar(?:y|ize)|摘要|彙整報告|整理成報告|報告草稿|(?:產生|建立).{0,16}報告/iu.test(prompt);
     const workflow =
       executionTarget.type === 'desktop' && folderAliasId !== undefined
         ? {
@@ -170,25 +172,69 @@ export class MockAiAdapter implements AiProviderAdapter, AiChatAdapter {
               schemaVersion: 1,
               trigger: { config: {}, type: 'manual.trigger' },
             }
-          : {
-              description: '驗證輸入資料中的必要欄位。',
-              edges: [],
-              executionTarget,
-              name: '資料品質檢查',
-              nodes: [
-                {
-                  config: {
-                    onInvalid: 'separate',
-                    rules: [{ dataType: 'string', field: 'id', required: true }],
+          : executionTarget.type === 'cloud' && inlineSummaryRequested
+            ? {
+                description: '使用核准文字建立專業繁體中文摘要與可檢閱報告。',
+                edges: [
+                  { from: 'approved_source', to: 'summarize_source' },
+                  { from: 'summarize_source', to: 'compose_report' },
+                ],
+                executionTarget,
+                name: 'AI 摘要與報告',
+                nodes: [
+                  {
+                    config: { content: prompt },
+                    id: 'approved_source',
+                    type: 'data.inline',
+                    version: 1,
                   },
-                  id: 'validate_input',
-                  type: 'data.validate',
-                  version: 1,
-                },
-              ],
-              schemaVersion: 1,
-              trigger: { config: {}, type: 'manual.trigger' },
-            };
+                  {
+                    config: {
+                      includeCaseStudy: false,
+                      includeRecommendations: true,
+                      language: 'zh-Hant',
+                      maxCharacters: 6_000,
+                      provider: 'auto',
+                      style: 'professional',
+                      tier: 'auto',
+                    },
+                    id: 'summarize_source',
+                    type: 'ai.summarize',
+                    version: 1,
+                  },
+                  {
+                    config: {
+                      format: 'markdown',
+                      includeReferences: false,
+                      title: 'AI 營運摘要報告',
+                    },
+                    id: 'compose_report',
+                    type: 'report.compose',
+                    version: 1,
+                  },
+                ],
+                schemaVersion: 1,
+                trigger: { config: {}, type: 'manual.trigger' },
+              }
+            : {
+                description: '驗證輸入資料中的必要欄位。',
+                edges: [],
+                executionTarget,
+                name: '資料品質檢查',
+                nodes: [
+                  {
+                    config: {
+                      onInvalid: 'separate',
+                      rules: [{ dataType: 'string', field: 'id', required: true }],
+                    },
+                    id: 'validate_input',
+                    type: 'data.validate',
+                    version: 1,
+                  },
+                ],
+                schemaVersion: 1,
+                trigger: { config: {}, type: 'manual.trigger' },
+              };
     const text = JSON.stringify({
       assumptions: ['使用者已確認 Mock 執行裝置與資料夾別名。'],
       explanation: `先列出與讀取受限 Excel，再做確定性的訂單編號去重，最後建立不覆寫既有檔案的新報表。${request.userPrompt.includes('[S1]') ? ' 參考來源 [S1]。' : ''}`,

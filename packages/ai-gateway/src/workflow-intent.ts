@@ -12,7 +12,8 @@ const GOOGLE_INTENT =
 const GMAIL_INTENT = /gmail|google\s*(?:mail|email)|郵件|電子郵件|信箱/iu;
 const FORM_INTENT = /google\s*(?:forms?|表單)|表單回覆|表單訂單/iu;
 const SHEETS_INTENT = /google\s*(?:sheets?|試算表)|雲端試算表/iu;
-const SUMMARY_INTENT = /summar(?:y|ize)|摘要|彙整報告|整理成報告|報告草稿/iu;
+const SUMMARY_INTENT =
+  /summar(?:y|ize)|摘要|彙整報告|整理成報告|報告草稿|(?:產生|建立).{0,16}報告/iu;
 const SLIDES_INTENT = /google\s*slides?|presentation|簡報|投影片|gas\s*簡報/iu;
 const APPS_SCRIPT_INTENT = /apps?\s*script|google\s*apps?\s*script|\bgas\b/iu;
 const EMAIL_DELIVERY_INTENT =
@@ -28,10 +29,18 @@ export interface WorkflowIntent {
 
 export function detectWorkflowIntent(prompt: string): WorkflowIntent {
   const required = new Set<WorkflowNodeType>();
-  if (GMAIL_INTENT.test(prompt)) required.add('gmail.read');
-  if (FORM_INTENT.test(prompt)) required.add('google_forms.read_responses');
-  if (SHEETS_INTENT.test(prompt)) required.add('google_sheets.read');
-  if (SUMMARY_INTENT.test(prompt)) {
+  const needsGmail = GMAIL_INTENT.test(prompt);
+  const needsForms = FORM_INTENT.test(prompt);
+  const needsSheets = SHEETS_INTENT.test(prompt);
+  const needsExcel = EXCEL_INTENT.test(prompt);
+  const needsSummary = SUMMARY_INTENT.test(prompt);
+  if (needsGmail) required.add('gmail.read');
+  if (needsForms) required.add('google_forms.read_responses');
+  if (needsSheets) required.add('google_sheets.read');
+  if (needsSummary) {
+    if (!needsGmail && !needsForms && !needsSheets && !needsExcel) {
+      required.add('data.inline');
+    }
     required.add('ai.summarize');
     required.add('report.compose');
   }
@@ -39,9 +48,9 @@ export function detectWorkflowIntent(prompt: string): WorkflowIntent {
   if (APPS_SCRIPT_INTENT.test(prompt)) required.add('apps_script.deploy_template');
   if (EMAIL_DELIVERY_INTENT.test(prompt) && !EMAIL_NEGATION.test(prompt))
     required.add('gmail.send');
-  if (EXCEL_INTENT.test(prompt)) required.add('excel.read');
+  if (needsExcel) required.add('excel.read');
   return {
-    needsDesktop: EXCEL_INTENT.test(prompt),
+    needsDesktop: needsExcel,
     needsGoogleConnection: GOOGLE_INTENT.test(prompt),
     requiredNodeTypes: [...required],
   };

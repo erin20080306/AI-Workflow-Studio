@@ -371,6 +371,14 @@ export const DataValidateNodeSchema = node(
     })
     .strict(),
 );
+export const DataInlineNodeSchema = node(
+  'data.inline',
+  z
+    .object({
+      content: z.string().trim().min(1).max(20_000),
+    })
+    .strict(),
+);
 
 export const GoogleSheetsReadNodeSchema = node(
   'google_sheets.read',
@@ -527,6 +535,7 @@ export const WorkflowNodeSchema = z.discriminatedUnion('type', [
   DataAggregateNodeSchema,
   DataDeduplicateNodeSchema,
   DataValidateNodeSchema,
+  DataInlineNodeSchema,
   GoogleSheetsReadNodeSchema,
   GoogleSheetsAppendNodeSchema,
   GoogleSheetsUpdateNodeSchema,

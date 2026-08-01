@@ -138,7 +138,7 @@ const copy = {
     deleteFailed: 'The conversation could not be deleted.',
     deleteTitle: 'Delete this conversation?',
     deleting: 'Deleting…',
-    draftOnly: 'Read-only AI',
+    draftOnly: 'Validated AI automation',
     desktopAgent: 'Desktop Agent',
     desktopOffline: 'Offline · jobs will wait',
     desktopOnline: 'Online',
@@ -154,12 +154,12 @@ const copy = {
       'This model is not available to the provider account. Choose Auto or another model.',
     errorRate: 'The provider quota is currently limited. Choose Auto or try again later.',
     errorTemporary: 'The provider could not be reached. Choose Auto or try again shortly.',
-    executionApproval: 'Approval required before Desktop dispatch',
+    executionApproval: 'Approval required before the first external or write action',
     executionDraft: 'Create reviewed draft',
     executionDraftReady: 'Reviewed Workflow v1 draft',
     executionError: 'The execution request could not be prepared. No new Job was dispatched.',
     executionReviewHelp:
-      'Step 1 creates an immutable draft only. Step 2 creates a run; write or destructive risk still requires a separate approval.',
+      'Run automatically creates an immutable validated version and starts it immediately. The first external or write action still pauses for explicit approval.',
     historyReady: 'Messages are saved to this workspace and isolated by Tenant.',
     loadingHistory: 'Loading conversations…',
     model: 'Model',
@@ -194,8 +194,9 @@ const copy = {
     requestRun: 'Create run request',
     run: 'Run',
     runOpen: 'Open run details',
-    runQueued: 'Desktop Job queued',
+    runQueued: 'Automatic run started',
     runReview: 'Review execution',
+    runAutomatic: 'Run automatically',
     safetyBody:
       'Ask and Plan stay read-only. Only an explicit run request can enter approval, and only validated nodes are dispatched after every required approval.',
     safetyTitle: 'Review, request, approve',
@@ -203,7 +204,7 @@ const copy = {
     sendImage: 'Generate image',
     sendPlan: 'Create plan',
     sources: 'Sources',
-    stage: 'Phase 29 · Multi-model chat and images',
+    stage: 'Phase 47 · Intelligent Work automation',
     steps: 'steps',
     stop: 'Stop generating',
     streaming: 'Generating…',
@@ -230,7 +231,7 @@ const copy = {
     deleteFailed: '無法刪除此對話。',
     deleteTitle: '確定刪除這個對話？',
     deleting: '刪除中⋯',
-    draftOnly: '唯讀 AI',
+    draftOnly: '已驗證 AI 自動化',
     desktopAgent: '桌面 Agent',
     desktopOffline: '離線 · 工作會等待連線',
     desktopOnline: '在線',
@@ -243,12 +244,12 @@ const copy = {
     errorModel: 'Provider 帳戶目前沒有此模型，請改用「自動」或其他模型。',
     errorRate: 'Provider 配額目前受限，請改用「自動」或稍後重試。',
     errorTemporary: 'Provider 目前無法連線，請改用「自動」或稍後重試。',
-    executionApproval: '等待核准後才會派送至 Desktop Agent',
+    executionApproval: '第一次對外或寫入動作需要核准',
     executionDraft: '建立審閱草稿',
     executionDraftReady: '已審閱的 Workflow v1 草稿',
     executionError: '無法準備執行要求；沒有派送新的 Job。',
     executionReviewHelp:
-      '第 1 步只建立不可變更的草稿；第 2 步建立 Run。只要有寫入或破壞性風險，仍需另一次明確核准。',
+      '「自動執行」會建立不可變更的已驗證版本並立即開始。第一次對外或寫入動作仍會暫停，等待您明確核准。',
     historyReady: '訊息會保存於此工作區，並依 Tenant 隔離。',
     loadingHistory: '載入對話中…',
     model: '模型',
@@ -279,8 +280,9 @@ const copy = {
     requestRun: '建立執行要求',
     run: '執行',
     runOpen: '開啟執行詳情',
-    runQueued: '已排入 Desktop Job',
+    runQueued: '自動執行已開始',
     runReview: '檢視執行',
+    runAutomatic: '自動執行',
     safetyBody:
       '詢問與規劃保持唯讀。只有你明確建立執行要求，並通過所有必要核准後，才會派送已驗證的節點。',
     safetyTitle: '審閱、要求、核准三段式',
@@ -288,7 +290,7 @@ const copy = {
     sendImage: '產生圖片',
     sendPlan: '建立計畫',
     sources: '參考來源',
-    stage: '第 29 階段 · 多模型對話與圖片',
+    stage: '第 47 階段 · 智慧 Work 自動化',
     steps: '個步驟',
     stop: '停止產生',
     streaming: '產生中⋯',
@@ -672,6 +674,45 @@ export function AssistantWorkspace({
       }
       setExecutionDraft(parsed.data.draft);
       setExecutionRun(parsed.data.run);
+      setExecutionStatus('ready');
+    } catch {
+      setExecutionStatus('error');
+    } finally {
+      setExecutionWorking(false);
+    }
+  }
+
+  async function automaticExecution(): Promise<void> {
+    if (conversationId === undefined || planMessageId === undefined || plan === undefined) {
+      return;
+    }
+    setExecutionWorking(true);
+    setExecutionStatus(undefined);
+    try {
+      const draftResponse = await fetch('/api/ai/workflow-drafts', {
+        body: JSON.stringify({ conversationId, messageId: planMessageId }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const draftPayload = AssistantWorkflowDraftCreateResponseSchema.safeParse(
+        await draftResponse.json(),
+      );
+      if (!draftResponse.ok || !draftPayload.success) {
+        throw new Error('Workflow draft creation failed');
+      }
+      setExecutionDraft(draftPayload.data.draft);
+      const runResponse = await fetch(
+        `/api/ai/workflow-drafts/${encodeURIComponent(draftPayload.data.draft.id)}/runs`,
+        { method: 'POST' },
+      );
+      const runPayload = AssistantWorkflowRunCreateResponseSchema.safeParse(
+        await runResponse.json(),
+      );
+      if (!runResponse.ok || !runPayload.success) {
+        throw new Error('Workflow run creation failed');
+      }
+      setExecutionDraft(runPayload.data.draft);
+      setExecutionRun(runPayload.data.run);
       setExecutionStatus('ready');
     } catch {
       setExecutionStatus('error');
@@ -1198,11 +1239,6 @@ export function AssistantWorkspace({
                 {text.noProvider}
               </div>
             )}
-            {mode === 'plan' && selectedExecutionTarget === undefined && (
-              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-                {text.noDesktopAgent}
-              </div>
-            )}
             {attachments.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {attachments.map((attachment) => {
@@ -1393,16 +1429,12 @@ export function AssistantWorkspace({
                       : 'bg-slate-950 text-white hover:bg-slate-800'
                   }`}
                   disabled={
-                    pending ||
-                    executionWorking ||
-                    plan === undefined ||
-                    planMessageId === undefined ||
-                    plan.workflow.executionTarget.type !== 'desktop'
+                    pending || executionWorking || plan === undefined || planMessageId === undefined
                   }
-                  onClick={() => void prepareExecutionReview()}
+                  onClick={() => void automaticExecution()}
                   type="button"
                 >
-                  {text.run} · {text.runReview}
+                  {text.runAutomatic}
                 </button>
               </div>
             </div>

@@ -119,6 +119,31 @@ abstract class CloudNodeExecutor implements RegisteredWorkflowNodeExecutor {
   ): ReturnType<RegisteredWorkflowNodeExecutor['execute']>;
 }
 
+class InlineDataExecutor extends CloudNodeExecutor {
+  constructor(context: WorkspaceContext) {
+    super(context, 'data.inline', 'read');
+  }
+
+  async execute(
+    _executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    _input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        content: z.string().trim().min(1).max(20_000),
+      })
+      .strict()
+      .parse(config);
+    return {
+      output: JsonValueSchema.parse({
+        kind: 'inline_text',
+        text: parsed.content,
+      }),
+    };
+  }
+}
+
 class GmailReadExecutor extends CloudNodeExecutor {
   constructor(
     context: WorkspaceContext,
@@ -535,6 +560,7 @@ function cloudRegistry(context: WorkspaceContext): NodeRegistry {
   const registry = new NodeRegistry();
   const workspace = new GoogleWorkspaceClient();
   const sheets = new GoogleSheetsClient({ operationStore: new InMemoryGoogleOperationStore() });
+  registry.register(new InlineDataExecutor(context));
   registry.register(new GmailReadExecutor(context, workspace));
   registry.register(new FormsReadExecutor(context, workspace));
   registry.register(new SheetsReadExecutor(context, sheets));

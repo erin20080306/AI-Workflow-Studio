@@ -27,6 +27,18 @@ describe('workflow intent coverage', () => {
     });
   });
 
+  it('requires an inline source when a report request contains no external source', () => {
+    expect(
+      detectWorkflowIntent(
+        '將「本日 12 筆訂單，營收 86,500 元」整理成繁體中文摘要並產生 Markdown 報告',
+      ),
+    ).toEqual({
+      needsDesktop: false,
+      needsGoogleConnection: false,
+      requiredNodeTypes: ['data.inline', 'ai.summarize', 'report.compose'],
+    });
+  });
+
   it('accepts a connected Gmail summary and rejects missing or invented capabilities', () => {
     const output = AIPlannerOutputSchema.parse({
       assumptions: [],

@@ -15,9 +15,16 @@ const actor = {
 const target = {
   deviceId: '00000000-0000-4000-8000-000000000501',
   deviceName: 'Erin’s MacBook Air',
+  executionTarget: 'desktop' as const,
   workflowId: '00000000-0000-4000-8000-000000000503',
   workflowName: '每日訂單彙整',
   workflowVersionId: '00000000-0000-4000-8000-000000000504',
+};
+const cloudTarget = {
+  executionTarget: 'cloud' as const,
+  workflowId: '00000000-0000-4000-8000-000000000603',
+  workflowName: '每日雲端摘要',
+  workflowVersionId: '00000000-0000-4000-8000-000000000604',
 };
 
 describe('safe recurring schedules', () => {
@@ -56,6 +63,21 @@ describe('safe recurring schedules', () => {
     expect(result.runCount).toBe(1);
     expect(result.fires[0]?.idempotencyKey).toBe(calls[0]);
     expect(duplicate.runCount).toBe(0);
+  });
+
+  it('schedules a Cloud workflow without requiring a Desktop device', async () => {
+    const service = new InMemoryScheduleService();
+    const schedule = service.create(
+      actor,
+      {
+        rule: { cadence: 'hourly' },
+        target: cloudTarget,
+        timezone: 'Asia/Taipei',
+      },
+      new Date('2026-07-27T00:01:00.000Z'),
+    );
+    expect(schedule.target).toMatchObject({ executionTarget: 'cloud' });
+    expect(schedule.target.deviceId).toBeUndefined();
   });
 
   it('rejects viewer mutation and pauses after three dispatch failures', async () => {

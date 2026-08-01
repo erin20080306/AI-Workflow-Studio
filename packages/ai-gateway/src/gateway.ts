@@ -89,9 +89,14 @@ export class AiGateway {
           ? { issues: intentIssues, success: false as const }
           : parsedOutput;
       const validationCodes = [...new Set(validation.issues.map((issue) => issue.code))].sort();
-      const fallback =
+      const fallbackCandidate =
         !validation.success && intentIssues.length === 0 && attempt === maxAttempts
           ? buildPlannerSafeFallback(request, validation.issues)
+          : undefined;
+      const fallback =
+        fallbackCandidate !== undefined &&
+        validateWorkflowIntentCoverage(request, fallbackCandidate).length === 0
+          ? fallbackCandidate
           : undefined;
       await recordUsage(this.usageSink, {
         attempt,

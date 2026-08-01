@@ -3416,6 +3416,23 @@ Status: in progress
 - Extended the Desktop Excel executor with automatic header discovery,
   multi-sheet and multi-workbook consolidation, deterministic data transforms,
   and styled Excel reporting.
+- Added a bounded `data.inline` source plus intent coverage that rejects a
+  summary/report plan unless it contains the complete source → AI summary →
+  report path. The safe fallback now produces that three-node cloud flow instead
+  of a single validation placeholder.
+- Changed the assistant Work action to one-click automatic execution: one
+  explicit user action creates the immutable validated version, activates the
+  workflow, and starts the Cloud or Desktop run. External, write, and
+  destructive nodes still pause at their required approval boundary.
+- Added first-run approval reuse per immutable workflow version. An approved
+  `first_run` version may continue automatically on later runs; nodes configured
+  with `always` approval continue to pause every time.
+- Added Cloud Work schedule targets and a durable, idempotent Production tick
+  implementation. The database shape is contained in the pending
+  `202608010003_cloud_workflow_schedules.sql` migration; no Production schedule
+  behavior depends on it until that migration is explicitly authorized.
+- Improved the workflow Canvas with numbered service nodes, service icons, and
+  visible directed connections while retaining the product's own identity.
 - Ran the consolidation implementation against 481 actual `.xlsx` workbooks:
   776 worksheets and 3,911 detail rows were processed with 0 read failures; 533
   sheets exposed a numeric total. The verified workbook is stored locally at
@@ -3426,16 +3443,22 @@ Status: in progress
 
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
-- `pnpm typecheck`: passed after the model-routing and Gmail body changes
-- `pnpm test`: passed — 271 tests across 63 files, including an over-budget
-  platform-administrator reservation and metered-source acceptance test
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 279 tests across 63 files, including complete Work
+  intent coverage, the bounded inline source, Cloud schedule target validation,
+  and the existing usage-control, website, Google Workspace, and Desktop tests
 - `pnpm build:web`: passed — 47 application pages and all Work, Google, run,
-  approval, schedule, and Website routes compiled successfully
-- `pnpm build:desktop`: passed — main, preload, and renderer bundles compiled
+  approval, schedule, and Website routes compiled successfully. The sandboxed
+  Turbopack attempt could not bind its worker port; the identical permitted
+  retry passed.
+- `vercel env ls production`: confirmed the server-only `CRON_SECRET` is already
+  configured for Production; no secret value was read or exposed.
+- `pnpm build:desktop`: not applicable to the latest change — no Desktop code
+  changed
 - `pnpm security:scan-client`: passed — 35 generated client files scanned
-- The four explicitly authorized Supabase migrations were applied to
+- The five explicitly authorized Supabase migrations were applied to
   Production and local/remote migration versions matched through
-  `202608010001_google_workspace_connections.sql`.
+  `202608010002_platform_admin_usage_override.sql`.
 - Commit `9794f24` was pushed to `codex/ai-workflow-platform`; Vercel Production
   deployment `dpl_AgBDuPZttxsdEk6nnDdURRwCJ83D` completed and was aliased to
   `https://www.erin-aiworkflowstudio.com`.
@@ -3448,14 +3471,18 @@ Status: in progress
 
 ### Pending production acceptance
 
-- The additional platform-administrator usage-override migration requires its
-  own explicit Production authorization. It has not been applied.
+- `202608010003_cloud_workflow_schedules.sql` received explicit authorization
+  and was applied successfully to Production on 2026-08-01. Local and remote
+  migration versions now match through that migration.
+- The owner confirmed the Production Vercel account is Pro. A secured
+  fifteen-minute Vercel Cron tick is therefore included for unattended
+  recurring Cloud and Desktop workflow dispatch.
 - The isolated database test could not start because the local Docker daemon is
   not running; no test was disabled or bypassed.
 - Production does not currently contain `GOOGLE_CLIENT_ID`,
   `GOOGLE_CLIENT_SECRET`, or `GOOGLE_REDIRECT_URI`; therefore a real Google
   Workspace reconnection and Gmail-to-report live run cannot yet pass.
-- The quota fix commit, migration application, replacement Vercel Production
-  deployment, Google Workspace reconnection, and authenticated Gmail-to-report
-  live run remain pending. The phase must not be described as complete until
-  these steps pass.
+- The updated commit, replacement Vercel Production deployment, Google
+  Workspace reconnection, and authenticated
+  source-to-summary-to-report live run remain pending. The phase must not be
+  described as complete until these steps pass.

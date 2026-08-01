@@ -13,9 +13,14 @@ import {
   type Node,
   type NodeProps,
 } from '@xyflow/react';
-import { NODE_CATALOG_BY_TYPE, type Workflow } from '@ai-workflow-studio/workflow-schema';
-import { useMemo } from 'react';
+import {
+  NODE_CATALOG_BY_TYPE,
+  type Workflow,
+  type WorkflowNodeType,
+} from '@ai-workflow-studio/workflow-schema';
+import { useMemo, type ComponentType, type SVGProps } from 'react';
 
+import { FileIcon, FlowIcon, FolderIcon, MailIcon, SparkIcon, TableIcon } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
 import { NODE_PRESENTATION } from '@/lib/mock-workflows';
 
@@ -23,13 +28,41 @@ interface WorkflowFlowNodeData extends Record<string, unknown> {
   readonly category: string;
   readonly label: string;
   readonly locale: 'en' | 'zh-Hant';
+  readonly nodeType: WorkflowNodeType;
   readonly requiresApproval: boolean;
   readonly risk: string;
+  readonly stepNumber: number;
 }
 
 type WorkflowFlowNode = Node<WorkflowFlowNodeData, 'workflow'>;
 
+type WorkflowIcon = ComponentType<SVGProps<SVGSVGElement>>;
+
+function iconForNode(type: WorkflowNodeType): WorkflowIcon {
+  if (type === 'ai.summarize') return SparkIcon;
+  if (type.startsWith('gmail.')) return MailIcon;
+  if (type.startsWith('excel.') || type.startsWith('google_sheets.')) return TableIcon;
+  if (type.startsWith('folder.')) return FolderIcon;
+  if (
+    type === 'data.inline' ||
+    type === 'report.compose' ||
+    type === 'google_forms.read_responses' ||
+    type === 'google_slides.create'
+  ) {
+    return FileIcon;
+  }
+  return FlowIcon;
+}
+
+function riskDot(risk: string): string {
+  if (risk === 'destructive') return 'bg-rose-500';
+  if (risk === 'external') return 'bg-violet-500';
+  if (risk === 'write') return 'bg-amber-500';
+  return 'bg-emerald-500';
+}
+
 function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowFlowNode>) {
+  const NodeIcon = iconForNode(data.nodeType);
   return (
     <button
       aria-label={`${data.label}, ${data.category}`}
@@ -46,14 +79,20 @@ function WorkflowNodeCard({ data, selected }: NodeProps<WorkflowFlowNode>) {
         type="target"
       />
       <div className="flex items-start justify-between gap-3">
-        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-          {data.category}
-        </span>
-        <span
-          className={`size-2 rounded-full ${
-            data.risk === 'write' ? 'bg-amber-500' : 'bg-emerald-500'
-          }`}
-        />
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600">
+            <NodeIcon className="size-4.5" />
+          </span>
+          <div className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+              {data.category}
+            </span>
+            <span className="mt-0.5 block text-[10px] font-semibold text-slate-400">
+              {data.locale === 'en' ? `Step ${data.stepNumber}` : `步驟 ${data.stepNumber}`}
+            </span>
+          </div>
+        </div>
+        <span className={`mt-1 size-2.5 shrink-0 rounded-full ${riskDot(data.risk)}`} />
       </div>
       <p className="mt-2 text-sm font-semibold text-slate-950">{data.label}</p>
       <p className="mt-1 text-[11px] text-slate-500">
@@ -89,13 +128,15 @@ function toFlowNodes(workflow: Workflow, locale: 'en' | 'zh-Hant'): readonly Wor
         category: presentation.category[presentationLocale],
         label: presentation.label[presentationLocale],
         locale,
+        nodeType: workflowNode.type,
         requiresApproval: definition?.approvalMode !== 'none',
         risk: definition?.riskLevel ?? 'read',
+        stepNumber: index + 1,
       },
       id: workflowNode.id,
       position: {
         x: 40 + index * 238,
-        y: index % 2 === 0 ? 118 : 150,
+        y: 130,
       },
       type: 'workflow',
     };

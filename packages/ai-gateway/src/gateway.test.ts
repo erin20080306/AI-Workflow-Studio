@@ -104,6 +104,7 @@ describe('AiGateway', () => {
     const result = await new AiGateway(adapter, usage).plan({
       ...plannerRequest,
       maxRepairAttempts: 2,
+      prompt: '檢查資料欄位',
     });
 
     expect(result.output.workflow.nodes).toMatchObject([
@@ -120,7 +121,7 @@ describe('AiGateway', () => {
     ]);
   });
 
-  it('never releases an unknown executable node and replaces it with a safe fallback', async () => {
+  it('never lets a validation-only fallback satisfy an explicit Excel action', async () => {
     const malicious = JSON.stringify({
       assumptions: [],
       explanation: 'Run a command.',
@@ -143,19 +144,35 @@ describe('AiGateway', () => {
       },
     });
 
+    await expect(
+      new AiGateway(new StaticAdapter([malicious]), new InMemoryUsageSink()).plan({
+        ...plannerRequest,
+        maxRepairAttempts: 0,
+      }),
+    ).rejects.toMatchObject({ code: 'AI_OUTPUT_INVALID' });
+  });
+
+  it('releases an intent-complete inline summary fallback after repair exhaustion', async () => {
     const result = await new AiGateway(
-      new StaticAdapter([malicious]),
+      new StaticAdapter(['not-json']),
       new InMemoryUsageSink(),
     ).plan({
-      ...plannerRequest,
+      context: {
+        allowedFolderAliasIds: [],
+        executionTarget: { type: 'cloud' },
+        googleConnectionIds: [],
+        locale: 'zh-Hant',
+        timezone: 'Asia/Taipei',
+      },
       maxRepairAttempts: 0,
+      prompt: '將「12 筆訂單，營收 86,500 元」整理成摘要並產生報告',
     });
 
-    expect(result.output.workflow.nodes).toMatchObject([
-      { id: 'validate_input', type: 'data.validate' },
+    expect(result.output.workflow.nodes.map((node) => node.type)).toEqual([
+      'data.inline',
+      'ai.summarize',
+      'report.compose',
     ]);
-    expect(JSON.stringify(result.output)).not.toContain('shell.execute');
-    expect(JSON.stringify(result.output)).not.toContain('rm -rf');
   });
 
   it('withholds a valid output when usage logging fails', async () => {

@@ -132,8 +132,49 @@ describe('WorkflowSchema', () => {
 
   it('registers exactly the first-version allowlist with no duplicate type/version pairs', () => {
     const keys = NODE_CATALOG.map((node) => `${node.type}@${node.version}`);
-    expect(NODE_CATALOG).toHaveLength(33);
-    expect(new Set(keys).size).toBe(33);
+    expect(NODE_CATALOG).toHaveLength(34);
+    expect(new Set(keys).size).toBe(34);
+  });
+
+  it('accepts a bounded inline source feeding an AI summary and report', () => {
+    const workflow = WorkflowSchema.parse({
+      description: 'Summarize approved inline business data.',
+      edges: [
+        { from: 'source', to: 'summary' },
+        { from: 'summary', to: 'report' },
+      ],
+      executionTarget: { type: 'cloud' },
+      name: 'Inline AI report',
+      nodes: [
+        {
+          config: { content: '12 orders, revenue 86,500, 3 pending confirmation.' },
+          id: 'source',
+          type: 'data.inline',
+          version: 1,
+        },
+        {
+          config: { language: 'zh-Hant', provider: 'anthropic', tier: 'standard' },
+          id: 'summary',
+          type: 'ai.summarize',
+          version: 1,
+        },
+        {
+          config: { format: 'markdown', includeReferences: false, title: '營運摘要' },
+          id: 'report',
+          type: 'report.compose',
+          version: 1,
+        },
+      ],
+      schemaVersion: 1,
+      trigger: { config: {}, type: 'manual.trigger' },
+    });
+
+    expect(validateWorkflow(workflow)).toMatchObject({ issues: [], success: true });
+    expect(workflow.nodes.map((node) => node.type)).toEqual([
+      'data.inline',
+      'ai.summarize',
+      'report.compose',
+    ]);
   });
 
   it('keeps the selected AI provider and model level inside a validated summary node', () => {

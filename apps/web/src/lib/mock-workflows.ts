@@ -40,6 +40,10 @@ export const NODE_PRESENTATION: Readonly<
     category: { en: 'Data transform', zhHant: '資料轉換' },
     label: { en: 'Filter data', zhHant: '篩選資料' },
   },
+  'data.inline': {
+    category: { en: 'Source', zhHant: '資料來源' },
+    label: { en: 'Use approved text', zhHant: '使用核准文字' },
+  },
   'data.group': {
     category: { en: 'Data transform', zhHant: '資料轉換' },
     label: { en: 'Group data', zhHant: '資料分組' },

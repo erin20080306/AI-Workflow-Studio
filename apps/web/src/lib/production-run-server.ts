@@ -152,6 +152,34 @@ function safeAuditMetadata(
   );
 }
 
+async function versionRequiresApproval(
+  tenantId: string,
+  workflowVersionId: string,
+  risk: ReturnType<typeof summarizeWorkflowRisks>,
+): Promise<boolean> {
+  const approvalNodes = [...risk.destructive, ...risk.external, ...risk.write];
+  if (approvalNodes.some((node) => node.approvalMode === 'always')) {
+    return true;
+  }
+  if (!approvalNodes.some((node) => node.approvalMode === 'first_run')) {
+    return false;
+  }
+  const result = await createSupabaseAdminClient()
+    .from('workflow_approvals')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('workflow_version_id', workflowVersionId)
+    .eq('status', 'approved')
+    .limit(1);
+  if (result.error !== null) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The workflow approval history could not be checked.',
+    );
+  }
+  return z.array(z.object({ id: UuidSchema })).parse(result.data).length === 0;
+}
+
 async function requireProductionTarget(
   tenantId: string,
   workflow: Workflow,
@@ -545,6 +573,11 @@ export async function startProductionRun(
   const runId = crypto.randomUUID();
   const now = new Date();
   const risk = summarizeWorkflowRisks(input.workflow);
+  const requiresApproval = await versionRequiresApproval(
+    actor.tenantId,
+    input.workflowVersionId,
+    risk,
+  );
   const insert = await admin
     .from('workflow_runs')
     .insert({
@@ -580,7 +613,7 @@ export async function startProductionRun(
     action: 'run.created',
     actor_user_id: actor.userId,
     correlation_id: runId,
-    metadata: { requiresApproval: risk.requiresApproval },
+    metadata: { requiresApproval },
     resource_id: runId,
     resource_type: 'workflow_run',
     tenant_id: actor.tenantId,
@@ -589,7 +622,7 @@ export async function startProductionRun(
     await admin.from('workflow_runs').delete().eq('tenant_id', actor.tenantId).eq('id', runId);
     throw new RunOrchestrationError('RUN_STATE_CONFLICT', 'The workflow run could not be audited.');
   }
-  if (risk.requiresApproval) {
+  if (requiresApproval) {
     const approvalId = crypto.randomUUID();
     const approvalInsert = await admin.from('workflow_approvals').insert({
       expires_at: new Date(now.getTime() + 15 * 60_000).toISOString(),
@@ -780,6 +813,11 @@ export async function startProductionCloudRun(
   const runId = crypto.randomUUID();
   const now = new Date();
   const risk = summarizeWorkflowRisks(input.workflow);
+  const requiresApproval = await versionRequiresApproval(
+    actor.tenantId,
+    input.workflowVersionId,
+    risk,
+  );
   const insert = await admin
     .from('workflow_runs')
     .insert({
@@ -816,7 +854,7 @@ export async function startProductionCloudRun(
       action: 'cloud_run.created',
       actor_user_id: actor.userId,
       correlation_id: runId,
-      metadata: { requiresApproval: risk.requiresApproval },
+      metadata: { requiresApproval },
       resource_id: runId,
       resource_type: 'workflow_run',
       tenant_id: actor.tenantId,
@@ -826,7 +864,7 @@ export async function startProductionCloudRun(
     await admin.from('workflow_runs').delete().eq('tenant_id', actor.tenantId).eq('id', runId);
     throw new RunOrchestrationError('RUN_STATE_CONFLICT', 'The cloud run could not be audited.');
   }
-  if (risk.requiresApproval) {
+  if (requiresApproval) {
     const approvalInsert = await admin.from('workflow_approvals').insert({
       expires_at: new Date(now.getTime() + 15 * 60_000).toISOString(),
       id: crypto.randomUUID(),

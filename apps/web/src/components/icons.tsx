@@ -79,6 +79,24 @@ export function FolderIcon(props: IconProps) {
   );
 }
 
+export function MailIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <rect height="14" rx="2" width="18" x="3" y="5" />
+      <path d="m4 7 8 6 8-6" />
+    </IconFrame>
+  );
+}
+
+export function TableIcon(props: IconProps) {
+  return (
+    <IconFrame {...props}>
+      <rect height="18" rx="2" width="18" x="3" y="3" />
+      <path d="M3 9h18M9 3v18M9 15h12" />
+    </IconFrame>
+  );
+}
+
 export function DashboardIcon(props: IconProps) {
   return (
     <IconFrame {...props}>
