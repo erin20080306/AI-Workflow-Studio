@@ -124,12 +124,39 @@ describe('provider adapters', () => {
         },
       },
     });
+    expect(body).not.toHaveProperty('reasoning');
     expect(String(capturedInit?.body)).not.toContain(API_KEY);
     expect(completion).toMatchObject({
       model: 'gpt-5.6-sol',
       text: '{"ok":true}',
       usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
     });
+  });
+
+  it('keeps configured reasoning for non-workflow OpenAI structured generation', async () => {
+    let capturedInit: RequestInit | undefined;
+    const fetchTransport: FetchTransport = async (_input, init) => {
+      capturedInit = init;
+      return jsonResponse({
+        id: 'resp_website',
+        model: 'gpt-5.6-sol',
+        output: [
+          {
+            content: [{ text: '{"ok":true}', type: 'output_text' }],
+            type: 'message',
+          },
+        ],
+      });
+    };
+
+    await new OpenAiAdapter({
+      apiKey: API_KEY,
+      fetchTransport,
+      reasoningEffort: 'high',
+    }).complete(websiteCompletionRequest);
+    const body = JSON.parse(String(capturedInit?.body)) as Record<string, unknown>;
+
+    expect(body).toMatchObject({ reasoning: { effort: 'high' } });
   });
 
   it('omits reasoning configuration for account-listed non-reasoning GPT models', async () => {

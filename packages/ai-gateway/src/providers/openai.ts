@@ -256,7 +256,7 @@ export class OpenAiAdapter implements AiProviderAdapter, AiChatAdapter {
         instructions: request.systemPrompt,
         max_output_tokens: request.maxOutputTokens,
         model: this.model,
-        ...this.reasoningConfig(),
+        ...(request.operation === 'workflow_plan' ? {} : this.reasoningConfig()),
         store: false,
         text: {
           format,

@@ -17,7 +17,11 @@ import {
 import { useLanguage } from '@/components/language-provider';
 import { AssistantWorkflowDraftCreateResponseSchema } from '@/lib/assistant-execution-schema';
 import type { AssistantExecutionTarget } from '@/lib/assistant-execution-targets';
-import type { AiProviderSelection, AiTierOption } from '@/lib/ai-model-selection';
+import {
+  modelsForSelectedProvider,
+  type AiProviderSelection,
+  type AiTierOption,
+} from '@/lib/ai-model-selection';
 import { selectWorkflowPlanningContext } from '@/lib/workflow-planning-context';
 
 import { WorkflowReview } from './workflow-review';
@@ -145,6 +149,14 @@ export function WorkflowComposer({
   const [planReference, setPlanReference] = useState<PlanReference>();
   const [planning, setPlanning] = useState(false);
   const [draft, setDraft] = useState<DraftStatus>({ status: 'idle' });
+  const providerTierOptions = useMemo(
+    () =>
+      tierOptions.map((option) => ({
+        option,
+        providerModels: modelsForSelectedProvider(option, provider),
+      })),
+    [provider, tierOptions],
+  );
 
   async function saveDraft(reference: PlanReference): Promise<void> {
     setDraft({ status: 'saving' });
@@ -306,10 +318,16 @@ export function WorkflowComposer({
                   value={tier}
                 >
                   <option value="auto">Auto</option>
-                  {tierOptions.map((option) => (
-                    <option disabled={!option.enabled} key={option.id} value={option.id}>
-                      {option.label[locale === 'zh-Hant' ? 'zhHant' : 'en']} ·{' '}
-                      {option.models.map((model) => model.model).join(' / ')}
+                  {providerTierOptions.map(({ option, providerModels }) => (
+                    <option
+                      disabled={!option.enabled || providerModels.length === 0}
+                      key={option.id}
+                      value={option.id}
+                    >
+                      {option.label[locale === 'zh-Hant' ? 'zhHant' : 'en']}
+                      {providerModels.length > 0
+                        ? ` · ${providerModels.map((model) => model.model).join(' / ')}`
+                        : ''}
                     </option>
                   ))}
                 </select>

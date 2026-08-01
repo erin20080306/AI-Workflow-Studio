@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_AI_MODEL_MAPPINGS } from './ai-model-catalog';
-import { AiModelSelectionSchema, buildAiTierOptions } from './ai-model-selection';
+import type { AiTierOption } from './ai-model-selection';
+import {
+  AiModelSelectionSchema,
+  buildAiTierOptions,
+  modelsForSelectedProvider,
+} from './ai-model-selection';
 
 describe('AI model selection', () => {
   it('keeps client choices provider-neutral and tier based', () => {
@@ -28,5 +33,29 @@ describe('AI model selection', () => {
       },
       { model: 'gemini-3.5-flash-lite', provider: 'gemini', providerLabel: 'Gemini' },
     ]);
+  });
+});
+
+const option: AiTierOption = {
+  enabled: true,
+  id: 'economy',
+  label: { en: 'Economy', zhHant: '經濟' },
+  models: [
+    { model: 'openai-economy', provider: 'openai', providerLabel: 'OpenAI' },
+    { model: 'claude-economy', provider: 'anthropic', providerLabel: 'Claude' },
+    { model: 'gemini-economy', provider: 'gemini', providerLabel: 'Gemini' },
+  ],
+};
+
+describe('modelsForSelectedProvider', () => {
+  it('shows only the selected provider model inside a model level', () => {
+    expect(modelsForSelectedProvider(option, 'openai')).toEqual([option.models[0]]);
+    expect(modelsForSelectedProvider(option, 'anthropic')).toEqual([option.models[1]]);
+    expect(modelsForSelectedProvider(option, 'gemini')).toEqual([option.models[2]]);
+  });
+
+  it('keeps all candidates only while automatic provider routing is selected', () => {
+    expect(modelsForSelectedProvider(option, 'auto')).toEqual(option.models);
+    expect(modelsForSelectedProvider(option, 'mock')).toEqual([]);
   });
 });

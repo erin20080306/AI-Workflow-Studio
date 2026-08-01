@@ -74,4 +74,13 @@ export function buildAiTierOptions(
   }));
 }
 
+export function modelsForSelectedProvider(
+  option: AiTierOption,
+  provider: AiProviderSelection,
+): AiTierOption['models'] {
+  if (provider === 'auto') return option.models;
+  if (provider === 'mock') return [];
+  return option.models.filter((model) => model.provider === provider);
+}
+
 export type { AiModelTier, AiModelTierSelection };
