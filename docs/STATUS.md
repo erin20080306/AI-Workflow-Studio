@@ -3601,13 +3601,16 @@ Status: implementation complete; Production acceptance pending
   `.xls`, `.xlsx`, and Google Sheets in the selected folder, locates headers,
   merges columns and rows with source provenance, and enforces bounded file,
   sheet, row, and byte limits.
-- `.xlsx` workbooks are parsed as inert workbook data in server memory so large
-  folders do not require hundreds of temporary conversions; formulas are read
-  only as stored results and macros are never executed. Legacy `.xls` files use
-  temporary app-created Google Sheets that are deleted after reading. The
-  generated report is uploaded as a new `.xlsx` file in the same Drive folder,
-  never overwrites an existing customer file, and uses an idempotency marker to
-  suppress duplicate retries.
+- `.xlsx` workbooks are parsed as inert workbook data with a value-only streaming
+  reader so large folders do not require hundreds of temporary Google Sheets or
+  full in-memory workbook models. Each downloaded workbook uses an isolated
+  ephemeral server path that is deleted immediately after parsing; presentation
+  styles are not retained, hyperlinks, drawings, and embedded code are excluded,
+  formulas are read only as stored results, and macros are never executed.
+  Legacy `.xls` files use temporary app-created Google Sheets that are deleted
+  after reading. The generated report is uploaded as a new `.xlsx` file in the
+  same Drive folder, never overwrites an existing customer file, and uses an
+  idempotency marker to suppress duplicate retries.
 - Natural-language Drive Excel requests now deterministically plan the complete
   six-node graph: Drive read → Excel report plus AI summary → composed report →
   professional Slides → approved GAS. Slides are moved into the requested
@@ -3645,15 +3648,25 @@ Status: implementation complete; Production acceptance pending
   limit during Production acceptance. Validated Cloud nodes now receive a
   four-minute ceiling inside the existing five-minute Vercel Pro route window;
   retry routes declare the same five-minute request duration explicitly.
+- Authenticated Production Run `7d5bc26f-d245-4aaf-8a23-406c01cdfdb6` confirmed
+  that the full-model `.xlsx` parser still exceeded the new four-minute node
+  ceiling before downstream writes began. The replacement reader streams only
+  worksheet values, rejects more than 64 MB of selected decompressed XML,
+  excludes workbook presentation metadata, deletes every
+  isolated ephemeral source after use, and has regression coverage at the hard
+  500-workbook envelope. Production re-acceptance remains pending until this
+  parser change is deployed; the failed attempt produced no report, Slides,
+  Apps Script project, or email.
 
 ### Local validation
 
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
 - `pnpm typecheck`: passed
-- `pnpm test`: passed — 303 tests across 66 files, including Drive workbook
-  conversion/merge/export, six-node planning, approval catalog, exact Slides
-  count, GAS presentation binding, and model-tier fallback
+- `pnpm test`: passed — 307 tests across 66 files, including Drive workbook
+  conversion/merge/export, value-only streaming at the 500-workbook hard limit,
+  six-node planning, approval catalog, exact Slides count, GAS presentation
+  binding, and model-tier fallback
 - `pnpm build:web`: passed — all 47 application pages compiled successfully.
   The sandboxed Turbopack attempt could not bind its worker port; the identical
   permitted retry passed.

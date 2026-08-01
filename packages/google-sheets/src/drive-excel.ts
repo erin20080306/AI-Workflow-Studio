@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
+import { mkdtemp, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import ExcelJS from 'exceljs';
+import { unzipSync, zipSync } from 'fflate';
 import { z } from 'zod';
 
 import { GoogleSheetsClient, InMemoryGoogleOperationStore } from './client';
@@ -35,6 +39,7 @@ const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 const MAX_API_RESPONSE_BYTES = 10_000_000;
 const MAX_MULTIPART_BYTES = 5_000_000;
 const MAX_RESUMABLE_BYTES = 20_000_000;
+const MAX_XLSX_XML_BYTES = 64_000_000;
 const XLSX_DOWNLOAD_CONCURRENCY = 8;
 
 export interface DriveExcelSource {
@@ -176,22 +181,99 @@ function excelCell(value: ExcelJS.CellValue): GoogleCell {
   return String(value);
 }
 
-async function readXlsxGrids(content: Uint8Array): Promise<readonly ExcelGrid[]> {
-  const workbook = new ExcelJS.Workbook();
-  const arrayBuffer = new ArrayBuffer(content.byteLength);
-  new Uint8Array(arrayBuffer).set(content);
-  await workbook.xlsx.load(arrayBuffer);
-  return workbook.worksheets.map((worksheet) => {
-    const values: GoogleCell[][] = [];
-    worksheet.eachRow({ includeEmpty: false }, (row) => {
-      const cells: GoogleCell[] = [];
-      row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
-        cells[columnNumber - 1] = excelCell(cell.value);
-      });
-      values.push(cells);
+function orderedXlsxForStreaming(content: Uint8Array): Uint8Array {
+  let selectedBytes = 0;
+  let files: ReturnType<typeof unzipSync>;
+  try {
+    files = unzipSync(content, {
+      filter: (file) => {
+        const selected =
+          file.name === 'xl/_rels/workbook.xml.rels' ||
+          file.name === 'xl/workbook.xml' ||
+          file.name === 'xl/sharedStrings.xml' ||
+          file.name === 'xl/styles.xml' ||
+          /^xl\/worksheets\/sheet\d+\.xml$/.test(file.name);
+        if (!selected) return false;
+        if (!Number.isSafeInteger(file.originalSize) || file.originalSize < 0) {
+          throw new GoogleSheetsError(
+            'GOOGLE_REQUEST_INVALID',
+            'The workbook contains invalid worksheet-size metadata.',
+          );
+        }
+        selectedBytes += file.originalSize;
+        if (selectedBytes > MAX_XLSX_XML_BYTES) {
+          throw new GoogleSheetsError(
+            'GOOGLE_REQUEST_INVALID',
+            'The workbook exceeds the bounded decompressed worksheet-data limit.',
+          );
+        }
+        return true;
+      },
     });
-    return { title: worksheet.name, values };
-  });
+  } catch (error) {
+    if (error instanceof GoogleSheetsError) throw error;
+    throw new GoogleSheetsError('GOOGLE_REQUEST_INVALID', 'The workbook is not a valid XLSX file.');
+  }
+  const workbookRelationships = files['xl/_rels/workbook.xml.rels'];
+  const workbook = files['xl/workbook.xml'];
+  if (!workbookRelationships || !workbook) {
+    throw new GoogleSheetsError(
+      'GOOGLE_REQUEST_INVALID',
+      'The workbook is missing required XLSX metadata.',
+    );
+  }
+  const ordered: Record<string, Uint8Array> = {
+    'xl/_rels/workbook.xml.rels': workbookRelationships,
+    'xl/workbook.xml': workbook,
+  };
+  const sharedStrings = files['xl/sharedStrings.xml'];
+  const styles = files['xl/styles.xml'];
+  if (sharedStrings) ordered['xl/sharedStrings.xml'] = sharedStrings;
+  if (styles) ordered['xl/styles.xml'] = styles;
+  for (const name of Object.keys(files)
+    .filter((entry) => /^xl\/worksheets\/sheet\d+\.xml$/.test(entry))
+    .sort((left, right) => {
+      const leftNumber = Number(left.match(/sheet(\d+)\.xml$/)?.[1] ?? 0);
+      const rightNumber = Number(right.match(/sheet(\d+)\.xml$/)?.[1] ?? 0);
+      return leftNumber - rightNumber;
+    })) {
+    const worksheet = files[name];
+    if (worksheet) ordered[name] = worksheet;
+  }
+  return zipSync(ordered, { level: 0 });
+}
+
+async function readXlsxGrids(content: Uint8Array): Promise<readonly ExcelGrid[]> {
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), 'ai-workflow-xlsx-'));
+  const temporaryPath = join(temporaryDirectory, 'source.xlsx');
+  try {
+    await writeFile(temporaryPath, orderedXlsxForStreaming(content));
+    const workbook = new ExcelJS.stream.xlsx.WorkbookReader(temporaryPath, {
+      entries: 'ignore',
+      hyperlinks: 'ignore',
+      sharedStrings: 'cache',
+      styles: 'cache',
+      worksheets: 'emit',
+    });
+    const grids: ExcelGrid[] = [];
+    for await (const rawWorksheet of workbook) {
+      const worksheet = rawWorksheet as typeof rawWorksheet & { readonly name: string };
+      const values: GoogleCell[][] = [];
+      for await (const row of worksheet) {
+        if (!row.hasValues) continue;
+        const cells: GoogleCell[] = [];
+        row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+          cells[columnNumber - 1] = excelCell(cell.value);
+        });
+        values.push(cells);
+      }
+      grids.push({ title: worksheet.name, values });
+    }
+    return grids;
+  } finally {
+    await unlink(temporaryPath).catch(() => undefined);
+    await rmdir(temporaryDirectory).catch(() => undefined);
+  }
 }
 
 async function reportXlsx(input: DriveExcelFolderResult): Promise<Uint8Array> {
@@ -306,12 +388,26 @@ export class GoogleDriveExcelClient {
         );
       }
     }
+    let xlsxParseTail = Promise.resolve();
+    const parseXlsx = async (content: Uint8Array): Promise<readonly ExcelGrid[]> => {
+      const previous = xlsxParseTail;
+      let release = (): void => undefined;
+      xlsxParseTail = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await previous;
+      try {
+        return await readXlsxGrids(content);
+      } finally {
+        release();
+      }
+    };
     const downloadedXlsx = await mapWithConcurrency(
       files,
       XLSX_DOWNLOAD_CONCURRENCY,
       async (file): Promise<readonly ExcelGrid[] | undefined> => {
         if (file.mimeType === GOOGLE_SHEET_MIME || isLegacyExcelFile(file)) return undefined;
-        return await readXlsxGrids(
+        return await parseXlsx(
           await this.downloadFile(accessToken, file, limits.maxFileSizeBytes, signal),
         );
       },

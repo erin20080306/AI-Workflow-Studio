@@ -80,9 +80,18 @@ describe('GoogleDriveExcelClient', () => {
 
   it('parses a downloaded XLSX locally without creating a temporary Google Sheet', async () => {
     const workbook = new ExcelJS.Workbook();
-    workbook
-      .addWorksheet('成本')
-      .addRows([['成本報價表'], ['品號', '數量', '成本'], ['A-01', 2, 120]]);
+    const worksheet = workbook.addWorksheet('成本');
+    worksheet.addRows([
+      ['成本報價表'],
+      ['品號', '數量', '成本'],
+      [{ richText: [{ text: 'A-' }, { font: { bold: true }, text: '01' }] }, 2],
+    ]);
+    worksheet.getCell('C3').value = { formula: 'B3*60', result: 120 };
+    worksheet.getCell('A3').fill = {
+      fgColor: { argb: 'FFFF0000' },
+      pattern: 'solid',
+      type: 'pattern',
+    };
     const workbookBytes = await workbook.xlsx.writeBuffer();
     const calls: string[] = [];
     const fetchTransport: GoogleFetch = async (input, init) => {
@@ -124,6 +133,39 @@ describe('GoogleDriveExcelClient', () => {
       },
     ]);
     expect(calls.some((call) => call.includes('/upload/'))).toBe(false);
+  });
+
+  it('fails closed when a downloaded workbook is not a valid XLSX archive', async () => {
+    const invalidWorkbook = new Uint8Array([1, 2, 3, 4]);
+    const fetchTransport: GoogleFetch = async (input) => {
+      const url = String(input);
+      if (url.includes('alt=media')) return new Response(invalidWorkbook);
+      if (url.includes('/drive/v3/files?')) {
+        return Response.json({
+          files: [
+            {
+              id: '1InvalidWorkbookResourceId12345',
+              mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              name: 'invalid.xlsx',
+              size: String(invalidWorkbook.byteLength),
+            },
+          ],
+        });
+      }
+      return new Response('not found', { status: 404 });
+    };
+    const client = new GoogleDriveExcelClient({ fetchTransport });
+
+    await expect(
+      client.readExcelFolder(TOKEN, FOLDER_ID, {
+        headerScanRows: 10,
+        includeSubfolders: true,
+        maxFileSizeBytes: 20_000_000,
+        maxFiles: 10,
+        maxRows: 100,
+        maxSheets: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'GOOGLE_REQUEST_INVALID' });
   });
 
   it('bounds concurrent XLSX downloads and preserves deterministic file order', async () => {
@@ -172,6 +214,45 @@ describe('GoogleDriveExcelClient', () => {
     expect(result.files.map((file) => file.fileName)).toEqual(
       Array.from({ length: 10 }, (_, index) => `成本-${String(index).padStart(2, '0')}.xlsx`),
     );
+  });
+
+  it('streams the maximum bounded workbook count without full workbook models', async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet('成本').addRows([
+      ['品號', '成本'],
+      ['A-01', 120],
+    ]);
+    const workbookBytes = await workbook.xlsx.writeBuffer();
+    const fetchTransport: GoogleFetch = async (input) => {
+      const url = String(input);
+      if (url.includes('alt=media')) return new Response(workbookBytes);
+      if (url.includes('/drive/v3/files?')) {
+        return Response.json({
+          files: Array.from({ length: 500 }, (_, index) => ({
+            id: `1BoundedWorkbookResource${String(index).padStart(3, '0')}`,
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            name: `成本-${String(index).padStart(3, '0')}.xlsx`,
+            size: String(workbookBytes.byteLength),
+          })),
+        });
+      }
+      return new Response('not found', { status: 404 });
+    };
+    const client = new GoogleDriveExcelClient({ fetchTransport });
+
+    const result = await client.readExcelFolder(TOKEN, FOLDER_ID, {
+      headerScanRows: 10,
+      includeSubfolders: true,
+      maxFileSizeBytes: 20_000_000,
+      maxFiles: 500,
+      maxRows: 100_000,
+      maxSheets: 1_000,
+    });
+
+    expect(result.files).toHaveLength(500);
+    expect(result.rows).toHaveLength(500);
+    expect(result.files[0]?.fileName).toBe('成本-000.xlsx');
+    expect(result.files[499]?.fileName).toBe('成本-499.xlsx');
   });
 
   it('uses a bounded resumable conversion for a legacy XLS workbook larger than 5 MB', async () => {

@@ -68,10 +68,14 @@ The Drive Excel reader accepts one validated folder identifier from the
 authenticated Tenant connection. It supports Google Sheets and binary `.xls`
 or `.xlsx` files, recursively visits approved subfolders, locates the first
 usable header row, merges a union of columns, and appends `_source_file` and
-`_source_sheet` provenance fields. `.xlsx` files are parsed as inert workbook
-data in server memory; formulas are read only as stored results and macros or
-embedded code are never executed. Legacy `.xls` files are converted to
-temporary app-created Google Sheets and deleted after reading.
+`_source_sheet` provenance fields. `.xlsx` files use a value-only streaming
+reader from an isolated ephemeral server path that is deleted immediately after
+parsing. Presentation styles are not retained; hyperlinks, drawings, and
+embedded code are excluded; and formulas are read only as stored results. A
+bounded style catalog is used only to preserve value interpretation such as
+dates. Selected decompressed workbook XML is capped at 64 MB, and macros are
+never executed. Legacy `.xls` files are converted to temporary app-created
+Google Sheets and deleted after reading.
 
 The matching report writer creates a styled `.xlsx` workbook in server memory
 and uploads it as a new file in the same Drive folder. It never overwrites a
@@ -91,10 +95,11 @@ legacy files use Drive's resumable upload protocol, remain capped at the same
 20 MB reviewed source limit, are converted only to a temporary Google Sheet,
 and are deleted after their inert cell values have been read.
 
-Independent `.xlsx` downloads use a fixed eight-request concurrency ceiling and
-are merged back in the deterministic Drive filename order. This keeps large
-folders within the Cloud execution window without changing file, worksheet,
-row, or byte limits.
+Independent `.xlsx` downloads use a fixed eight-request concurrency ceiling.
+The value-only parser uses one safety queue to avoid ExcelJS concurrent-reader
+races, while downloaded results are merged back in deterministic Drive filename
+order. This keeps large folders within the Cloud execution window without
+changing file, worksheet, row, or byte limits.
 
 Production Cloud workflow requests are capped at five minutes, while each
 validated node has a four-minute timeout. The remaining minute is reserved for
