@@ -9,7 +9,8 @@ import type { PlannerRequest } from './types';
 
 const GOOGLE_INTENT =
   /gmail|google\s*(?:drive|forms?|sheets?|slides?)|google\s*(?:雲端硬碟|表單|試算表|簡報)|drive\.google\.com|郵件|電子郵件|信箱/iu;
-const GMAIL_INTENT = /gmail|google\s*(?:mail|email)|郵件|電子郵件|信箱/iu;
+const GMAIL_INTENT =
+  /gmail|google\s*(?:mail|email)|(?:讀取|收集|擷取|整理|摘要|今日|今天).{0,24}(?:郵件|電子郵件|信箱)|(?:郵件|電子郵件|信箱).{0,24}(?:讀取|收集|擷取|整理|摘要|今日|今天)/iu;
 const FORM_INTENT = /google\s*(?:forms?|表單)|表單回覆|表單訂單/iu;
 const SHEETS_INTENT = /google\s*(?:sheets?|試算表)|雲端試算表/iu;
 const SUMMARY_INTENT =

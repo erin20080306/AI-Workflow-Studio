@@ -58,6 +58,16 @@ describe('workflow intent coverage', () => {
     });
   });
 
+  it('does not invent Gmail as a source when the request explicitly forbids email delivery', () => {
+    const intent = detectWorkflowIntent(
+      '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel，匯總成報表與 GAS，不要寄送郵件。',
+    );
+
+    expect(intent.requiredNodeTypes).not.toContain('gmail.read');
+    expect(intent.requiredNodeTypes).not.toContain('gmail.send');
+    expect(intent.requiredNodeTypes).toContain('google_drive.read_excel_folder');
+  });
+
   it('accepts a connected Gmail summary and rejects missing or invented capabilities', () => {
     const output = AIPlannerOutputSchema.parse({
       assumptions: [],

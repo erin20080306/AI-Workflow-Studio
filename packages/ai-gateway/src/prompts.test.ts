@@ -174,7 +174,7 @@ describe('planner prompts', () => {
         googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
       },
       prompt:
-        '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel，匯總成一份 Excel，產生摘要報告、5 頁 Google Slides 與核准型 GAS。',
+        '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel，匯總成一份 Excel，產生摘要報告、5 頁 Google Slides 與核准型 GAS，不要寄送郵件。',
     };
     const example = buildPlannerShapeExample(googleRequest);
 

@@ -187,7 +187,7 @@ function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput |
         maxFileSizeBytes: 5_000_000,
         maxFiles: 500,
         maxRows: 100_000,
-        maxSheets: 500,
+        maxSheets: 1_000,
       },
       id: 'read_drive_excel_folder',
       type: 'google_drive.read_excel_folder',

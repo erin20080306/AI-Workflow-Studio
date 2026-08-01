@@ -314,7 +314,7 @@ class DriveExcelFolderReadExecutor extends CloudNodeExecutor {
         maxFileSizeBytes: z.number().int().min(1).max(20_000_000),
         maxFiles: z.number().int().min(1).max(500),
         maxRows: z.number().int().min(1).max(100_000),
-        maxSheets: z.number().int().min(1).max(500),
+        maxSheets: z.number().int().min(1).max(2_000),
       })
       .strict()
       .parse(config);

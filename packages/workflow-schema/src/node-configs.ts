@@ -422,7 +422,7 @@ export const GoogleDriveReadExcelFolderNodeSchema = node(
       maxFileSizeBytes: z.number().int().min(1).max(20_000_000).default(5_000_000),
       maxFiles: z.number().int().min(1).max(500).default(100),
       maxRows: z.number().int().min(1).max(100_000).default(20_000),
-      maxSheets: z.number().int().min(1).max(500).default(100),
+      maxSheets: z.number().int().min(1).max(2_000).default(1_000),
     })
     .strict(),
 );

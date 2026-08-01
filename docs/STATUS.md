@@ -3621,13 +3621,20 @@ Status: implementation complete; Production acceptance pending
 - Google OAuth now requests `drive.readonly` in addition to the existing
   Workspace scopes. Existing Production connections must be re-authorized
   before the Drive reader can run.
+- Gmail source detection is separate from email delivery. A request that says
+  `不要寄送郵件` no longer invents a Gmail reader merely because it contains
+  the word `郵件`; Gmail is included only when the request identifies inbox
+  collection or reading as a source.
+- The Drive Excel safety envelope now permits up to 2,000 worksheets, while the
+  deterministic planner requests 1,000. This covers the currently observed 776
+  worksheets without removing the per-file, row, or byte bounds.
 
 ### Local validation
 
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
 - `pnpm typecheck`: passed
-- `pnpm test`: passed — 302 tests across 66 files, including Drive workbook
+- `pnpm test`: passed — 303 tests across 66 files, including Drive workbook
   conversion/merge/export, six-node planning, approval catalog, exact Slides
   count, GAS presentation binding, and model-tier fallback
 - `pnpm build:web`: passed — all 47 application pages compiled successfully.
