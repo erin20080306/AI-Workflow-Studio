@@ -3,6 +3,7 @@
 import { AIPlannerOutputSchema, type Workflow } from '@ai-workflow-studio/workflow-schema';
 import type { AiModelTierSelection } from '@ai-workflow-studio/usage-control';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 
@@ -15,7 +16,11 @@ import {
   SparkIcon,
 } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
-import { AssistantWorkflowDraftCreateResponseSchema } from '@/lib/assistant-execution-schema';
+import {
+  AssistantWorkflowDraftCreateResponseSchema,
+  AssistantWorkflowRunCreateResponseSchema,
+  type AssistantWorkflowDraftSummary,
+} from '@/lib/assistant-execution-schema';
 import type { AssistantExecutionTarget } from '@/lib/assistant-execution-targets';
 import {
   modelsForSelectedProvider,
@@ -36,7 +41,7 @@ const copy = {
     context: 'Trusted execution context',
     create: 'Create workflow with AI',
     description:
-      'A few words are enough. AI fills conservative defaults, validates Workflow JSON, and saves a draft automatically. It never activates or runs the workflow.',
+      'A few words are enough. AI fills conservative defaults, validates Workflow JSON, saves an immutable version, and starts it. External writes still pause for approval.',
     device: 'Execution target',
     draft: 'Validated workflow draft',
     error:
@@ -54,9 +59,10 @@ const copy = {
     planner: 'Automatic AI planner',
     provider: 'Model provider',
     planning: 'Planning, validating, and saving…',
+    running: 'Activating and starting the reviewed workflow…',
     prompt: 'What should be automated?',
     retrySave: 'The plan is valid, but the draft was not saved. Retry saving it below.',
-    savedHelp: 'It remains inactive. No file, service, or external data was changed.',
+    savedHelp: 'The immutable workflow version has been saved and sent to execution review.',
     targetHelp:
       'Only the displayed Agent and folder aliases are shared with the planner. Absolute paths stay on the Desktop Agent.',
     title: 'Describe the work in a few words',
@@ -71,7 +77,7 @@ const copy = {
     context: '可信任的執行情境',
     create: '由 AI 建立工作流',
     description:
-      '只要幾個字即可。AI 會補上保守預設、驗證 Workflow JSON，並自動儲存草稿；不會直接啟用或執行。',
+      '只要幾個字即可。AI 會補上保守預設、驗證 Workflow JSON、儲存不可變版本並開始執行；外部寫入仍會停在核准畫面。',
     device: '執行目標',
     draft: '已驗證的工作流草稿',
     error: 'AI 目前無法建立通過驗證的工作流；沒有儲存或執行任何內容，請稍後再試。',
@@ -87,9 +93,10 @@ const copy = {
     planner: 'AI 自動規劃器',
     provider: '模型提供者',
     planning: 'AI 正在規劃、驗證並儲存…',
+    running: '正在啟用並開始執行已檢查的工作流…',
     prompt: '想自動處理什麼？',
     retrySave: '規劃已通過驗證，但草稿尚未儲存；請在下方重新儲存。',
-    savedHelp: '目前仍未啟用，沒有變更任何檔案、服務或外部資料。',
+    savedHelp: '不可變更的工作流版本已儲存，並送往執行或核准畫面。',
     targetHelp: '規劃器只能看見畫面所列的 Agent 與資料夾別名；實際路徑仍只保存在桌面 Agent。',
     title: '用幾個字描述想自動化的工作',
     tier: '模型等級',
@@ -121,7 +128,11 @@ type DraftStatus =
   | { readonly status: 'idle' }
   | { readonly status: 'saving' }
   | { readonly status: 'failed' }
-  | { readonly status: 'saved'; readonly workflowId: string };
+  | {
+      readonly draftId: string;
+      readonly status: 'saved';
+      readonly workflowId: string;
+    };
 
 export function WorkflowComposer({
   executionTargets,
@@ -132,6 +143,7 @@ export function WorkflowComposer({
   platformAdmin: boolean;
   tierOptions: readonly AiTierOption[];
 }>) {
+  const router = useRouter();
   const { locale } = useLanguage();
   const text = copy[locale];
   const planningContext = useMemo(
@@ -158,7 +170,7 @@ export function WorkflowComposer({
     [provider, tierOptions],
   );
 
-  async function saveDraft(reference: PlanReference): Promise<void> {
+  async function saveDraft(reference: PlanReference): Promise<AssistantWorkflowDraftSummary> {
     setDraft({ status: 'saving' });
     try {
       const response = await fetch('/api/ai/workflow-drafts', {
@@ -170,10 +182,28 @@ export function WorkflowComposer({
       if (!response.ok || !parsed.success) {
         throw new Error('Workflow draft creation failed');
       }
-      setDraft({ status: 'saved', workflowId: parsed.data.draft.workflowId });
+      setDraft({
+        draftId: parsed.data.draft.id,
+        status: 'saved',
+        workflowId: parsed.data.draft.workflowId,
+      });
+      return parsed.data.draft;
     } catch {
       setDraft({ status: 'failed' });
+      throw new Error('Workflow draft creation failed');
     }
+  }
+
+  async function startDraftRun(draftSummary: AssistantWorkflowDraftSummary): Promise<void> {
+    const response = await fetch(
+      `/api/ai/workflow-drafts/${encodeURIComponent(draftSummary.id)}/runs`,
+      { method: 'POST' },
+    );
+    const parsed = AssistantWorkflowRunCreateResponseSchema.safeParse(await response.json());
+    if (!response.ok || !parsed.success) {
+      throw new Error('Workflow run creation failed');
+    }
+    router.push(`/dashboard/runs/${encodeURIComponent(parsed.data.run.id)}`);
   }
 
   async function createPreview(event: FormEvent<HTMLFormElement>) {
@@ -236,7 +266,8 @@ export function WorkflowComposer({
       setWorkflow(parsed.data.output.workflow);
       setPlannedModel({ model: parsed.data.model, provider: parsed.data.provider });
       setPlanReference(reference);
-      await saveDraft(reference);
+      const savedDraft = await saveDraft(reference);
+      await startDraftRun(savedDraft);
     } catch {
       setWorkflow(undefined);
       setPlannedModel(undefined);
@@ -347,7 +378,7 @@ export function WorkflowComposer({
                 disabled={planning}
                 type="submit"
               >
-                {planning ? text.planning : text.create}
+                {planning ? (draft.status === 'saved' ? text.running : text.planning) : text.create}
                 <ArrowRightIcon className="size-4" />
               </button>
               <button
@@ -432,7 +463,12 @@ export function WorkflowComposer({
               targetName: selectedTarget?.deviceName ?? text.cloud,
             }}
             {...(draft.status === 'failed' && planReference !== undefined
-              ? { onSaveDraft: () => saveDraft(planReference) }
+              ? {
+                  onSaveDraft: async () => {
+                    const savedDraft = await saveDraft(planReference);
+                    await startDraftRun(savedDraft);
+                  },
+                }
               : {})}
             savingDraft={draft.status === 'saving'}
             workflow={workflow}
