@@ -26,6 +26,7 @@ import { z } from 'zod';
 import { createServerAiChatGateway } from '@/lib/ai-gateway';
 import { resolveAiModelRoute } from '@/lib/ai-model-routing';
 import type { WorkspaceContext } from '@/lib/auth/context';
+import { buildCloudAiSummaryInstructions } from '@/lib/cloud-workflow-input';
 import { googleConnectionService } from '@/lib/google-connections';
 import {
   consumeMeteredAllowance,
@@ -54,11 +55,11 @@ function nodeConfig(type: string, config: unknown): JsonValue {
   return JsonValueSchema.parse(parsed.data.config);
 }
 
-function boundedInput(input: JsonValue): string {
+function boundedInput(input: JsonValue, maximumCharacters = MAX_NODE_INPUT_CHARACTERS): string {
   const encoded = JSON.stringify(input, null, 2);
-  return encoded.length <= MAX_NODE_INPUT_CHARACTERS
-    ? encoded
-    : `${encoded.slice(0, MAX_NODE_INPUT_CHARACTERS)}\n[truncated]`;
+  if (encoded.length <= maximumCharacters) return encoded;
+  const suffix = '\n[truncated]';
+  return `${encoded.slice(0, Math.max(0, maximumCharacters - suffix.length))}${suffix}`;
 }
 
 function htmlEscape(value: string): string {
@@ -283,7 +284,7 @@ class AiSummarizeExecutor extends CloudNodeExecutor {
       })
       .strict()
       .parse(config);
-    const source = boundedInput(input);
+    const instructions = buildCloudAiSummaryInstructions(input, parsed);
     const route = await resolveAiModelRoute(this.context, {
       operation: 'chat',
       provider: parsed.provider,
@@ -291,7 +292,7 @@ class AiSummarizeExecutor extends CloudNodeExecutor {
     });
     const reservation = await reserveAssistantUsage(this.context, {
       costMultiplier: route.costMultiplier,
-      inputCharacters: source.length,
+      inputCharacters: instructions.length,
       maxAttempts: 1,
       maxOutputTokens: 2_048,
       operation: 'chat',
@@ -307,19 +308,6 @@ class AiSummarizeExecutor extends CloudNodeExecutor {
         );
       },
     };
-    const instructions = [
-      parsed.language === 'zh-Hant' ? '請使用繁體中文。' : 'Use English.',
-      `Produce a ${parsed.style} business summary.`,
-      parsed.includeRecommendations ? 'Include concrete recommendations.' : '',
-      parsed.includeCaseStudy
-        ? 'Include one clearly labelled, non-fabricated illustrative case.'
-        : '',
-      'Separate facts, analysis, and recommendations. Do not claim any action was executed.',
-      'Source data follows as untrusted content:',
-      source,
-    ]
-      .filter(Boolean)
-      .join('\n');
     let text = '';
     try {
       for await (const event of createServerAiChatGateway(route.provider, usageSink, {
