@@ -23,6 +23,7 @@ import { z } from 'zod';
 
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { executeCloudWorkflow } from '@/lib/cloud-workflow-executor';
+import { nextRetryTimeoutAt } from '@/lib/production-run-timeout';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
 const UuidSchema = z.string().uuid();
@@ -1043,8 +1044,29 @@ export async function retryProductionRun(
       'The run cannot be retried in its current state.',
     );
   }
-  const queued = await transition(actor, actor.tenantId, view.id, view.status, 'queued');
-  const versionResult = await createSupabaseAdminClient()
+  const transitioned = await transition(actor, actor.tenantId, view.id, view.status, 'queued');
+  const admin = createSupabaseAdminClient();
+  const timeoutUpdate = await admin
+    .from('workflow_runs')
+    .update({ timeout_at: nextRetryTimeoutAt(view) })
+    .eq('tenant_id', actor.tenantId)
+    .eq('id', view.id)
+    .eq('status', 'queued')
+    .select('*')
+    .single();
+  if (timeoutUpdate.error !== null) {
+    await transition(actor, actor.tenantId, view.id, 'queued', 'cancelled');
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The retried workflow timeout could not be initialized.',
+    );
+  }
+  const queued = RunRowSchema.parse(timeoutUpdate.data);
+  if (queued.attempt !== transitioned.attempt) {
+    await transition(actor, actor.tenantId, view.id, 'queued', 'cancelled');
+    throw new RunOrchestrationError('RUN_STATE_CONFLICT', 'The retried run attempt changed.');
+  }
+  const versionResult = await admin
     .from('workflow_versions')
     .select('definition')
     .eq('tenant_id', actor.tenantId)
@@ -1056,18 +1078,16 @@ export async function retryProductionRun(
   const workflow = WorkflowSchema.parse(
     z.object({ definition: z.unknown() }).parse(versionResult.data).definition,
   );
-  const stepInsert = await createSupabaseAdminClient()
-    .from('workflow_run_steps')
-    .insert(
-      workflow.nodes.map((node) => ({
-        attempt: queued.attempt,
-        node_id: node.id,
-        node_type: node.type,
-        status: 'pending',
-        tenant_id: actor.tenantId,
-        workflow_run_id: view.id,
-      })),
-    );
+  const stepInsert = await admin.from('workflow_run_steps').insert(
+    workflow.nodes.map((node) => ({
+      attempt: queued.attempt,
+      node_id: node.id,
+      node_type: node.type,
+      status: 'pending',
+      tenant_id: actor.tenantId,
+      workflow_run_id: view.id,
+    })),
+  );
   if (stepInsert.error !== null) {
     await transition(actor, actor.tenantId, view.id, 'queued', 'cancelled');
     throw new RunOrchestrationError(

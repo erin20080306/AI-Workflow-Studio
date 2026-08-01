@@ -58,3 +58,4 @@ export async function GET(request: Request): Promise<Response> {
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const maxDuration = 800;

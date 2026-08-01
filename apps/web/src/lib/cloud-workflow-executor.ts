@@ -37,7 +37,7 @@ import {
   reserveAssistantUsage,
 } from '@/lib/usage-control-server';
 
-const CLOUD_STEP_TIMEOUT_MS = 240_000;
+const CLOUD_STEP_TIMEOUT_MS = 600_000;
 const UuidSchema = z.string().uuid();
 const GoogleResourceIdSchema = z
   .string()

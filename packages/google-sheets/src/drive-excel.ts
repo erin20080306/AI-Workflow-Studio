@@ -38,7 +38,7 @@ const MAX_API_RESPONSE_BYTES = 10_000_000;
 const MAX_MULTIPART_BYTES = 5_000_000;
 const MAX_RESUMABLE_BYTES = 20_000_000;
 const MAX_XLSX_XML_BYTES = 64_000_000;
-const XLSX_DOWNLOAD_CONCURRENCY = 16;
+const XLSX_DOWNLOAD_CONCURRENCY = 24;
 
 export interface DriveExcelSource {
   readonly fileId: string;

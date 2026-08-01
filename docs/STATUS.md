@@ -3655,19 +3655,26 @@ Status: implementation complete; Production acceptance pending
   64 MB of selected decompressed XML, excludes workbook presentation metadata,
   creates no temporary workbook file, raises the bounded download ceiling from
   8 to 16, and has regression coverage at the hard 500-workbook envelope.
-  Production re-acceptance remains pending until this parser change is deployed;
-  both failed attempts produced no report, Slides, Apps Script project, or
-  email.
+  A fresh Production Run `4f629f4b-3c97-4689-bcfe-13d8fca59309` verified that
+  the replacement parser passed the former implementation boundary but still
+  exceeded the four-minute node limit for the 481-workbook folder. The Vercel
+  Pro Cloud routes now use the documented 800-second Fluid Compute ceiling, the
+  Drive reader has a ten-minute per-step ceiling, and its deterministic bounded
+  download pool is raised from 16 to 24. Retry initialization also starts a
+  fresh bounded Run timeout window instead of retaining the previous attempt's
+  expired deadline. Production re-acceptance remains pending until this change
+  is deployed; all failed attempts produced no report, Slides, Apps Script
+  project, or email.
 
 ### Local validation
 
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
 - `pnpm typecheck`: passed
-- `pnpm test`: passed — 307 tests across 66 files, including Drive workbook
+- `pnpm test`: passed — 309 tests across 67 files, including Drive workbook
   conversion/merge/export, value-only streaming at the 500-workbook hard limit,
   six-node planning, approval catalog, exact Slides count, GAS presentation
-  binding, and model-tier fallback
+  binding, model-tier fallback, and fresh retry timeout-window initialization
 - `pnpm build:web`: passed — all 47 application pages compiled successfully.
   The sandboxed Turbopack attempt could not bind its worker port; the identical
   permitted retry passed.

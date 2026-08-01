@@ -210,7 +210,7 @@ describe('GoogleDriveExcelClient', () => {
     });
 
     expect(maximumDownloads).toBeGreaterThan(1);
-    expect(maximumDownloads).toBeLessThanOrEqual(16);
+    expect(maximumDownloads).toBeLessThanOrEqual(24);
     expect(result.files.map((file) => file.fileName)).toEqual(
       Array.from({ length: 20 }, (_, index) => `成本-${String(index).padStart(2, '0')}.xlsx`),
     );
