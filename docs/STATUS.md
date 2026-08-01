@@ -3459,6 +3459,10 @@ Status: in progress
 - The five explicitly authorized Supabase migrations were applied to
   Production and local/remote migration versions matched through
   `202608010002_platform_admin_usage_override.sql`.
+- The sixth Cloud-schedule migration and seventh platform-administrator
+  workflow-limit migration were explicitly authorized and applied to
+  Production. Local and remote migration versions now match through
+  `202608010004_platform_admin_workflow_limit_override.sql`.
 - Commit `9794f24` was pushed to `codex/ai-workflow-platform`; Vercel Production
   deployment `dpl_AgBDuPZttxsdEk6nnDdURRwCJ83D` completed and was aliased to
   `https://www.erin-aiworkflowstudio.com`.
@@ -3488,7 +3492,7 @@ Status: in progress
 - A repeated authenticated Production attempt isolated the remaining `23514`
   failure to the Store subscription workflow-count trigger: the Tenant had
   reached its Free workflow allowance before the platform-administrator
-  acceptance Run could create its immutable workflow. The pending migration
+  acceptance Run could create its immutable workflow. The applied migration
   `202608010004_platform_admin_workflow_limit_override.sql` gives only an active
   platform administrator a workflow/Run-count support override. Normal members,
   inactive administrators, device/member limits, validation, approval, provider,
@@ -3498,16 +3502,26 @@ Status: in progress
   first sandboxed Turbopack attempt could not bind its worker port; the
   identical permitted retry passed.
 - The workflow-limit fix passed formatting, lint, strict typecheck, all 279 unit
-  tests, and the 47-page Production web build. `supabase db push --dry-run`
-  confirmed that only
-  `202608010004_platform_admin_workflow_limit_override.sql` is pending. The
-  isolated database test remains unavailable because the local Docker daemon is
-  not running; no test was disabled or bypassed.
+  tests, and the 47-page Production web build. Before authorization,
+  `supabase db push --dry-run` confirmed that only
+  `202608010004_platform_admin_workflow_limit_override.sql` was pending. After
+  authorization, the linked push succeeded and the local/remote migration list
+  matched. The isolated database test remains unavailable because the local
+  Docker daemon is not running; no test was disabled or bypassed.
+- Authenticated Production acceptance then created immutable Workflow v1 and
+  Run `bb978787-ab86-49ed-b4cb-fa7af0551cd8` from one natural-language request.
+  The validated graph contained `data.inline` → `ai.summarize` →
+  `report.compose`. Its single non-destructive first-run write approval was
+  reviewed and approved; attempt 1 completed all three nodes successfully. The
+  Run detail showed the complete queued, running, succeeded, and
+  `cloud_run.succeeded` audit sequence plus completion notifications. Cloud Run
+  success is recorded only after every step output summary is persisted.
 - Production does not currently contain `GOOGLE_CLIENT_ID`,
   `GOOGLE_CLIENT_SECRET`, or `GOOGLE_REDIRECT_URI`; therefore a real Google
   Workspace reconnection and Gmail-to-report live run cannot yet pass.
-- The defect-fix commit, replacement Vercel Production deployment, and
-  authenticated source-to-summary-to-report live run remain pending. Google
-  Workspace reconnection is separately required before Gmail, Sheets, Forms,
-  Slides, or Apps Script acceptance can pass. The phase must not be described
-  as complete until the applicable steps pass.
+- The defect-fix commits were pushed and the corrected application is active on
+  the canonical Production domain. The bounded inline
+  source-to-summary-to-report live Run has passed. Google Workspace
+  reconnection is separately required before Gmail, Sheets, Forms, Slides, or
+  Apps Script acceptance can pass, and Desktop Agent pairing is still required
+  for a real local Excel Run. Phase 47 therefore remains in progress.
