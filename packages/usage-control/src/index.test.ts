@@ -28,6 +28,17 @@ describe('usage control', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('reserves for the worst-case token density of CJK and structured input', () => {
+    const characters = 12_000;
+    expect(
+      estimateMaximumAiCostMicrounits({
+        inputCharacters: characters,
+        maxOutputTokens: 2_048,
+        provider: 'anthropic',
+      }),
+    ).toBe(estimateAiCostMicrounits('anthropic', characters, 2_048));
+  });
+
   it('opens model tiers only when the effective plan can fund them', () => {
     expect(allowedAiModelTiers('free')).toEqual(['economy']);
     expect(allowedAiModelTiers('pro')).toEqual(['economy', 'standard']);

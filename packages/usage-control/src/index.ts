@@ -70,6 +70,16 @@ export function estimateTextTokens(text: string): number {
   return Math.max(1, Math.ceil([...text].length / 3));
 }
 
+function estimateMaximumTextTokens(characterCount: number): number {
+  const characters = z.number().int().nonnegative().max(100_000).parse(characterCount);
+  // Budget reservations must be safe for CJK text, JSON punctuation, identifiers,
+  // and other content that can tokenize close to one token per Unicode scalar.
+  // The regular estimator remains useful for reporting, while reservations use
+  // this deliberately conservative upper bound so a completed provider response
+  // is never rejected merely because its source was not mostly English prose.
+  return characters;
+}
+
 export function estimateAiCostMicrounits(
   provider: UsageProvider,
   inputTokens: number,
@@ -101,7 +111,7 @@ export function estimateMaximumAiCostMicrounits(input: {
   return (
     estimateAiCostMicrounits(
       input.provider,
-      estimateTextTokens('x'.repeat(Math.min(characters, 100_000))),
+      estimateMaximumTextTokens(Math.min(characters, 100_000)),
       maxOutputTokens,
       input.costMultiplier,
     ) * attempts
