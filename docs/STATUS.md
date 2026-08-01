@@ -3631,6 +3631,10 @@ Status: implementation complete; Production acceptance pending
 - Connected Google Workspace plans now always target the Cloud executor, even
   when a paired Desktop Agent is available. Production acceptance exposed and
   cancelled one incorrectly queued Desktop attempt before it processed data.
+- The grounded Drive planner now uses the existing 20 MB per-`.xlsx` source
+  hard limit instead of a stricter 5 MB planning value. Production acceptance
+  showed the current folder reaches a larger source workbook after 41 seconds;
+  legacy `.xls` conversion remains capped at the 5 MB multipart boundary.
 
 ### Local validation
 

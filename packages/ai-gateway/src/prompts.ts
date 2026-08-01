@@ -184,7 +184,7 @@ function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput |
         folderId,
         headerScanRows: 30,
         includeSubfolders: true,
-        maxFileSizeBytes: 5_000_000,
+        maxFileSizeBytes: 20_000_000,
         maxFiles: 500,
         maxRows: 100_000,
         maxSheets: 1_000,

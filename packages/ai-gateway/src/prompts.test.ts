@@ -203,6 +203,7 @@ describe('planner prompts', () => {
       config: {
         folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
         includeSubfolders: true,
+        maxFileSizeBytes: 20_000_000,
       },
       type: 'google_drive.read_excel_folder',
     });

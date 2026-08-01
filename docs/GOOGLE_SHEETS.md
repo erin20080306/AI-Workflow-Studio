@@ -79,8 +79,9 @@ customer file and uses an app-owned idempotency marker so a repeated workflow
 attempt returns the same metadata result. The workflow schema bounds each
 request to 20 MB per `.xlsx` source file, 5 MB for legacy `.xls` conversion,
 500 files, 2,000 sheets, and 100,000 merged rows. The deterministic planner
-uses a reviewed default of 1,000 sheets so the current cost folder's 776
-worksheets remain inside the safe envelope. The complete limits are visible
+uses the 20 MB source-file limit and a reviewed default of 1,000 sheets so the
+current cost folder's 776 worksheets remain inside the safe envelope. The
+complete limits are visible
 in the reviewed workflow before execution, and external outputs still require
 approval. Read operations fail closed when an existing OAuth connection lacks
 `drive.readonly`.
