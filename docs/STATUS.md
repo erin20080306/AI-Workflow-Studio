@@ -3485,11 +3485,23 @@ Status: in progress
   a safe stage name and database error code to server logs, without prompt,
   credential, or business-data content. The corrected cloud-fallback text also
   describes the complete source → AI summary → report flow it actually builds.
+- A repeated authenticated Production attempt isolated the remaining `23514`
+  failure to the Store subscription workflow-count trigger: the Tenant had
+  reached its Free workflow allowance before the platform-administrator
+  acceptance Run could create its immutable workflow. The pending migration
+  `202608010004_platform_admin_workflow_limit_override.sql` gives only an active
+  platform administrator a workflow/Run-count support override. Normal members,
+  inactive administrators, device/member limits, validation, approval, provider,
+  rate, audit, and usage controls remain enforced.
 - The defect-fix verification passed `pnpm format:check`, `pnpm lint`,
   `pnpm typecheck`, all 279 tests, and the 47-page Production web build. The
   first sandboxed Turbopack attempt could not bind its worker port; the
   identical permitted retry passed.
-- The isolated database test could not start because the local Docker daemon is
+- The workflow-limit fix passed formatting, lint, strict typecheck, all 279 unit
+  tests, and the 47-page Production web build. `supabase db push --dry-run`
+  confirmed that only
+  `202608010004_platform_admin_workflow_limit_override.sql` is pending. The
+  isolated database test remains unavailable because the local Docker daemon is
   not running; no test was disabled or bypassed.
 - Production does not currently contain `GOOGLE_CLIENT_ID`,
   `GOOGLE_CLIENT_SECRET`, or `GOOGLE_REDIRECT_URI`; therefore a real Google

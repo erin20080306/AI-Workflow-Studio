@@ -316,6 +316,61 @@ values (
   'Database authorization test bootstrap'
 );
 
+insert into public.workflows (tenant_id, created_by, name)
+values (
+  '20000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  'Platform administrator acceptance workflow'
+);
+
+do $$
+declare
+  target_version public.workflow_versions;
+begin
+  select * into target_version
+  from public.workflow_versions
+  where tenant_id = '20000000-0000-0000-0000-000000000001'
+  order by created_at
+  limit 1;
+
+  insert into public.workflow_runs (
+    tenant_id,
+    workflow_id,
+    workflow_version_id,
+    triggered_by,
+    status,
+    idempotency_key
+  )
+  values (
+    target_version.tenant_id,
+    target_version.workflow_id,
+    target_version.id,
+    '10000000-0000-0000-0000-000000000001',
+    'pending',
+    'platform-admin-limit-override-run'
+  );
+end;
+$$;
+
+select tests.assert_true(
+  (
+    select count(*)
+    from public.workflows
+    where tenant_id = '20000000-0000-0000-0000-000000000001'
+      and status <> 'archived'
+  ) = 4,
+  'an active platform administrator must be able to create an auditable acceptance workflow after the Tenant limit'
+);
+
+select tests.assert_true(
+  (
+    select count(*)
+    from public.workflow_runs
+    where tenant_id = '20000000-0000-0000-0000-000000000001'
+  ) = 101,
+  'an active platform administrator must be able to create an auditable acceptance Run after the monthly limit'
+);
+
 select public.platform_admin_change_tenant_plan(
   '10000000-0000-0000-0000-000000000001',
   '20000000-0000-0000-0000-000000000001',
