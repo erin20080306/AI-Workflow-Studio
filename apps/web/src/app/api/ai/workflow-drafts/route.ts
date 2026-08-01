@@ -12,6 +12,19 @@ export async function POST(request: Request): Promise<Response> {
       { headers: { 'cache-control': 'no-store' }, status: 201 },
     );
   } catch (error) {
+    console.error(
+      JSON.stringify({
+        assistantWorkflowDraftRequestFailure: {
+          code:
+            typeof error === 'object' &&
+            error !== null &&
+            'code' in error &&
+            typeof error.code === 'string'
+              ? error.code
+              : 'RUN_STATE_CONFLICT',
+        },
+      }),
+    );
     return runApiError(error);
   }
 }

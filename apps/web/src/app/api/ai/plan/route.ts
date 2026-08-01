@@ -2,6 +2,7 @@ import {
   AiGatewayError,
   PlannerRequestSchema,
   detectWorkflowIntent,
+  type PlannerResult,
 } from '@ai-workflow-studio/ai-gateway';
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
@@ -40,6 +41,21 @@ const ApiPlannerRequestSchema = PlannerRequestSchema.extend({
   provider: AiModelSelectionSchema.shape.provider.default('auto'),
   tier: AiModelSelectionSchema.shape.tier.default('auto'),
 }).strict();
+
+const RETRYABLE_AUTO_PROVIDER_CODES = new Set([
+  'AI_OUTPUT_INVALID',
+  'AI_PROVIDER_AUTHENTICATION_FAILED',
+  'AI_PROVIDER_NOT_CONFIGURED',
+  'AI_PROVIDER_QUOTA_EXCEEDED',
+  'AI_PROVIDER_RATE_LIMITED',
+  'AI_PROVIDER_REQUEST_FAILED',
+  'AI_PROVIDER_RESPONSE_INVALID',
+  'AI_PROVIDER_TIMEOUT',
+]);
+
+function canRetryAutoProvider(error: unknown): error is AiGatewayError {
+  return error instanceof AiGatewayError && RETRYABLE_AUTO_PROVIDER_CODES.has(error.code);
+}
 
 export async function POST(request: Request): Promise<Response> {
   const contentLength = Number(request.headers.get('content-length') ?? '0');
@@ -205,28 +221,56 @@ export async function POST(request: Request): Promise<Response> {
       messageId: userMessage.id,
     });
     const boundedPrompt = renderPreparedSources(trustedPlannerRequest.prompt, sources, 8_000);
-    usageReservation = await reserveAssistantUsage(workspace, {
-      inputCharacters: boundedPrompt.length,
-      maxAttempts: trustedPlannerRequest.maxRepairAttempts + 1,
-      maxOutputTokens: 4_096,
-      operation: 'workflow_plan',
-      provider: route.provider,
-      costMultiplier: route.costMultiplier,
-    });
-    const result = await createServerAiGateway(
-      route.provider,
-      createAssistantUsageSink(workspace, conversation.id, usageReservation),
-      {
-        model: route.model,
-        ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: route.reasoningEffort }),
-      },
-    ).plan(
-      {
-        ...trustedPlannerRequest,
-        prompt: boundedPrompt,
-      },
-      request.signal,
-    );
+    const attemptedProviders = new Set<ResolvedAiModelRoute['provider']>();
+    let result: PlannerResult | undefined;
+    while (result === undefined) {
+      const activeRoute = route;
+      usageReservation = await reserveAssistantUsage(workspace, {
+        inputCharacters: boundedPrompt.length,
+        maxAttempts: trustedPlannerRequest.maxRepairAttempts + 1,
+        maxOutputTokens: 4_096,
+        operation: 'workflow_plan',
+        provider: activeRoute.provider,
+        costMultiplier: activeRoute.costMultiplier,
+      });
+      try {
+        result = await createServerAiGateway(
+          activeRoute.provider,
+          createAssistantUsageSink(workspace, conversation.id, usageReservation),
+          {
+            model: activeRoute.model,
+            ...(activeRoute.reasoningEffort === undefined
+              ? {}
+              : { reasoningEffort: activeRoute.reasoningEffort }),
+          },
+        ).plan(
+          {
+            ...trustedPlannerRequest,
+            prompt: boundedPrompt,
+          },
+          request.signal,
+        );
+      } catch (error) {
+        await usageReservation.release().catch(() => undefined);
+        usageReservation = undefined;
+        if (providerSelection !== 'auto' || !canRetryAutoProvider(error)) throw error;
+        attemptedProviders.add(activeRoute.provider);
+        console.warn(
+          JSON.stringify({
+            aiPlanProviderFallback: {
+              code: error.code,
+              provider: activeRoute.provider,
+            },
+          }),
+        );
+        route = await resolveAiModelRoute(workspace, {
+          excludedProviders: [...attemptedProviders],
+          operation: 'workflow_plan',
+          provider: 'auto',
+          tier,
+        });
+      }
+    }
     const routedOutput = AIPlannerOutputSchema.parse({
       ...result.output,
       workflow: {

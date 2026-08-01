@@ -48,6 +48,21 @@ const DraftRowSchema = z.object({
   workflow_version_id: z.string().uuid(),
 });
 
+function logDraftPersistenceFailure(stage: string, error: unknown): void {
+  const databaseCode =
+    typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+      ? error.code
+      : undefined;
+  console.error(
+    JSON.stringify({
+      assistantWorkflowDraftFailure: {
+        ...(databaseCode === undefined ? {} : { databaseCode }),
+        stage,
+      },
+    }),
+  );
+}
+
 function assertCanCreate(context: WorkspaceContext): void {
   if (context.actor.role === 'viewer') {
     throw new RunOrchestrationError(
@@ -173,6 +188,7 @@ export async function createAssistantWorkflowDraft(
     .eq('message_id', input.messageId)
     .maybeSingle();
   if (existingResult.error !== null) {
+    logDraftPersistenceFailure('read_existing_draft', existingResult.error);
     throw new RunOrchestrationError('RUN_STATE_CONFLICT', 'The workflow draft could not be read.');
   }
   if (existingResult.data !== null) {
@@ -199,7 +215,11 @@ export async function createAssistantWorkflowDraft(
     tenant_id: context.actor.tenantId,
   });
   if (workflowInsert.error !== null) {
-    throw new RunOrchestrationError('RUN_STATE_CONFLICT', 'The workflow draft could not be saved.');
+    logDraftPersistenceFailure('create_workflow', workflowInsert.error);
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The workflow record could not be created.',
+    );
   }
 
   const versionInsert = await admin.from('workflow_versions').insert({
@@ -239,12 +259,28 @@ export async function createAssistantWorkflowDraft(
       : { data: null, error: activeVersionUpdate.error };
   const row = DraftRowSchema.safeParse(draftInsert.data);
   if (versionInsert.error !== null || activeVersionUpdate.error !== null || !row.success) {
+    if (versionInsert.error !== null) {
+      logDraftPersistenceFailure('create_workflow_version', versionInsert.error);
+    } else if (activeVersionUpdate.error !== null) {
+      logDraftPersistenceFailure('link_active_version', activeVersionUpdate.error);
+    } else if ('error' in draftInsert && draftInsert.error !== null) {
+      logDraftPersistenceFailure('link_assistant_draft', draftInsert.error);
+    } else {
+      logDraftPersistenceFailure('parse_assistant_draft', row.error);
+    }
     await admin
       .from('workflows')
       .delete()
       .eq('id', workflowId)
       .eq('tenant_id', context.actor.tenantId);
-    throw new RunOrchestrationError('RUN_STATE_CONFLICT', 'The workflow draft could not be saved.');
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      versionInsert.error !== null
+        ? 'The immutable workflow version could not be created.'
+        : activeVersionUpdate.error !== null
+          ? 'The immutable workflow version could not be linked.'
+          : 'The assistant plan could not be linked to the workflow version.',
+    );
   }
   const audit = await admin.from('audit_logs').insert({
     action: 'assistant.workflow_draft_created',
@@ -261,6 +297,7 @@ export async function createAssistantWorkflowDraft(
     tenant_id: context.actor.tenantId,
   });
   if (audit.error !== null) {
+    logDraftPersistenceFailure('audit_workflow_draft', audit.error);
     await admin
       .from('workflows')
       .delete()

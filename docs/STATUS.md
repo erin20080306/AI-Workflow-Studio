@@ -3477,12 +3477,25 @@ Status: in progress
 - The owner confirmed the Production Vercel account is Pro. A secured
   fifteen-minute Vercel Cron tick is therefore included for unattended
   recurring Cloud and Desktop workflow dispatch.
+- Authenticated Production testing exposed two additional defects before a run
+  could be accepted: Auto stopped after the first provider failure, and the
+  reviewed three-node plan failed while creating its immutable workflow draft.
+  Auto now retries the next verified provider for bounded provider, quota,
+  timeout, response, or validation failures. Draft persistence now reports only
+  a safe stage name and database error code to server logs, without prompt,
+  credential, or business-data content. The corrected cloud-fallback text also
+  describes the complete source → AI summary → report flow it actually builds.
+- The defect-fix verification passed `pnpm format:check`, `pnpm lint`,
+  `pnpm typecheck`, all 279 tests, and the 47-page Production web build. The
+  first sandboxed Turbopack attempt could not bind its worker port; the
+  identical permitted retry passed.
 - The isolated database test could not start because the local Docker daemon is
   not running; no test was disabled or bypassed.
 - Production does not currently contain `GOOGLE_CLIENT_ID`,
   `GOOGLE_CLIENT_SECRET`, or `GOOGLE_REDIRECT_URI`; therefore a real Google
   Workspace reconnection and Gmail-to-report live run cannot yet pass.
-- The updated commit, replacement Vercel Production deployment, Google
-  Workspace reconnection, and authenticated
-  source-to-summary-to-report live run remain pending. The phase must not be
-  described as complete until these steps pass.
+- The defect-fix commit, replacement Vercel Production deployment, and
+  authenticated source-to-summary-to-report live run remain pending. Google
+  Workspace reconnection is separately required before Gmail, Sheets, Forms,
+  Slides, or Apps Script acceptance can pass. The phase must not be described
+  as complete until the applicable steps pass.

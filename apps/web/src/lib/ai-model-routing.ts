@@ -192,6 +192,7 @@ function providerHealthError(status: AiProviderHealthStatus): AiGatewayError {
 export async function resolveAiModelRoute(
   context: WorkspaceContext,
   input: {
+    readonly excludedProviders?: readonly AiProviderName[];
     readonly operation: Extract<UsageOperation, 'chat' | 'workflow_plan' | 'website_generation'>;
     readonly provider: AiProviderSelection;
     readonly tier: AiModelTierSelection;
@@ -236,6 +237,7 @@ export async function resolveAiModelRoute(
         : [input.provider];
   let explicitProviderError: AiGatewayError | undefined;
   for (const provider of requestedProviders) {
+    if (input.excludedProviders?.includes(provider) === true) continue;
     if (!environment.providers[provider]) continue;
     const mapping = mappings.find(
       (candidate) =>

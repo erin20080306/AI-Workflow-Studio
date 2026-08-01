@@ -155,8 +155,9 @@ export function buildPlannerSafeFallback(
         ? []
         : [`Rejected provider validation classes: ${validationClasses.join(', ')}.`]),
     ],
-    explanation:
-      'A safe, disabled validation draft was created automatically. Connect an approved source or Desktop Agent before extending it with file access or execution.',
+    explanation: example.workflow.nodes.some((node) => node.type === 'data.inline')
+      ? 'A complete, validated cloud flow was created from the approved text: source, AI summary, and auditable report.'
+      : 'A safe, disabled validation draft was created automatically. Connect an approved source or Desktop Agent before extending it with file access or execution.',
   });
 }
 
