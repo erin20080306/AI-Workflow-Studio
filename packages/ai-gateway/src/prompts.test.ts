@@ -171,6 +171,11 @@ describe('planner prompts', () => {
       ...request,
       context: {
         ...request.context,
+        allowedFolderAliasIds: ['10000000-0000-4000-8000-000000000912'],
+        executionTarget: {
+          deviceId: '10000000-0000-4000-8000-000000000913',
+          type: 'desktop',
+        },
         googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
       },
       prompt:

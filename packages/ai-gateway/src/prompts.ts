@@ -371,7 +371,7 @@ function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput |
       description:
         'Read an approved Google Workspace source and create the requested reviewable AI artifacts.',
       edges,
-      executionTarget: request.context.executionTarget,
+      executionTarget: { type: 'cloud' },
       name:
         request.context.locale === 'en'
           ? 'Google Workspace AI report'

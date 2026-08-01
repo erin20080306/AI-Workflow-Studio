@@ -3628,6 +3628,9 @@ Status: implementation complete; Production acceptance pending
 - The Drive Excel safety envelope now permits up to 2,000 worksheets, while the
   deterministic planner requests 1,000. This covers the currently observed 776
   worksheets without removing the per-file, row, or byte bounds.
+- Connected Google Workspace plans now always target the Cloud executor, even
+  when a paired Desktop Agent is available. Production acceptance exposed and
+  cancelled one incorrectly queued Desktop attempt before it processed data.
 
 ### Local validation
 
