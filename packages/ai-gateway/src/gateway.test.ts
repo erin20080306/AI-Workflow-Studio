@@ -175,6 +175,53 @@ describe('AiGateway', () => {
     ]);
   });
 
+  it('repairs a valid but incomplete provider plan with an intent-complete Gmail fallback', async () => {
+    const incomplete = JSON.stringify({
+      assumptions: [],
+      explanation: 'Validate input.',
+      mappingProposals: [],
+      workflow: {
+        description: 'Incomplete validation plan',
+        edges: [],
+        executionTarget: { type: 'cloud' },
+        name: 'Incomplete',
+        nodes: [
+          {
+            config: {
+              onInvalid: 'separate',
+              rules: [{ dataType: 'string', field: 'id', required: true }],
+            },
+            id: 'validate_input',
+            type: 'data.validate',
+            version: 1,
+          },
+        ],
+        schemaVersion: 1,
+        trigger: { config: {}, type: 'manual.trigger' },
+      },
+    });
+    const result = await new AiGateway(
+      new StaticAdapter([incomplete]),
+      new InMemoryUsageSink(),
+    ).plan({
+      context: {
+        allowedFolderAliasIds: [],
+        executionTarget: { type: 'cloud' },
+        googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
+        locale: 'zh-Hant',
+        timezone: 'Asia/Taipei',
+      },
+      maxRepairAttempts: 0,
+      prompt: '整理今日 Gmail，產生摘要報告，不要寄信',
+    });
+
+    expect(result.output.workflow.nodes.map((node) => node.type)).toEqual([
+      'gmail.read',
+      'ai.summarize',
+      'report.compose',
+    ]);
+  });
+
   it('withholds a valid output when usage logging fails', async () => {
     const failingSink: UsageSink = {
       async record() {

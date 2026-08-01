@@ -10,6 +10,171 @@ import { detectWorkflowIntent } from './workflow-intent';
 
 const ALLOWED_NODE_TYPES = NODE_CATALOG.map((node) => node.type).join(', ');
 
+const EMAIL_ADDRESS_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
+const FORM_ID_PATTERN = /forms\/d\/(?:e\/)?([A-Za-z0-9_-]{10,240})/iu;
+const SHEET_ID_PATTERN = /spreadsheets\/d\/([A-Za-z0-9_-]{10,200})/iu;
+
+function firstMatch(prompt: string, pattern: RegExp): string | undefined {
+  return pattern.exec(prompt)?.[1];
+}
+
+function requestedSlideCount(prompt: string): number {
+  const requested = /(?:建立|產生|create)?\s*(\d{1,2})\s*(?:頁|張|slides?)/iu.exec(prompt)?.[1];
+  const count = requested === undefined ? 10 : Number(requested);
+  return Math.min(30, Math.max(3, count));
+}
+
+function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput | undefined {
+  const intent = detectWorkflowIntent(request.prompt);
+  const required = new Set(intent.requiredNodeTypes);
+  const connectionId = request.context.googleConnectionIds[0];
+  if (connectionId === undefined || !intent.needsGoogleConnection) return undefined;
+
+  const nodes: unknown[] = [];
+  const edges: { from: string; to: string }[] = [];
+  const sourceIds: string[] = [];
+  if (required.has('gmail.read')) {
+    nodes.push({
+      config: {
+        connectionId,
+        includeBody: true,
+        maxMessages: 50,
+        timeRange: /昨天|yesterday/iu.test(request.prompt)
+          ? 'yesterday'
+          : /近\s*7\s*天|last\s*7\s*days/iu.test(request.prompt)
+            ? 'last_7_days'
+            : 'today',
+      },
+      id: 'read_gmail',
+      type: 'gmail.read',
+      version: 1,
+    });
+    sourceIds.push('read_gmail');
+  }
+
+  if (required.has('google_sheets.read')) {
+    const spreadsheetId = firstMatch(request.prompt, SHEET_ID_PATTERN);
+    const sheetName =
+      /(?:工作表名稱|sheet\s*name)\s*[:：]?\s*[「"']?([^\s」"',，。]{1,100})/iu.exec(
+        request.prompt,
+      )?.[1];
+    if (spreadsheetId === undefined || sheetName === undefined) return undefined;
+    nodes.push({
+      config: { connectionId, sheetName, spreadsheetId },
+      id: 'read_sheet',
+      type: 'google_sheets.read',
+      version: 1,
+    });
+    sourceIds.push('read_sheet');
+  }
+
+  if (required.has('google_forms.read_responses')) {
+    const formId = firstMatch(request.prompt, FORM_ID_PATTERN);
+    if (formId === undefined) return undefined;
+    nodes.push({
+      config: { connectionId, formId, maxResponses: 1_000 },
+      id: 'read_form_responses',
+      type: 'google_forms.read_responses',
+      version: 1,
+    });
+    sourceIds.push('read_form_responses');
+  }
+
+  let lastOutputIds = [...sourceIds];
+  if (required.has('ai.summarize')) {
+    nodes.push({
+      config: {
+        includeCaseStudy: false,
+        includeRecommendations: true,
+        language: request.context.locale === 'en' ? 'en' : 'zh-Hant',
+        maxCharacters: 6_000,
+        provider: 'auto',
+        style: 'professional',
+        tier: 'auto',
+      },
+      id: 'summarize_sources',
+      type: 'ai.summarize',
+      version: 1,
+    });
+    for (const sourceId of sourceIds) edges.push({ from: sourceId, to: 'summarize_sources' });
+    lastOutputIds = ['summarize_sources'];
+  }
+
+  if (required.has('report.compose')) {
+    nodes.push({
+      config: {
+        format: 'markdown',
+        includeReferences: true,
+        title: request.context.locale === 'en' ? 'AI business report' : 'AI 專業摘要報告',
+      },
+      id: 'compose_report',
+      type: 'report.compose',
+      version: 1,
+    });
+    for (const outputId of lastOutputIds) edges.push({ from: outputId, to: 'compose_report' });
+    lastOutputIds = ['compose_report'];
+  }
+
+  const terminalSource = lastOutputIds[0];
+  if (required.has('google_slides.create')) {
+    nodes.push({
+      config: {
+        connectionId,
+        includeImages: true,
+        includeReferences: true,
+        maxSlides: requestedSlideCount(request.prompt),
+        title: request.context.locale === 'en' ? 'AI executive presentation' : 'AI 專業摘要簡報',
+      },
+      id: 'create_slides',
+      type: 'google_slides.create',
+      version: 1,
+    });
+    if (terminalSource !== undefined) edges.push({ from: terminalSource, to: 'create_slides' });
+  }
+
+  const recipient = EMAIL_ADDRESS_PATTERN.exec(request.prompt)?.[0];
+  const wantsDraft = /草稿|draft/iu.test(request.prompt);
+  if ((required.has('gmail.send') || wantsDraft) && recipient !== undefined) {
+    nodes.push({
+      config: {
+        connectionId,
+        recipients: [recipient],
+        sendMode: wantsDraft ? 'draft' : 'send',
+        subject: request.context.locale === 'en' ? 'AI business report' : 'AI 專業摘要報告',
+      },
+      id: 'deliver_report',
+      type: 'gmail.send',
+      version: 1,
+    });
+    if (terminalSource !== undefined) edges.push({ from: terminalSource, to: 'deliver_report' });
+  }
+
+  if (nodes.length === 0 || sourceIds.length === 0) return undefined;
+  return AIPlannerOutputSchema.parse({
+    assumptions: [
+      'The first approved Google Workspace connection is used for this bounded cloud workflow.',
+      'Email delivery is created as a draft unless the requirement explicitly asks to send it.',
+      'All generated artifacts remain reviewable and auditable before external use.',
+    ],
+    explanation:
+      'Create a complete connected Google Workspace flow from the approved source through AI summary, report, presentation, and reviewable delivery where requested.',
+    mappingProposals: [],
+    workflow: {
+      description:
+        'Read an approved Google Workspace source and create the requested reviewable AI artifacts.',
+      edges,
+      executionTarget: request.context.executionTarget,
+      name:
+        request.context.locale === 'en'
+          ? 'Google Workspace AI report'
+          : 'Google Workspace AI 摘要報告',
+      nodes,
+      schemaVersion: 1,
+      trigger: { config: {}, type: 'manual.trigger' },
+    },
+  });
+}
+
 export const PLANNER_SYSTEM_PROMPT = `Role: Convert a user's automation requirement into one safe Workflow v1 JSON plan.
 
 Goal: Return exactly one JSON object with assumptions, explanation, mappingProposals, and workflow.
@@ -50,6 +215,8 @@ function repairFeedback(issues: readonly WorkflowValidationIssue[]): string {
 
 export function buildPlannerShapeExample(request: PlannerRequest): AIPlannerOutput {
   const intent = detectWorkflowIntent(request.prompt);
+  const googleExample = buildConnectedGoogleExample(request);
+  if (googleExample !== undefined) return googleExample;
   if (
     request.context.executionTarget.type === 'cloud' &&
     intent.requiredNodeTypes.includes('data.inline') &&

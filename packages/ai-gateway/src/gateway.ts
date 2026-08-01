@@ -90,7 +90,7 @@ export class AiGateway {
           : parsedOutput;
       const validationCodes = [...new Set(validation.issues.map((issue) => issue.code))].sort();
       const fallbackCandidate =
-        !validation.success && intentIssues.length === 0 && attempt === maxAttempts
+        !validation.success && attempt === maxAttempts
           ? buildPlannerSafeFallback(request, validation.issues)
           : undefined;
       const fallback =

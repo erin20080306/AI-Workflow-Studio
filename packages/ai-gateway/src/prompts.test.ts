@@ -61,4 +61,36 @@ describe('planner prompts', () => {
     expect(buildPlannerUserPrompt(summaryRequest)).toContain('"type":"data.inline"');
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });
+
+  it('grounds a connected Gmail report, Slides, and self-review draft request', () => {
+    const googleRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
+      },
+      prompt:
+        '讀取今天 Gmail 郵件，產生繁體中文摘要與報告，建立 5 頁 Google Slides，最後建立寄給 owner@example.com 的草稿，不要直接寄送。',
+    };
+    const example = buildPlannerShapeExample(googleRequest);
+
+    expect(example.workflow.nodes.map((node) => node.type)).toEqual([
+      'gmail.read',
+      'ai.summarize',
+      'report.compose',
+      'google_slides.create',
+      'gmail.send',
+    ]);
+    expect(example.workflow.edges).toEqual([
+      { from: 'read_gmail', to: 'summarize_sources' },
+      { from: 'summarize_sources', to: 'compose_report' },
+      { from: 'compose_report', to: 'create_slides' },
+      { from: 'compose_report', to: 'deliver_report' },
+    ]);
+    expect(example.workflow.nodes.at(-1)).toMatchObject({
+      config: { recipients: ['owner@example.com'], sendMode: 'draft' },
+      type: 'gmail.send',
+    });
+    expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+  });
 });
