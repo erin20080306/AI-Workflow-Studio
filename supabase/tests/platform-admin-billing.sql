@@ -14,8 +14,8 @@ begin
 end;
 $$;
 
-grant usage on schema tests to authenticated;
-grant execute on function tests.assert_true(boolean, text) to authenticated;
+grant usage on schema tests to authenticated, service_role;
+grant execute on function tests.assert_true(boolean, text) to authenticated, service_role;
 
 insert into auth.users (id, email, raw_user_meta_data)
 values

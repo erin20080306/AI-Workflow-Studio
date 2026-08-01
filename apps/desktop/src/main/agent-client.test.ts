@@ -94,16 +94,16 @@ describe('AgentClient', () => {
       return jsonResponse(jobPayload());
     };
     const statuses: AgentClientStatus[] = [];
+    const folderAliasWithLocalMetadata = {
+      createdAt: '2026-08-01T00:00:00.000Z',
+      displayName: 'Approved imports',
+      folderAliasId: '10000000-0000-4000-8000-000000000825',
+      permissions: { read: true, watch: false, write: false },
+    };
     const client = new AgentClient({
       agentVersion: '0.1.0-test',
       fetchTransport,
-      listFolderAliases: async () => [
-        {
-          displayName: 'Approved imports',
-          folderAliasId: '10000000-0000-4000-8000-000000000825',
-          permissions: { read: true, watch: false, write: false },
-        },
-      ],
+      listFolderAliases: async () => [folderAliasWithLocalMetadata],
       logger: { info: vi.fn(), warn: vi.fn() },
       onStatus: (status) => statuses.push(status),
       vault: {
@@ -133,6 +133,7 @@ describe('AgentClient', () => {
     expect(requests[1]?.headers.get('authorization')).toBe(`Bearer ${TOKEN}`);
     expect(requests[1]?.body).not.toContain(TENANT_ID);
     expect(requests[1]?.body).not.toContain('/Users/');
+    expect(requests[1]?.body).not.toContain('createdAt');
     expect(JSON.parse(requests[1]?.body ?? '{}')).toMatchObject({
       metadata: {
         folderAliases: [

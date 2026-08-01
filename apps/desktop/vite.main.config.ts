@@ -17,6 +17,8 @@ export default defineConfig({
       external: (id) =>
         id === 'electron' ||
         id === 'electron-updater' ||
+        id === 'exceljs' ||
+        id.startsWith('exceljs/') ||
         id.startsWith('node:') ||
         nodeBuiltins.has(id),
     },

@@ -59,34 +59,52 @@ describe('AiGateway', () => {
 
     expect(result.provider).toBe('mock');
     expect(result.attempts).toBe(1);
+    expect(result.model).toBe('server-grounded-excel-v1');
     expect(result.output.workflow.executionTarget).toEqual(plannerRequest.context.executionTarget);
     expect(result.output.workflow.nodes).toHaveLength(4);
-    expect(JSON.stringify(usage.records)).not.toContain(plannerRequest.prompt);
     expect(usage.records).toMatchObject([
       {
-        attempt: 1,
+        inputTokens: 0,
+        model: 'server-grounded-excel-v1',
         operation: 'workflow_plan',
         outcome: 'succeeded',
+        outputTokens: 0,
         provider: 'mock',
-        validationCodes: [],
       },
+    ]);
+    expect(JSON.stringify(usage.records)).not.toContain(plannerRequest.prompt);
+  });
+
+  it('does not call a provider for a fully grounded local Excel plan', async () => {
+    const adapter = new StaticAdapter(['not-json']);
+    const result = await new AiGateway(adapter, new InMemoryUsageSink()).plan(plannerRequest);
+
+    expect(adapter.calls).toBe(0);
+    expect(result.model).toBe('server-grounded-excel-v1');
+    expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+    expect(result.output.workflow.nodes.map((node) => node.type)).toEqual([
+      'folder.list_files',
+      'excel.read',
+      'data.deduplicate',
+      'excel.create_report',
     ]);
   });
 
   it('repairs an invalid first response once and aggregates usage', async () => {
+    const repairRequest = { ...plannerRequest, prompt: '檢查資料欄位' };
     const mockCompletion = await new MockAiAdapter().complete({
       attempt: 2,
       jsonSchema: {},
       maxOutputTokens: 12_000,
       operation: 'workflow_plan',
-      plannerRequest,
+      plannerRequest: repairRequest,
       schemaName: 'workflow_plan',
       systemPrompt: 'system',
       userPrompt: 'user',
     });
     const adapter = new StaticAdapter(['not-json', mockCompletion.text]);
     const usage = new InMemoryUsageSink();
-    const result = await new AiGateway(adapter, usage).plan(plannerRequest);
+    const result = await new AiGateway(adapter, usage).plan(repairRequest);
 
     expect(result.attempts).toBe(2);
     expect(result.usage).toEqual({
@@ -121,7 +139,7 @@ describe('AiGateway', () => {
     ]);
   });
 
-  it('never lets a validation-only fallback satisfy an explicit Excel action', async () => {
+  it('replaces malicious provider output with a trusted, intent-complete Excel plan', async () => {
     const malicious = JSON.stringify({
       assumptions: [],
       explanation: 'Run a command.',
@@ -144,12 +162,25 @@ describe('AiGateway', () => {
       },
     });
 
-    await expect(
-      new AiGateway(new StaticAdapter([malicious]), new InMemoryUsageSink()).plan({
-        ...plannerRequest,
-        maxRepairAttempts: 0,
-      }),
-    ).rejects.toMatchObject({ code: 'AI_OUTPUT_INVALID' });
+    const adapter = new StaticAdapter([malicious]);
+    const result = await new AiGateway(adapter, new InMemoryUsageSink()).plan({
+      ...plannerRequest,
+      maxRepairAttempts: 0,
+    });
+
+    expect(result.output.workflow.executionTarget).toEqual(plannerRequest.context.executionTarget);
+    expect(result.output.workflow.nodes.map((node) => node.type)).toEqual([
+      'folder.list_files',
+      'excel.read',
+      'data.deduplicate',
+      'excel.create_report',
+    ]);
+    expect(result.output.workflow.nodes[0]).toMatchObject({
+      config: { folderAliasId: FOLDER_ID },
+    });
+    expect(JSON.stringify(result.output)).not.toContain('shell.execute');
+    expect(JSON.stringify(result.output)).not.toContain('rm -rf');
+    expect(adapter.calls).toBe(0);
   });
 
   it('releases an intent-complete inline summary fallback after repair exhaustion', async () => {

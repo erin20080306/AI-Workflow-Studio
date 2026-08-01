@@ -1,8 +1,9 @@
 import type { AgentJob, JsonValue, StepResult } from '@ai-workflow-studio/agent-protocol';
-import type { SpreadsheetTable } from '@ai-workflow-studio/local-executor';
+import { LocalExecutorError, type SpreadsheetTable } from '@ai-workflow-studio/local-executor';
 import {
   NodeRegistry,
   WorkflowEngine,
+  WorkflowEngineError,
   type RegisteredWorkflowNodeExecutor,
   type WorkflowExecutionContext,
 } from '@ai-workflow-studio/workflow-engine';
@@ -15,6 +16,7 @@ import {
 import { z } from 'zod';
 
 import type { AgentJobReporter } from './agent-client';
+import { FolderAuthorizationError } from './folder-grants';
 import { DesktopSpreadsheetExecutor } from './local-executor';
 
 const CellSchema = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
@@ -126,205 +128,209 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
     };
     readonly output: JsonValue;
   }> {
-    const parsed = WorkflowNodeSchema.parse({
-      config,
-      id: context.nodeId,
-      type: this.type,
-      version: this.version,
-    });
-    const envelope = parseEnvelope(input);
+    try {
+      const parsed = WorkflowNodeSchema.parse({
+        config,
+        id: context.nodeId,
+        type: this.type,
+        version: this.version,
+      });
+      const envelope = parseEnvelope(input);
 
-    switch (parsed.type) {
-      case 'folder.list_files': {
-        const paths = await this.spreadsheet.list(this.deviceId, {
-          folderAliasId: parsed.config.folderAliasId,
-          pattern: parsed.config.pattern,
-          ...(parsed.config.modifiedSince === undefined
-            ? {}
-            : { modifiedSince: parsed.config.modifiedSince }),
-        });
-        return {
-          metrics: { processedFileCount: paths.length },
-          output: jsonEnvelope({
+      switch (parsed.type) {
+        case 'folder.list_files': {
+          const paths = await this.spreadsheet.list(this.deviceId, {
             folderAliasId: parsed.config.folderAliasId,
-            inputHashes: [],
-            paths: [...paths],
-            tables: [],
-          }),
-        };
-      }
-      case 'excel.read': {
-        if (envelope.folderAliasId === undefined || envelope.paths.length === 0) {
-          throw new Error('No authorized spreadsheet files were selected.');
+            pattern: parsed.config.pattern,
+            ...(parsed.config.modifiedSince === undefined
+              ? {}
+              : { modifiedSince: parsed.config.modifiedSince }),
+          });
+          return {
+            metrics: { processedFileCount: paths.length },
+            output: jsonEnvelope({
+              folderAliasId: parsed.config.folderAliasId,
+              inputHashes: [],
+              paths: [...paths],
+              tables: [],
+            }),
+          };
         }
-        const folderAliasId = envelope.folderAliasId;
-        const documents = await Promise.all(
-          envelope.paths.map(async (relativePath) => {
-            return await this.spreadsheet.read(
-              this.deviceId,
-              {
-                folderAliasId,
-                relativePath,
-              },
-              {
-                headerMode: parsed.config.headerMode,
-                headerRow: parsed.config.headerRow,
-                headerScanRows: parsed.config.headerScanRows,
-                maxFileSizeBytes: parsed.config.maxFileSizeBytes,
-                maxRows: parsed.config.maxRows,
-                maxSheets: parsed.config.maxSheets,
-                sheetMode: parsed.config.sheetMode,
-                ...(parsed.config.sheetNames === undefined
-                  ? {}
-                  : { sheetNames: parsed.config.sheetNames }),
-              },
-            );
-          }),
-        );
-        const tables = documents.flatMap((document) => document.sheets);
-        return {
-          metrics: {
-            processedFileCount: documents.length,
-            processedRowCount: countRows(tables),
-          },
-          output: jsonEnvelope({
-            folderAliasId: envelope.folderAliasId,
-            inputHashes: documents.map((document) => document.source.fileHash),
-            paths: envelope.paths,
-            tables,
-          }),
-        };
-      }
-      case 'excel.merge': {
-        const table = this.spreadsheet.transform(envelope.tables, {
-          columnMode: parsed.config.columnMode,
-        });
-        return transformed(envelope, table);
-      }
-      case 'data.filter': {
-        const table = this.spreadsheet.transform(envelope.tables, {
-          filter: {
-            conditions: parsed.config.conditions.map((condition) => ({
-              field: condition.field,
-              operator: condition.operator,
-              ...(condition.value === undefined ? {} : { value: condition.value }),
-            })),
-            match: parsed.config.match,
-          },
-        });
-        return transformed(envelope, table);
-      }
-      case 'data.map_columns': {
-        const table = this.spreadsheet.transform(envelope.tables, {
-          mappings: parsed.config.mappings,
-          preserveUnmapped: parsed.config.preserveUnmapped,
-        });
-        return transformed(envelope, table);
-      }
-      case 'data.deduplicate': {
-        const table = this.spreadsheet.transform(envelope.tables, {
-          deduplicate: {
-            keep: parsed.config.keep,
-            keys: parsed.config.keys,
-          },
-        });
-        return transformed(envelope, table);
-      }
-      case 'data.sort': {
-        const table = this.spreadsheet.transform(envelope.tables, {
-          sort: parsed.config.fields,
-        });
-        return transformed(envelope, table);
-      }
-      case 'data.group': {
-        const table = this.spreadsheet.transform(envelope.tables, {
-          groupBy: parsed.config.keys,
-        });
-        return transformed(envelope, table);
-      }
-      case 'data.aggregate': {
-        const table = this.spreadsheet.transform(envelope.tables, {
-          aggregate: {
-            groupBy: parsed.config.groupBy,
-            operations: parsed.config.operations.map((operation) => ({
-              alias: operation.alias,
-              ...(operation.field === undefined ? {} : { field: operation.field }),
-              operation: operation.operation,
-            })),
-          },
-        });
-        return transformed(envelope, table);
-      }
-      case 'data.validate': {
-        const validated = this.spreadsheet.validate(
-          envelope.tables,
-          parsed.config.rules.map((rule) => ({
-            ...(rule.dataType === undefined ? {} : { dataType: rule.dataType }),
-            field: rule.field,
-            ...(rule.max === undefined ? {} : { max: rule.max }),
-            ...(rule.min === undefined ? {} : { min: rule.min }),
-            ...(rule.pattern === undefined ? {} : { pattern: rule.pattern }),
-            required: rule.required,
-          })),
-        );
-        if (parsed.config.onInvalid === 'fail' && validated.invalid.rows.length > 0) {
-          throw new Error('Spreadsheet validation found invalid rows.');
-        }
-        return {
-          metrics: {
-            processedRowCount: validated.valid.rows.length + validated.invalid.rows.length,
-          },
-          output: jsonEnvelope({
-            ...envelope,
-            tables:
-              parsed.config.onInvalid === 'separate'
-                ? [validated.valid, validated.invalid]
-                : [validated.valid],
-          }),
-        };
-      }
-      case 'excel.create_report':
-      case 'excel.write': {
-        if (envelope.tables.length === 0) {
-          throw new Error('No spreadsheet rows are available to write.');
-        }
-        const written = await this.spreadsheet.writeOnce(
-          this.deviceId,
-          `${context.idempotencyKey}:${context.nodeId}`,
-          envelope.inputHashes,
-          {
-            folderAliasId: parsed.config.folderAliasId,
-            outputName: parsed.config.outputName,
-            ...(parsed.type === 'excel.create_report' && parsed.config.reportTitle !== undefined
-              ? { reportTitle: parsed.config.reportTitle }
-              : {}),
-          },
-          envelope.tables,
-        );
-        return {
-          metrics: {
-            processedFileCount: 1,
-            processedRowCount: written.result?.processedRowCount ?? countRows(envelope.tables),
-          },
-          output: jsonEnvelope({
-            ...envelope,
-            write: {
-              duplicate: written.duplicate,
-              ...(written.result === undefined
-                ? {}
-                : {
-                    backupCreated: written.result.backupCreated,
-                    fileHash: written.result.fileHash,
-                    fileSizeBytes: written.result.fileSizeBytes,
-                    processedRowCount: written.result.processedRowCount,
-                    sheetCount: written.result.sheetCount,
-                  }),
+        case 'excel.read': {
+          if (envelope.folderAliasId === undefined || envelope.paths.length === 0) {
+            throw new Error('No authorized spreadsheet files were selected.');
+          }
+          const folderAliasId = envelope.folderAliasId;
+          const documents = await Promise.all(
+            envelope.paths.map(async (relativePath) => {
+              return await this.spreadsheet.read(
+                this.deviceId,
+                {
+                  folderAliasId,
+                  relativePath,
+                },
+                {
+                  headerMode: parsed.config.headerMode,
+                  headerRow: parsed.config.headerRow,
+                  headerScanRows: parsed.config.headerScanRows,
+                  maxFileSizeBytes: parsed.config.maxFileSizeBytes,
+                  maxRows: parsed.config.maxRows,
+                  maxSheets: parsed.config.maxSheets,
+                  sheetMode: parsed.config.sheetMode,
+                  ...(parsed.config.sheetNames === undefined
+                    ? {}
+                    : { sheetNames: parsed.config.sheetNames }),
+                },
+              );
+            }),
+          );
+          const tables = documents.flatMap((document) => document.sheets);
+          return {
+            metrics: {
+              processedFileCount: documents.length,
+              processedRowCount: countRows(tables),
             },
-          }),
-        };
+            output: jsonEnvelope({
+              folderAliasId: envelope.folderAliasId,
+              inputHashes: documents.map((document) => document.source.fileHash),
+              paths: envelope.paths,
+              tables,
+            }),
+          };
+        }
+        case 'excel.merge': {
+          const table = this.spreadsheet.transform(envelope.tables, {
+            columnMode: parsed.config.columnMode,
+          });
+          return transformed(envelope, table);
+        }
+        case 'data.filter': {
+          const table = this.spreadsheet.transform(envelope.tables, {
+            filter: {
+              conditions: parsed.config.conditions.map((condition) => ({
+                field: condition.field,
+                operator: condition.operator,
+                ...(condition.value === undefined ? {} : { value: condition.value }),
+              })),
+              match: parsed.config.match,
+            },
+          });
+          return transformed(envelope, table);
+        }
+        case 'data.map_columns': {
+          const table = this.spreadsheet.transform(envelope.tables, {
+            mappings: parsed.config.mappings,
+            preserveUnmapped: parsed.config.preserveUnmapped,
+          });
+          return transformed(envelope, table);
+        }
+        case 'data.deduplicate': {
+          const table = this.spreadsheet.transform(envelope.tables, {
+            deduplicate: {
+              keep: parsed.config.keep,
+              keys: parsed.config.keys,
+            },
+          });
+          return transformed(envelope, table);
+        }
+        case 'data.sort': {
+          const table = this.spreadsheet.transform(envelope.tables, {
+            sort: parsed.config.fields,
+          });
+          return transformed(envelope, table);
+        }
+        case 'data.group': {
+          const table = this.spreadsheet.transform(envelope.tables, {
+            groupBy: parsed.config.keys,
+          });
+          return transformed(envelope, table);
+        }
+        case 'data.aggregate': {
+          const table = this.spreadsheet.transform(envelope.tables, {
+            aggregate: {
+              groupBy: parsed.config.groupBy,
+              operations: parsed.config.operations.map((operation) => ({
+                alias: operation.alias,
+                ...(operation.field === undefined ? {} : { field: operation.field }),
+                operation: operation.operation,
+              })),
+            },
+          });
+          return transformed(envelope, table);
+        }
+        case 'data.validate': {
+          const validated = this.spreadsheet.validate(
+            envelope.tables,
+            parsed.config.rules.map((rule) => ({
+              ...(rule.dataType === undefined ? {} : { dataType: rule.dataType }),
+              field: rule.field,
+              ...(rule.max === undefined ? {} : { max: rule.max }),
+              ...(rule.min === undefined ? {} : { min: rule.min }),
+              ...(rule.pattern === undefined ? {} : { pattern: rule.pattern }),
+              required: rule.required,
+            })),
+          );
+          if (parsed.config.onInvalid === 'fail' && validated.invalid.rows.length > 0) {
+            throw new Error('Spreadsheet validation found invalid rows.');
+          }
+          return {
+            metrics: {
+              processedRowCount: validated.valid.rows.length + validated.invalid.rows.length,
+            },
+            output: jsonEnvelope({
+              ...envelope,
+              tables:
+                parsed.config.onInvalid === 'separate'
+                  ? [validated.valid, validated.invalid]
+                  : [validated.valid],
+            }),
+          };
+        }
+        case 'excel.create_report':
+        case 'excel.write': {
+          if (envelope.tables.length === 0) {
+            throw new Error('No spreadsheet rows are available to write.');
+          }
+          const written = await this.spreadsheet.writeOnce(
+            this.deviceId,
+            `${context.idempotencyKey}:${context.nodeId}`,
+            envelope.inputHashes,
+            {
+              folderAliasId: parsed.config.folderAliasId,
+              outputName: parsed.config.outputName,
+              ...(parsed.type === 'excel.create_report' && parsed.config.reportTitle !== undefined
+                ? { reportTitle: parsed.config.reportTitle }
+                : {}),
+            },
+            envelope.tables,
+          );
+          return {
+            metrics: {
+              processedFileCount: 1,
+              processedRowCount: written.result?.processedRowCount ?? countRows(envelope.tables),
+            },
+            output: jsonEnvelope({
+              ...envelope,
+              write: {
+                duplicate: written.duplicate,
+                ...(written.result === undefined
+                  ? {}
+                  : {
+                      backupCreated: written.result.backupCreated,
+                      fileHash: written.result.fileHash,
+                      fileSizeBytes: written.result.fileSizeBytes,
+                      processedRowCount: written.result.processedRowCount,
+                      sheetCount: written.result.sheetCount,
+                    }),
+              },
+            }),
+          };
+        }
+        default:
+          throw new Error(`Desktop node ${parsed.type} is not supported.`);
       }
-      default:
-        throw new Error(`Desktop node ${parsed.type} is not supported.`);
+    } catch (error) {
+      throw safeDesktopExecutionError(error, context.nodeId);
     }
   }
 }
@@ -364,7 +370,8 @@ export class DesktopWorkflowJobExecutor {
     if (result.status !== 'succeeded') {
       const lastError = result.steps.at(-1)?.error;
       throw new DesktopWorkflowJobError(
-        lastError?.code ??
+        safeExecutionCode(lastError?.message) ??
+          lastError?.code ??
           (result.status === 'cancelled' ? 'RUN_CANCELLED' : 'NODE_EXECUTION_FAILED'),
         lastError?.retryable ?? false,
       );
@@ -382,6 +389,31 @@ export class DesktopWorkflowJobExecutor {
       stepCount: result.steps.length,
     });
   }
+}
+
+function safeDesktopExecutionError(error: unknown, nodeId: string): WorkflowEngineError {
+  if (error instanceof WorkflowEngineError) return error;
+  const safeCode =
+    error instanceof LocalExecutorError || error instanceof FolderAuthorizationError
+      ? error.code
+      : error instanceof z.ZodError
+        ? 'DESKTOP_DATA_VALIDATION_FAILED'
+        : 'DESKTOP_UNEXPECTED_ERROR';
+  const retryable = error instanceof LocalExecutorError && error.retryable;
+  return new WorkflowEngineError(
+    'NODE_EXECUTION_FAILED',
+    `Node "${nodeId}" failed (${safeCode}).`,
+    {
+      cause: error,
+      details: { nodeId, safeCode },
+      retryable,
+    },
+  );
+}
+
+function safeExecutionCode(message: string | undefined): string | undefined {
+  const code = /\(([A-Z][A-Z0-9_]{0,119})\)\.$/u.exec(message ?? '')?.[1];
+  return code;
 }
 
 class DesktopWorkflowJobError extends Error {

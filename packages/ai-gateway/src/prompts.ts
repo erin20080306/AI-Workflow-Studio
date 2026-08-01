@@ -32,6 +32,126 @@ function requestedSheetName(prompt: string): string | undefined {
   );
 }
 
+function requestedWorkbookNames(prompt: string): readonly string[] {
+  return [
+    ...new Set(
+      [...prompt.matchAll(/[\p{L}\p{N}][\p{L}\p{N}._-]{0,119}\.xlsx/giu)].map((match) => match[0]),
+    ),
+  ];
+}
+
+function requestedColumn(prompt: string, suffix: RegExp): string | undefined {
+  const match = new RegExp(
+    `(?:依|by|按)\\s*[「"']?([\\p{L}\\p{N}][\\p{L}\\p{N} _-]{0,60}?)[」"']?\\s*(?:${suffix.source})`,
+    'iu',
+  ).exec(prompt);
+  return match?.[1]?.trim();
+}
+
+function requestedSummedColumn(prompt: string): string | undefined {
+  return /(?:加總|sum)\s*[「"']?([\p{L}\p{N}][\p{L}\p{N} _-]{0,60})[」"']?/iu
+    .exec(prompt)?.[1]
+    ?.trim();
+}
+
+function buildConnectedDesktopExample(request: PlannerRequest): AIPlannerOutput | undefined {
+  const intent = detectWorkflowIntent(request.prompt);
+  const folderAliasId = request.context.allowedFolderAliasIds[0];
+  if (!intent.needsDesktop || request.context.executionTarget.type !== 'desktop') return undefined;
+  if (folderAliasId === undefined) return undefined;
+
+  const workbookNames = requestedWorkbookNames(request.prompt);
+  const inputName = workbookNames[0] ?? '*.xlsx';
+  const outputName = workbookNames[1] ?? 'AI-Excel-報表.xlsx';
+  const deduplicateKey = requestedColumn(request.prompt, /去除重複|去重|deduplicat(?:e|ion)/iu);
+  const groupBy = requestedColumn(request.prompt, /分組|group(?:ed)?/iu);
+  const summedColumn = requestedSummedColumn(request.prompt);
+  const nodes: unknown[] = [
+    {
+      config: { folderAliasId, pattern: inputName },
+      id: 'list_workbooks',
+      type: 'folder.list_files',
+      version: 1,
+    },
+    {
+      config: {
+        headerMode: 'auto',
+        headerRow: 1,
+        headerScanRows: 30,
+        maxFileSizeBytes: 50_000_000,
+        maxRows: 100_000,
+        maxSheets: 50,
+        sheetMode: 'all',
+      },
+      id: 'read_workbooks',
+      type: 'excel.read',
+      version: 1,
+    },
+  ];
+  const edges = [{ from: 'list_workbooks', to: 'read_workbooks' }];
+  let previousNodeId = 'read_workbooks';
+  if (deduplicateKey !== undefined) {
+    nodes.push({
+      config: { keep: 'first', keys: [deduplicateKey] },
+      id: 'deduplicate_rows',
+      type: 'data.deduplicate',
+      version: 1,
+    });
+    edges.push({ from: previousNodeId, to: 'deduplicate_rows' });
+    previousNodeId = 'deduplicate_rows';
+  }
+  if (groupBy !== undefined && summedColumn !== undefined) {
+    nodes.push({
+      config: {
+        groupBy: [groupBy],
+        operations: [{ alias: `${summedColumn} Total`, field: summedColumn, operation: 'sum' }],
+      },
+      id: 'aggregate_rows',
+      type: 'data.aggregate',
+      version: 1,
+    });
+    edges.push({ from: previousNodeId, to: 'aggregate_rows' });
+    previousNodeId = 'aggregate_rows';
+  }
+  nodes.push({
+    config: {
+      folderAliasId,
+      outputName,
+      overwrite: false,
+      reportTitle: request.context.locale === 'en' ? 'AI Excel report' : 'AI Excel 彙整報表',
+    },
+    id: 'create_excel_report',
+    type: 'excel.create_report',
+    version: 1,
+  });
+  edges.push({ from: previousNodeId, to: 'create_excel_report' });
+
+  return AIPlannerOutputSchema.parse({
+    assumptions: [
+      'Only the first approved folder alias is used; its local path remains on the Desktop Agent.',
+      'The source workbook is read with bounded row, sheet, and file-size limits.',
+      'The output is a new file and never overwrites an existing workbook.',
+    ],
+    explanation:
+      'Read the approved Excel workbook, apply the requested deterministic transformations, and create a new auditable Excel report through the paired Desktop Agent.',
+    mappingProposals: [],
+    workflow: {
+      description:
+        'Process an approved local Excel workbook and create a bounded, non-overwriting summary report.',
+      edges,
+      executionTarget: request.context.executionTarget,
+      name: request.context.locale === 'en' ? 'Local Excel summary' : '本機 Excel 智慧彙整',
+      nodes,
+      schemaVersion: 1,
+      trigger: { config: {}, type: 'manual.trigger' },
+    },
+  });
+}
+
+export function buildPlannerGroundedPlan(request: PlannerRequest): AIPlannerOutput | undefined {
+  return buildConnectedDesktopExample(request);
+}
+
 function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput | undefined {
   const intent = detectWorkflowIntent(request.prompt);
   const required = new Set(intent.requiredNodeTypes);
@@ -228,6 +348,8 @@ export function buildPlannerShapeExample(request: PlannerRequest): AIPlannerOutp
   const intent = detectWorkflowIntent(request.prompt);
   const googleExample = buildConnectedGoogleExample(request);
   if (googleExample !== undefined) return googleExample;
+  const desktopExample = buildConnectedDesktopExample(request);
+  if (desktopExample !== undefined) return desktopExample;
   if (
     request.context.executionTarget.type === 'cloud' &&
     intent.requiredNodeTypes.includes('data.inline') &&
@@ -323,19 +445,26 @@ export function buildPlannerSafeFallback(
   issues: readonly WorkflowValidationIssue[],
 ): AIPlannerOutput {
   const example = buildPlannerShapeExample(request);
+  const isDesktopExcelPlan = example.workflow.nodes.some(
+    (node) => node.type === 'excel.create_report',
+  );
   const validationClasses = [...new Set(issues.map((issue) => issue.code))].sort();
   return AIPlannerOutputSchema.parse({
     ...example,
     assumptions: [
       'The provider response required server-side normalization before it could be released.',
-      'This conservative draft stays read-only and does not execute or access an unapproved integration.',
+      isDesktopExcelPlan
+        ? 'The normalized Excel plan uses only the paired device and approved folder alias from the trusted request context.'
+        : 'This conservative draft stays read-only and does not execute or access an unapproved integration.',
       ...(validationClasses.length === 0
         ? []
         : [`Rejected provider validation classes: ${validationClasses.join(', ')}.`]),
     ],
-    explanation: example.workflow.nodes.some((node) => node.type === 'data.inline')
-      ? 'A complete, validated cloud flow was created from the approved text: source, AI summary, and auditable report.'
-      : 'A safe, disabled validation draft was created automatically. Connect an approved source or Desktop Agent before extending it with file access or execution.',
+    explanation: isDesktopExcelPlan
+      ? 'A complete, validated Desktop Agent flow was created from the approved folder alias: bounded Excel read, deterministic transformations, and a non-overwriting report.'
+      : example.workflow.nodes.some((node) => node.type === 'data.inline')
+        ? 'A complete, validated cloud flow was created from the approved text: source, AI summary, and auditable report.'
+        : 'A safe, disabled validation draft was created automatically. Connect an approved source or Desktop Agent before extending it with file access or execution.',
   });
 }
 

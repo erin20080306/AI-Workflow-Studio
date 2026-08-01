@@ -121,4 +121,48 @@ describe('planner prompts', () => {
     });
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });
+
+  it('grounds an approved local Excel request with deterministic transformations and output', () => {
+    const desktopRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        allowedFolderAliasIds: ['10000000-0000-4000-8000-000000000825'],
+        executionTarget: {
+          deviceId: '10000000-0000-4000-8000-000000000824',
+          type: 'desktop',
+        },
+      },
+      prompt:
+        '讀取已核准資料夾中的 orders.xlsx，依 Order ID 去除重複，依 Status 分組並加總 Amount，建立名為 phase47-summary.xlsx 的 Excel 報表。',
+    };
+    const example = buildPlannerShapeExample(desktopRequest);
+
+    expect(example.workflow.nodes.map((node) => node.type)).toEqual([
+      'folder.list_files',
+      'excel.read',
+      'data.deduplicate',
+      'data.aggregate',
+      'excel.create_report',
+    ]);
+    expect(example.workflow.nodes[0]).toMatchObject({
+      config: {
+        folderAliasId: '10000000-0000-4000-8000-000000000825',
+        pattern: 'orders.xlsx',
+      },
+    });
+    expect(example.workflow.nodes[2]).toMatchObject({
+      config: { keys: ['Order ID'] },
+    });
+    expect(example.workflow.nodes[3]).toMatchObject({
+      config: {
+        groupBy: ['Status'],
+        operations: [{ field: 'Amount', operation: 'sum' }],
+      },
+    });
+    expect(example.workflow.nodes[4]).toMatchObject({
+      config: { outputName: 'phase47-summary.xlsx', overwrite: false },
+    });
+    expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+  });
 });

@@ -2,7 +2,12 @@ import type { WorkflowValidationIssue } from '@ai-workflow-studio/workflow-schem
 
 import { AiGatewayError } from './errors';
 import { parseStrictPlannerOutput } from './json';
-import { buildPlannerSafeFallback, buildPlannerUserPrompt, PLANNER_SYSTEM_PROMPT } from './prompts';
+import {
+  buildPlannerGroundedPlan,
+  buildPlannerSafeFallback,
+  buildPlannerUserPrompt,
+  PLANNER_SYSTEM_PROMPT,
+} from './prompts';
 import { PLANNER_PROVIDER_JSON_SCHEMA } from './provider-schema';
 import type {
   AiProviderAdapter,
@@ -47,6 +52,28 @@ export class AiGateway {
       outputTokens: 0,
       totalTokens: 0,
     };
+
+    const groundedPlan = buildPlannerGroundedPlan(request);
+    if (groundedPlan !== undefined) {
+      await recordUsage(this.usageSink, {
+        attempt: 1,
+        durationMs: 0,
+        inputTokens: 0,
+        model: 'server-grounded-excel-v1',
+        operation: 'workflow_plan',
+        outcome: 'succeeded',
+        outputTokens: 0,
+        provider: this.adapter.provider,
+        validationCodes: [],
+      });
+      return {
+        attempts: 1,
+        model: 'server-grounded-excel-v1',
+        output: groundedPlan,
+        provider: this.adapter.provider,
+        usage: aggregateUsage,
+      };
+    }
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const startedAt = Date.now();

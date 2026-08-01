@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "electron-updater": "6.8.9"
+    "electron-updater": "6.8.9",
+    "exceljs": "4.4.0"
   },
   "devDependencies": {
     "@ai-workflow-studio/agent-protocol": "workspace:*",

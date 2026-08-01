@@ -233,7 +233,15 @@ export class AgentClient {
 
   async pollOnce(signal?: AbortSignal): Promise<readonly AgentJob[]> {
     const session = this.requireSession();
-    const folderAliases = (await this.listFolderAliases?.()) ?? [];
+    const folderAliases = ((await this.listFolderAliases?.()) ?? []).map((alias) => ({
+      displayName: alias.displayName,
+      folderAliasId: alias.folderAliasId,
+      permissions: {
+        read: alias.permissions.read,
+        watch: alias.permissions.watch,
+        write: alias.permissions.write,
+      },
+    }));
     const requestTimestamp = new Date().toISOString();
     const headers = {
       authorization: `Bearer ${session.deviceToken}`,

@@ -16,6 +16,9 @@ begin
 end;
 $$;
 
+grant usage on schema tests to authenticated, service_role;
+grant execute on function tests.assert_true(boolean, text) to authenticated, service_role;
+
 select tests.assert_true(
   (select maximum_ai_model_tier = 'economy' from public.billing_plans where code = 'free'),
   'free plan must be limited to economy models'

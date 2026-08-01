@@ -3382,7 +3382,7 @@ Status: completed
 
 ## Phase 47 — Intelligent Work cloud automation
 
-Status: in progress
+Status: completed
 
 ### Implemented
 
@@ -3428,9 +3428,8 @@ Status: in progress
   `first_run` version may continue automatically on later runs; nodes configured
   with `always` approval continue to pause every time.
 - Added Cloud Work schedule targets and a durable, idempotent Production tick
-  implementation. The database shape is contained in the pending
-  `202608010003_cloud_workflow_schedules.sql` migration; no Production schedule
-  behavior depends on it until that migration is explicitly authorized.
+  implementation. The explicitly authorized
+  `202608010003_cloud_workflow_schedules.sql` migration is applied in Production.
 - Improved the workflow Canvas with numbered service nodes, service icons, and
   visible directed connections while retaining the product's own identity.
 - Ran the consolidation implementation against 481 actual `.xlsx` workbooks:
@@ -3438,24 +3437,39 @@ Status: in progress
   sheets exposed a numeric total. The verified workbook is stored locally at
   `outputs/phase47-cost-automation/成本單整合與分析報告.xlsx` and remains outside
   Git.
+- Added a deterministic, grounded Desktop Excel plan for natural-language
+  consolidation requests: approved-folder discovery, Excel read, duplicate
+  removal, status aggregation, and styled Excel report generation are emitted
+  as validated workflow JSON without arbitrary commands or hidden paths.
+- Hardened Desktop job execution and packaging. Heartbeats now serialize only
+  signed agent-protocol folder-alias fields, safe failure codes distinguish
+  validation from unexpected errors without exposing local data, and ExcelJS is
+  loaded as a packaged runtime dependency so `.xlsx` parsing behaves the same in
+  tests and the Electron application.
 
-### Validation to date
+### Validation
 
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
 - `pnpm typecheck`: passed
-- `pnpm test`: passed — 279 tests across 63 files, including complete Work
+- `pnpm test`: passed — 288 tests across 64 files, including complete Work
   intent coverage, the bounded inline source, Cloud schedule target validation,
-  and the existing usage-control, website, Google Workspace, and Desktop tests
+  packaged Desktop Excel execution, and the existing usage-control, website,
+  and Google Workspace tests
 - `pnpm build:web`: passed — 47 application pages and all Work, Google, run,
   approval, schedule, and Website routes compiled successfully. The sandboxed
   Turbopack attempt could not bind its worker port; the identical permitted
   retry passed.
 - `vercel env ls production`: confirmed the server-only `CRON_SECRET` is already
   configured for Production; no secret value was read or exposed.
-- `pnpm build:desktop`: not applicable to the latest change — no Desktop code
-  changed
+- `pnpm build:desktop`: passed — packaged main, preload, and renderer bundles
+  compiled successfully with the runtime spreadsheet parser externalized from
+  the Electron main bundle
 - `pnpm security:scan-client`: passed — 35 generated client files scanned
+- `pnpm db:test`: passed — every migration applied to a fresh PostgreSQL 16
+  container; Tenant isolation, platform-administrator boundaries, AI model
+  mappings, website data actions, workflow schedules, idempotent seed, and all
+  remaining database assertions passed
 - The five explicitly authorized Supabase migrations were applied to
   Production and local/remote migration versions matched through
   `202608010002_platform_admin_usage_override.sql`.
@@ -3469,11 +3483,11 @@ Status: in progress
 - Authenticated Production acceptance reached the Work planner with the
   platform administrator and verified that all configured providers and model
   levels were selectable. The request exposed a real quota defect:
-  `USAGE_BUDGET_EXCEEDED` was returned for the administrator. The tested fix is
-  contained in the pending `202608010002_platform_admin_usage_override.sql`
-  migration and matching server checks.
+  `USAGE_BUDGET_EXCEEDED` was returned for the administrator. The tested fix was
+  applied through `202608010002_platform_admin_usage_override.sql` and matching
+  server checks.
 
-### Pending production acceptance
+### Production acceptance
 
 - `202608010003_cloud_workflow_schedules.sql` received explicit authorization
   and was applied successfully to Production on 2026-08-01. Local and remote
@@ -3506,8 +3520,9 @@ Status: in progress
   `supabase db push --dry-run` confirmed that only
   `202608010004_platform_admin_workflow_limit_override.sql` was pending. After
   authorization, the linked push succeeded and the local/remote migration list
-  matched. The isolated database test remains unavailable because the local
-  Docker daemon is not running; no test was disabled or bypassed.
+  matched. The isolated database test was subsequently completed successfully
+  after the local Docker daemon became available; no test was disabled or
+  bypassed.
 - Authenticated Production acceptance then created immutable Workflow v1 and
   Run `bb978787-ab86-49ed-b4cb-fa7af0551cd8` from one natural-language request.
   The validated graph contained `data.inline` → `ai.summarize` →
@@ -3516,12 +3531,24 @@ Status: in progress
   Run detail showed the complete queued, running, succeeded, and
   `cloud_run.succeeded` audit sequence plus completion notifications. Cloud Run
   success is recorded only after every step output summary is persisted.
-- Production does not currently contain `GOOGLE_CLIENT_ID`,
-  `GOOGLE_CLIENT_SECRET`, or `GOOGLE_REDIRECT_URI`; therefore a real Google
-  Workspace reconnection and Gmail-to-report live run cannot yet pass.
-- The defect-fix commits were pushed and the corrected application is active on
-  the canonical Production domain. The bounded inline
-  source-to-summary-to-report live Run has passed. Google Workspace
-  reconnection is separately required before Gmail, Sheets, Forms, Slides, or
-  Apps Script acceptance can pass, and Desktop Agent pairing is still required
-  for a real local Excel Run. Phase 47 therefore remains in progress.
+- Initial acceptance showed that Google OAuth server variables were absent;
+  after they were configured, the connected Production account passed bounded
+  Gmail, Sheets, Forms, and Slides-capable connection acceptance. Gmail Run
+  `89316612-1224-4124-b7db-e80113e8ecfb` completed as a self-addressed draft
+  without sending mail; Sheets Run `807c1915-c17e-460a-ac92-379d628af04e` and
+  Forms Run `501a7ad9-5dc3-4615-b951-683c3d16d226` completed successfully. No
+  message body, credential, or customer content was recorded in these notes.
+- A fresh Desktop Agent pairing completed a real packaged-Electron Excel
+  workflow. Run `c9c8bc5f-a048-4baa-93c2-58bd2ba6f6c2` listed one approved
+  workbook, read six rows, removed one duplicate, aggregated five rows into
+  three status totals, and wrote a styled report. Independent workbook
+  inspection confirmed Paid `4,970`, Pending `880`, and Cancelled `450`, with no
+  spreadsheet formula errors.
+- The local Docker daemon was started and the complete isolated database suite
+  passed after aligning two test-only assertion grants with the service-role
+  contexts they exercise. No Production table, role, or credential was changed
+  by this test.
+- The canonical Production application and previously deployed Phase 47 cloud
+  routes were used for live acceptance. The new Desktop packaging and permanent
+  regression-test changes are source changes for the next signed Desktop
+  release; they do not alter the accepted cloud execution boundary.
