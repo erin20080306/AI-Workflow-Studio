@@ -126,6 +126,98 @@ describe('GoogleDriveExcelClient', () => {
     expect(calls.some((call) => call.includes('/upload/'))).toBe(false);
   });
 
+  it('uses a bounded resumable conversion for a legacy XLS workbook larger than 5 MB', async () => {
+    const legacyBytes = new Uint8Array(5_000_001);
+    const calls: string[] = [];
+    const fetchTransport: GoogleFetch = async (input, init) => {
+      const url = String(input);
+      calls.push(`${init?.method ?? 'GET'} ${url}`);
+      if (url.includes('alt=media')) return new Response(legacyBytes);
+      if (url.includes('/upload/drive/v3/files?') && init?.method === 'POST') {
+        expect(init.headers).toMatchObject({
+          'x-upload-content-length': String(legacyBytes.byteLength),
+          'x-upload-content-type': 'application/vnd.ms-excel',
+        });
+        return new Response('', {
+          headers: { location: 'https://upload.example.test/resumable/legacy-sheet' },
+        });
+      }
+      if (url === 'https://upload.example.test/resumable/legacy-sheet') {
+        return Response.json({
+          id: '1ConvertedLegacySpreadsheet1234',
+          mimeType: 'application/vnd.google-apps.spreadsheet',
+          name: 'AI Workflow Studio temporary legacy.xls',
+        });
+      }
+      if (url.includes('/drive/v3/files?')) {
+        return Response.json({
+          files: [
+            {
+              id: '1LegacyWorkbookResourceId12345',
+              mimeType: 'application/vnd.ms-excel',
+              name: 'legacy.xls',
+              size: String(legacyBytes.byteLength),
+            },
+          ],
+        });
+      }
+      if (url.includes('/spreadsheets/1ConvertedLegacySpreadsheet1234?')) {
+        return Response.json({
+          sheets: [
+            {
+              properties: {
+                gridProperties: { columnCount: 3, rowCount: 3 },
+                sheetId: 0,
+                title: '成本',
+              },
+            },
+          ],
+        });
+      }
+      if (url.includes('/values/')) {
+        return Response.json({
+          range: "'成本'!A1:C3",
+          values: [
+            ['品號', '數量', '成本'],
+            ['A-01', 2, 120],
+          ],
+        });
+      }
+      if (url.includes('/drive/v3/files/1ConvertedLegacySpreadsheet1234')) {
+        return new Response('', { status: 204 });
+      }
+      return new Response('not found', { status: 404 });
+    };
+    const sheetsClient = new GoogleSheetsClient({
+      fetchTransport,
+      operationStore: new InMemoryGoogleOperationStore(),
+    });
+    const client = new GoogleDriveExcelClient({ fetchTransport, sheetsClient });
+
+    const result = await client.readExcelFolder(TOKEN, FOLDER_ID, {
+      headerScanRows: 10,
+      includeSubfolders: true,
+      maxFileSizeBytes: 20_000_000,
+      maxFiles: 10,
+      maxRows: 100,
+      maxSheets: 10,
+    });
+
+    expect(result.rows).toEqual([
+      {
+        _source_file: 'legacy.xls',
+        _source_sheet: '成本',
+        品號: 'A-01',
+        數量: 2,
+        成本: 120,
+      },
+    ]);
+    expect(calls.some((call) => call.includes('uploadType=resumable'))).toBe(true);
+    expect(calls).toContain(
+      'DELETE https://www.googleapis.com/drive/v3/files/1ConvertedLegacySpreadsheet1234?supportsAllDrives=true',
+    );
+  });
+
   it('creates an idempotent XLSX export without overwriting an existing workbook', async () => {
     const calls: string[] = [];
     let uploadCount = 0;

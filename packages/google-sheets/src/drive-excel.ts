@@ -34,6 +34,7 @@ const XLS_MIME = 'application/vnd.ms-excel';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MAX_API_RESPONSE_BYTES = 10_000_000;
 const MAX_MULTIPART_BYTES = 5_000_000;
+const MAX_RESUMABLE_BYTES = 20_000_000;
 
 export interface DriveExcelSource {
   readonly fileId: string;
@@ -295,7 +296,7 @@ export class GoogleDriveExcelClient {
           if (file.mimeType !== XLS_MIME && !file.name.toLowerCase().endsWith('.xls')) {
             localGrids = await readXlsxGrids(content);
           } else {
-            const converted = await this.uploadMultipart(
+            const converted = await this.uploadFile(
               accessToken,
               {
                 appProperties: { aiWorkflowStudioTemporary: 'true' },
@@ -435,13 +436,13 @@ export class GoogleDriveExcelClient {
     }
 
     const report = await reportXlsx(input);
-    if (report.byteLength > MAX_MULTIPART_BYTES) {
+    if (report.byteLength > MAX_RESUMABLE_BYTES) {
       throw new GoogleSheetsError(
         'GOOGLE_REQUEST_INVALID',
         'The consolidated Excel report exceeds the bounded upload limit.',
       );
     }
-    const created = await this.uploadMultipart(
+    const created = await this.uploadFile(
       accessToken,
       {
         appProperties: {
@@ -546,15 +547,18 @@ export class GoogleDriveExcelClient {
     );
   }
 
-  private async uploadMultipart(
+  private async uploadFile(
     accessToken: string,
     metadata: unknown,
     mimeType: string,
     content: Uint8Array,
     signal?: AbortSignal,
   ): Promise<z.infer<typeof DriveFileSchema>> {
+    if (content.byteLength > MAX_RESUMABLE_BYTES) {
+      throw new GoogleSheetsError('GOOGLE_REQUEST_INVALID', 'Drive upload exceeds 20 MB.');
+    }
     if (content.byteLength > MAX_MULTIPART_BYTES) {
-      throw new GoogleSheetsError('GOOGLE_REQUEST_INVALID', 'Drive upload exceeds 5 MB.');
+      return await this.uploadResumable(accessToken, metadata, mimeType, content, signal);
     }
     const multipart = multipartBody(metadata, mimeType, content);
     return await this.jsonRequest(
@@ -568,6 +572,66 @@ export class GoogleDriveExcelClient {
         body: multipart.body.buffer as ArrayBuffer,
         headers: { 'content-type': multipart.contentType },
         method: 'POST',
+      },
+      DriveFileSchema,
+      signal,
+    );
+  }
+
+  private async uploadResumable(
+    accessToken: string,
+    metadata: unknown,
+    mimeType: string,
+    content: Uint8Array,
+    signal?: AbortSignal,
+  ): Promise<z.infer<typeof DriveFileSchema>> {
+    const initiation = await this.fetchTransport(
+      `${this.uploadBaseUrl}/files?${new URLSearchParams({
+        fields: 'id,name,mimeType,webViewLink',
+        supportsAllDrives: 'true',
+        uploadType: 'resumable',
+      })}`,
+      {
+        body: JSON.stringify(metadata),
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json; charset=UTF-8',
+          'x-upload-content-length': String(content.byteLength),
+          'x-upload-content-type': mimeType,
+        },
+        method: 'POST',
+        ...(signal === undefined ? {} : { signal }),
+      },
+    );
+    if (!initiation.ok) {
+      throw new GoogleSheetsError(
+        initiation.status === 429 ? 'GOOGLE_RATE_LIMITED' : 'GOOGLE_REQUEST_FAILED',
+        'Google Drive rejected resumable-upload initialization.',
+        { retryable: initiation.status === 429 || initiation.status >= 500 },
+      );
+    }
+    const location = initiation.headers.get('location');
+    const parsedLocation = z.url().max(2_000).safeParse(location);
+    if (!parsedLocation.success || new URL(parsedLocation.data).protocol !== 'https:') {
+      throw new GoogleSheetsError(
+        'GOOGLE_RESPONSE_INVALID',
+        'Google Drive returned an invalid resumable-upload location.',
+      );
+    }
+    return await this.jsonRequest(
+      accessToken,
+      parsedLocation.data,
+      {
+        body: content.buffer.slice(
+          content.byteOffset,
+          content.byteOffset + content.byteLength,
+        ) as ArrayBuffer,
+        headers: {
+          'content-length': String(content.byteLength),
+          'content-type': mimeType,
+        },
+        method: 'PUT',
       },
       DriveFileSchema,
       signal,

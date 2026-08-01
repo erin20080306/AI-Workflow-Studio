@@ -3633,8 +3633,10 @@ Status: implementation complete; Production acceptance pending
   cancelled one incorrectly queued Desktop attempt before it processed data.
 - The grounded Drive planner now uses the existing 20 MB per-`.xlsx` source
   hard limit instead of a stricter 5 MB planning value. Production acceptance
-  showed the current folder reaches a larger source workbook after 41 seconds;
-  legacy `.xls` conversion remains capped at the 5 MB multipart boundary.
+  confirmed that the current folder also contains legacy `.xls` workbooks. A
+  legacy file larger than the 5 MB multipart boundary now uses Drive's bounded
+  resumable-upload protocol for temporary Google Sheets conversion and remains
+  capped by the same reviewed 20 MB source limit.
 
 ### Local validation
 

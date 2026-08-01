@@ -77,7 +77,7 @@ The matching report writer creates a styled `.xlsx` workbook in server memory
 and uploads it as a new file in the same Drive folder. It never overwrites a
 customer file and uses an app-owned idempotency marker so a repeated workflow
 attempt returns the same metadata result. The workflow schema bounds each
-request to 20 MB per `.xlsx` source file, 5 MB for legacy `.xls` conversion,
+request to 20 MB per `.xlsx` or legacy `.xls` source file,
 500 files, 2,000 sheets, and 100,000 merged rows. The deterministic planner
 uses the 20 MB source-file limit and a reviewed default of 1,000 sheets so the
 current cost folder's 776 worksheets remain inside the safe envelope. The
@@ -85,6 +85,11 @@ complete limits are visible
 in the reviewed workflow before execution, and external outputs still require
 approval. Read operations fail closed when an existing OAuth connection lacks
 `drive.readonly`.
+
+Legacy `.xls` files at or below 5 MB use a bounded multipart conversion. Larger
+legacy files use Drive's resumable upload protocol, remain capped at the same
+20 MB reviewed source limit, are converted only to a temporary Google Sheet,
+and are deleted after their inert cell values have been read.
 
 ## Token protection
 
