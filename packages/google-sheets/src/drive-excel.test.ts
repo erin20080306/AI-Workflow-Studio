@@ -188,10 +188,10 @@ describe('GoogleDriveExcelClient', () => {
       }
       if (url.includes('/drive/v3/files?')) {
         return Response.json({
-          files: Array.from({ length: 10 }, (_, index) => ({
+          files: Array.from({ length: 20 }, (_, index) => ({
             id: `1BinaryWorkbookResourceId${String(index).padStart(3, '0')}`,
             mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            name: `成本-${String(9 - index).padStart(2, '0')}.xlsx`,
+            name: `成本-${String(19 - index).padStart(2, '0')}.xlsx`,
             size: String(workbookBytes.byteLength),
           })),
         });
@@ -210,9 +210,9 @@ describe('GoogleDriveExcelClient', () => {
     });
 
     expect(maximumDownloads).toBeGreaterThan(1);
-    expect(maximumDownloads).toBeLessThanOrEqual(8);
+    expect(maximumDownloads).toBeLessThanOrEqual(16);
     expect(result.files.map((file) => file.fileName)).toEqual(
-      Array.from({ length: 10 }, (_, index) => `成本-${String(index).padStart(2, '0')}.xlsx`),
+      Array.from({ length: 20 }, (_, index) => `成本-${String(index).padStart(2, '0')}.xlsx`),
     );
   });
 

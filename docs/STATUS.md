@@ -3642,21 +3642,22 @@ Status: implementation complete; Production acceptance pending
   capped by the same reviewed 20 MB source limit.
 - Production retry passed the former request-validation boundary and exposed
   the 120-second single-node execution timeout while reading the 481-workbook
-  folder. Independent `.xlsx` downloads now use a fixed concurrency ceiling of
-  eight, while results remain merged in deterministic filename order.
+  folder. Independent `.xlsx` downloads now use a fixed concurrency ceiling,
+  while results remain merged in deterministic filename order.
 - The bounded parallel implementation still reached the former 120-second
   limit during Production acceptance. Validated Cloud nodes now receive a
   four-minute ceiling inside the existing five-minute Vercel Pro route window;
   retry routes declare the same five-minute request duration explicitly.
 - Authenticated Production Run `7d5bc26f-d245-4aaf-8a23-406c01cdfdb6` confirmed
-  that the full-model `.xlsx` parser still exceeded the new four-minute node
-  ceiling before downstream writes began. The replacement reader streams only
-  worksheet values, rejects more than 64 MB of selected decompressed XML,
-  excludes workbook presentation metadata, deletes every
-  isolated ephemeral source after use, and has regression coverage at the hard
-  500-workbook envelope. Production re-acceptance remains pending until this
-  parser change is deployed; the failed attempt produced no report, Slides,
-  Apps Script project, or email.
+  that the ExcelJS streaming reader still exceeded the new four-minute node
+  ceiling before downstream writes began on attempt 2. The replacement reader
+  directly parses only allowlisted workbook XML with SAX, rejects more than
+  64 MB of selected decompressed XML, excludes workbook presentation metadata,
+  creates no temporary workbook file, raises the bounded download ceiling from
+  8 to 16, and has regression coverage at the hard 500-workbook envelope.
+  Production re-acceptance remains pending until this parser change is deployed;
+  both failed attempts produced no report, Slides, Apps Script project, or
+  email.
 
 ### Local validation
 

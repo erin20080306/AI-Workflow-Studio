@@ -68,14 +68,16 @@ The Drive Excel reader accepts one validated folder identifier from the
 authenticated Tenant connection. It supports Google Sheets and binary `.xls`
 or `.xlsx` files, recursively visits approved subfolders, locates the first
 usable header row, merges a union of columns, and appends `_source_file` and
-`_source_sheet` provenance fields. `.xlsx` files use a value-only streaming
-reader from an isolated ephemeral server path that is deleted immediately after
-parsing. Presentation styles are not retained; hyperlinks, drawings, and
+`_source_sheet` provenance fields. `.xlsx` files use a value-only SAX parser
+over a strict allowlist of workbook, relationship, shared-string, style, and
+worksheet XML entries. No temporary workbook file or full Excel workbook model
+is created. Presentation styles are not retained; hyperlinks, drawings, and
 embedded code are excluded; and formulas are read only as stored results. A
 bounded style catalog is used only to preserve value interpretation such as
-dates. Selected decompressed workbook XML is capped at 64 MB, and macros are
-never executed. Legacy `.xls` files are converted to temporary app-created
-Google Sheets and deleted after reading.
+dates. Selected decompressed workbook XML is capped at 64 MB, downloads use a
+fixed concurrency ceiling of 16, and macros are never executed. Legacy `.xls`
+files are converted to temporary app-created Google Sheets and deleted after
+reading.
 
 The matching report writer creates a styled `.xlsx` workbook in server memory
 and uploads it as a new file in the same Drive folder. It never overwrites a

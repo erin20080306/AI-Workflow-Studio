@@ -1,10 +1,8 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, rmdir, unlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 import ExcelJS from 'exceljs';
-import { unzipSync, zipSync } from 'fflate';
+import { unzipSync } from 'fflate';
+import { SaxesParser, type SaxesTagPlain } from 'saxes';
 import { z } from 'zod';
 
 import { GoogleSheetsClient, InMemoryGoogleOperationStore } from './client';
@@ -40,7 +38,7 @@ const MAX_API_RESPONSE_BYTES = 10_000_000;
 const MAX_MULTIPART_BYTES = 5_000_000;
 const MAX_RESUMABLE_BYTES = 20_000_000;
 const MAX_XLSX_XML_BYTES = 64_000_000;
-const XLSX_DOWNLOAD_CONCURRENCY = 8;
+const XLSX_DOWNLOAD_CONCURRENCY = 16;
 
 export interface DriveExcelSource {
   readonly fileId: string;
@@ -161,27 +159,27 @@ function headerRowIndex(rows: readonly (readonly GoogleCell[])[], scanRows: numb
   return bestIndex;
 }
 
-function excelCell(value: ExcelJS.CellValue): GoogleCell {
-  if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
-  if (typeof value === 'string') return value;
-  if (value instanceof Date) return value.toISOString();
-  const candidate = value as unknown as Readonly<Record<string, unknown>>;
-  if ('result' in candidate && candidate.result !== undefined) {
-    return excelCell(candidate.result as ExcelJS.CellValue);
-  }
-  if (typeof candidate.text === 'string') return candidate.text;
-  if (Array.isArray(candidate.richText)) {
-    return candidate.richText
-      .map((part) =>
-        typeof part === 'object' && part !== null && 'text' in part ? String(part.text) : '',
-      )
-      .join('');
-  }
-  if (typeof candidate.error === 'string') return candidate.error;
-  return String(value);
+function localName(name: string): string {
+  return name.slice(name.lastIndexOf(':') + 1);
 }
 
-function orderedXlsxForStreaming(content: Uint8Array): Uint8Array {
+function xmlAttribute(tag: SaxesTagPlain, name: string): string | undefined {
+  const value = tag.attributes[name];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function xmlText(content: Uint8Array): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(content);
+  } catch {
+    throw new GoogleSheetsError(
+      'GOOGLE_REQUEST_INVALID',
+      'The workbook contains invalid XML text.',
+    );
+  }
+}
+
+function selectedXlsxFiles(content: Uint8Array): ReturnType<typeof unzipSync> {
   let selectedBytes = 0;
   let files: ReturnType<typeof unzipSync>;
   try {
@@ -214,65 +212,306 @@ function orderedXlsxForStreaming(content: Uint8Array): Uint8Array {
     if (error instanceof GoogleSheetsError) throw error;
     throw new GoogleSheetsError('GOOGLE_REQUEST_INVALID', 'The workbook is not a valid XLSX file.');
   }
-  const workbookRelationships = files['xl/_rels/workbook.xml.rels'];
-  const workbook = files['xl/workbook.xml'];
-  if (!workbookRelationships || !workbook) {
+  if (!files['xl/_rels/workbook.xml.rels'] || !files['xl/workbook.xml']) {
     throw new GoogleSheetsError(
       'GOOGLE_REQUEST_INVALID',
       'The workbook is missing required XLSX metadata.',
     );
   }
-  const ordered: Record<string, Uint8Array> = {
-    'xl/_rels/workbook.xml.rels': workbookRelationships,
-    'xl/workbook.xml': workbook,
-  };
-  const sharedStrings = files['xl/sharedStrings.xml'];
-  const styles = files['xl/styles.xml'];
-  if (sharedStrings) ordered['xl/sharedStrings.xml'] = sharedStrings;
-  if (styles) ordered['xl/styles.xml'] = styles;
-  for (const name of Object.keys(files)
-    .filter((entry) => /^xl\/worksheets\/sheet\d+\.xml$/.test(entry))
-    .sort((left, right) => {
-      const leftNumber = Number(left.match(/sheet(\d+)\.xml$/)?.[1] ?? 0);
-      const rightNumber = Number(right.match(/sheet(\d+)\.xml$/)?.[1] ?? 0);
-      return leftNumber - rightNumber;
-    })) {
-    const worksheet = files[name];
-    if (worksheet) ordered[name] = worksheet;
-  }
-  return zipSync(ordered, { level: 0 });
+  return files;
 }
 
-async function readXlsxGrids(content: Uint8Array): Promise<readonly ExcelGrid[]> {
-  const temporaryDirectory = await mkdtemp(join(tmpdir(), 'ai-workflow-xlsx-'));
-  const temporaryPath = join(temporaryDirectory, 'source.xlsx');
-  try {
-    await writeFile(temporaryPath, orderedXlsxForStreaming(content));
-    const workbook = new ExcelJS.stream.xlsx.WorkbookReader(temporaryPath, {
-      entries: 'ignore',
-      hyperlinks: 'ignore',
-      sharedStrings: 'cache',
-      styles: 'cache',
-      worksheets: 'emit',
-    });
-    const grids: ExcelGrid[] = [];
-    for await (const rawWorksheet of workbook) {
-      const worksheet = rawWorksheet as typeof rawWorksheet & { readonly name: string };
-      const values: GoogleCell[][] = [];
-      for await (const row of worksheet) {
-        if (!row.hasValues) continue;
-        const cells: GoogleCell[] = [];
-        row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
-          cells[columnNumber - 1] = excelCell(cell.value);
-        });
-        values.push(cells);
+function parseXml(xml: string, configure: (parser: SaxesParser) => void): void {
+  const parser = new SaxesParser();
+  configure(parser);
+  parser.on('doctype', () => {
+    throw new GoogleSheetsError(
+      'GOOGLE_REQUEST_INVALID',
+      'Workbook XML document types are not allowed.',
+    );
+  });
+  parser.on('error', (error) => {
+    throw error;
+  });
+  parser.write(xml).close();
+}
+
+function parseWorkbookMetadata(
+  workbookContent: Uint8Array,
+  relationshipContent: Uint8Array,
+): {
+  readonly date1904: boolean;
+  readonly sheets: readonly { readonly path: string; readonly title: string }[];
+} {
+  const relationshipTargets = new Map<string, string>();
+  parseXml(xmlText(relationshipContent), (parser) => {
+    parser.on('opentag', (tag) => {
+      if (localName(tag.name) !== 'Relationship') return;
+      const id = xmlAttribute(tag, 'Id');
+      const target = xmlAttribute(tag, 'Target')?.replaceAll('\\', '/');
+      const worksheet = target?.match(/(?:^|\/)(worksheets\/sheet\d+\.xml)$/)?.[1];
+      if (id !== undefined && worksheet !== undefined) {
+        relationshipTargets.set(id, `xl/${worksheet}`);
       }
-      grids.push({ title: worksheet.name, values });
+    });
+  });
+
+  let date1904 = false;
+  const sheets: { path: string; title: string }[] = [];
+  parseXml(xmlText(workbookContent), (parser) => {
+    parser.on('opentag', (tag) => {
+      const name = localName(tag.name);
+      if (name === 'workbookPr') {
+        const value = xmlAttribute(tag, 'date1904');
+        date1904 = value === '1' || value === 'true';
+        return;
+      }
+      if (name !== 'sheet') return;
+      const title = xmlAttribute(tag, 'name')?.trim();
+      const relationshipId = xmlAttribute(tag, 'r:id');
+      const path =
+        relationshipId === undefined ? undefined : relationshipTargets.get(relationshipId);
+      if (title !== undefined && title !== '' && path !== undefined) {
+        sheets.push({ path, title: title.slice(0, 200) });
+      }
+    });
+  });
+  if (sheets.length === 0) {
+    throw new GoogleSheetsError(
+      'GOOGLE_REQUEST_INVALID',
+      'The workbook contains no readable worksheets.',
+    );
+  }
+  return { date1904, sheets };
+}
+
+function parseSharedStrings(content: Uint8Array | undefined): readonly string[] {
+  if (content === undefined) return [];
+  const strings: string[] = [];
+  let inItem = false;
+  let inText = false;
+  let current = '';
+  parseXml(xmlText(content), (parser) => {
+    parser.on('opentag', (tag) => {
+      const name = localName(tag.name);
+      if (name === 'si') {
+        inItem = true;
+        current = '';
+      } else if (name === 't' && inItem) {
+        inText = true;
+      }
+    });
+    const append = (text: string): void => {
+      if (inText) current += text;
+    };
+    parser.on('text', append);
+    parser.on('cdata', append);
+    parser.on('closetag', (tag) => {
+      const name = localName(tag.name);
+      if (name === 't') inText = false;
+      if (name === 'si') {
+        strings.push(current);
+        inItem = false;
+      }
+    });
+  });
+  return strings;
+}
+
+function isDateNumberFormat(id: number, customDateFormats: ReadonlySet<number>): boolean {
+  return (
+    customDateFormats.has(id) ||
+    (id >= 14 && id <= 22) ||
+    (id >= 27 && id <= 36) ||
+    (id >= 45 && id <= 47) ||
+    (id >= 50 && id <= 58)
+  );
+}
+
+function parseDateStyles(content: Uint8Array | undefined): ReadonlySet<number> {
+  if (content === undefined) return new Set();
+  const customDateFormats = new Set<number>();
+  const dateStyles = new Set<number>();
+  let inCellFormats = false;
+  let styleIndex = 0;
+  parseXml(xmlText(content), (parser) => {
+    parser.on('opentag', (tag) => {
+      const name = localName(tag.name);
+      if (name === 'numFmt') {
+        const id = Number(xmlAttribute(tag, 'numFmtId'));
+        const code = xmlAttribute(tag, 'formatCode') ?? '';
+        const normalized = code
+          .replace(/"[^"]*"/g, '')
+          .replace(/\\./g, '')
+          .replace(/\[[^\]]*\]/g, '');
+        if (Number.isSafeInteger(id) && /[ymdhis]/i.test(normalized)) customDateFormats.add(id);
+        return;
+      }
+      if (name === 'cellXfs') {
+        inCellFormats = true;
+        styleIndex = 0;
+        return;
+      }
+      if (name === 'xf' && inCellFormats) {
+        const numberFormatId = Number(xmlAttribute(tag, 'numFmtId') ?? '0');
+        if (isDateNumberFormat(numberFormatId, customDateFormats)) dateStyles.add(styleIndex);
+        styleIndex += 1;
+      }
+    });
+    parser.on('closetag', (tag) => {
+      if (localName(tag.name) === 'cellXfs') inCellFormats = false;
+    });
+  });
+  return dateStyles;
+}
+
+function excelColumnIndex(reference: string | undefined, fallback: number): number {
+  const letters = reference?.match(/^([A-Z]{1,3})\d+$/i)?.[1]?.toUpperCase();
+  if (letters === undefined) return fallback;
+  let result = 0;
+  for (const letter of letters) result = result * 26 + letter.charCodeAt(0) - 64;
+  return result >= 1 && result <= 16_384 ? result - 1 : fallback;
+}
+
+function excelDate(serial: number, date1904: boolean): string | number {
+  const milliseconds =
+    (date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30)) + serial * 24 * 60 * 60 * 1_000;
+  const date = new Date(milliseconds);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : serial;
+}
+
+function worksheetCellValue(
+  type: string | undefined,
+  raw: string,
+  inline: string,
+  styleIndex: number,
+  dateStyles: ReadonlySet<number>,
+  sharedStrings: readonly string[],
+  date1904: boolean,
+): GoogleCell {
+  if (type === 'inlineStr') return inline;
+  if (type === 's') return sharedStrings[Number(raw)] ?? '';
+  if (type === 'str' || type === 'e') return raw;
+  if (type === 'b') return raw === '1';
+  if (type === 'd') {
+    const date = new Date(raw);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : raw;
+  }
+  const number = Number(raw);
+  if (raw !== '' && Number.isFinite(number)) {
+    return dateStyles.has(styleIndex) ? excelDate(number, date1904) : number;
+  }
+  return raw;
+}
+
+function parseWorksheet(
+  content: Uint8Array,
+  title: string,
+  sharedStrings: readonly string[],
+  dateStyles: ReadonlySet<number>,
+  date1904: boolean,
+): ExcelGrid {
+  const values: GoogleCell[][] = [];
+  let row: GoogleCell[] | undefined;
+  let rowHasValue = false;
+  let nextColumn = 0;
+  let cell:
+    | {
+        readonly column: number;
+        readonly styleIndex: number;
+        readonly type?: string;
+        inline: string;
+        raw: string;
+      }
+    | undefined;
+  let capture: 'inline' | 'raw' | undefined;
+  parseXml(xmlText(content), (parser) => {
+    parser.on('opentag', (tag) => {
+      const name = localName(tag.name);
+      if (name === 'row') {
+        row = [];
+        rowHasValue = false;
+        nextColumn = 0;
+        return;
+      }
+      if (name === 'c' && row !== undefined) {
+        const column = excelColumnIndex(xmlAttribute(tag, 'r'), nextColumn);
+        nextColumn = column + 1;
+        const type = xmlAttribute(tag, 't');
+        cell = {
+          column,
+          inline: '',
+          raw: '',
+          styleIndex: Number(xmlAttribute(tag, 's') ?? '0'),
+          ...(type === undefined ? {} : { type }),
+        };
+        return;
+      }
+      if (cell !== undefined && name === 'v') capture = 'raw';
+      if (cell !== undefined && name === 't' && cell.type === 'inlineStr') capture = 'inline';
+    });
+    const append = (text: string): void => {
+      if (cell === undefined || capture === undefined) return;
+      cell[capture] += text;
+    };
+    parser.on('text', append);
+    parser.on('cdata', append);
+    parser.on('closetag', (tag) => {
+      const name = localName(tag.name);
+      if (name === 'v' || name === 't') capture = undefined;
+      if (name === 'c' && row !== undefined && cell !== undefined) {
+        const hasValue = cell.raw !== '' || cell.inline !== '';
+        if (hasValue) {
+          row[cell.column] = worksheetCellValue(
+            cell.type,
+            cell.raw,
+            cell.inline,
+            cell.styleIndex,
+            dateStyles,
+            sharedStrings,
+            date1904,
+          );
+          rowHasValue = true;
+        }
+        cell = undefined;
+        capture = undefined;
+      }
+      if (name === 'row' && row !== undefined) {
+        if (rowHasValue) values.push(row);
+        row = undefined;
+      }
+    });
+  });
+  return { title, values };
+}
+
+function readXlsxGrids(content: Uint8Array): readonly ExcelGrid[] {
+  try {
+    const files = selectedXlsxFiles(content);
+    const workbook = files['xl/workbook.xml'];
+    const relationships = files['xl/_rels/workbook.xml.rels'];
+    if (workbook === undefined || relationships === undefined) {
+      throw new GoogleSheetsError(
+        'GOOGLE_REQUEST_INVALID',
+        'The workbook is missing required XLSX metadata.',
+      );
     }
-    return grids;
-  } finally {
-    await unlink(temporaryPath).catch(() => undefined);
-    await rmdir(temporaryDirectory).catch(() => undefined);
+    const metadata = parseWorkbookMetadata(workbook, relationships);
+    const sharedStrings = parseSharedStrings(files['xl/sharedStrings.xml']);
+    const dateStyles = parseDateStyles(files['xl/styles.xml']);
+    return metadata.sheets.map((sheet) => {
+      const worksheet = files[sheet.path];
+      if (worksheet === undefined) {
+        throw new GoogleSheetsError(
+          'GOOGLE_REQUEST_INVALID',
+          'The workbook references a missing worksheet.',
+        );
+      }
+      return parseWorksheet(worksheet, sheet.title, sharedStrings, dateStyles, metadata.date1904);
+    });
+  } catch (error) {
+    if (error instanceof GoogleSheetsError) throw error;
+    throw new GoogleSheetsError('GOOGLE_REQUEST_INVALID', 'The workbook contains invalid XML.');
   }
 }
 
@@ -388,26 +627,12 @@ export class GoogleDriveExcelClient {
         );
       }
     }
-    let xlsxParseTail = Promise.resolve();
-    const parseXlsx = async (content: Uint8Array): Promise<readonly ExcelGrid[]> => {
-      const previous = xlsxParseTail;
-      let release = (): void => undefined;
-      xlsxParseTail = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      await previous;
-      try {
-        return await readXlsxGrids(content);
-      } finally {
-        release();
-      }
-    };
     const downloadedXlsx = await mapWithConcurrency(
       files,
       XLSX_DOWNLOAD_CONCURRENCY,
       async (file): Promise<readonly ExcelGrid[] | undefined> => {
         if (file.mimeType === GOOGLE_SHEET_MIME || isLegacyExcelFile(file)) return undefined;
-        return await parseXlsx(
+        return readXlsxGrids(
           await this.downloadFile(accessToken, file, limits.maxFileSizeBytes, signal),
         );
       },
