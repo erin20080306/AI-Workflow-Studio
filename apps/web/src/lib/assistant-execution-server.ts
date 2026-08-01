@@ -49,6 +49,21 @@ const DraftRowSchema = z.object({
 });
 
 function logDraftPersistenceFailure(stage: string, error: unknown): void {
+  const directConstraint =
+    typeof error === 'object' &&
+    error !== null &&
+    'constraint' in error &&
+    typeof error.constraint === 'string'
+      ? error.constraint
+      : undefined;
+  const message =
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+      ? error.message
+      : '';
+  const constraint = directConstraint ?? /constraint "([a-z0-9_]+)"/iu.exec(message)?.[1];
   const databaseCode =
     typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
       ? error.code
@@ -56,6 +71,7 @@ function logDraftPersistenceFailure(stage: string, error: unknown): void {
   console.error(
     JSON.stringify({
       assistantWorkflowDraftFailure: {
+        ...(constraint === undefined ? {} : { constraint }),
         ...(databaseCode === undefined ? {} : { databaseCode }),
         stage,
       },
