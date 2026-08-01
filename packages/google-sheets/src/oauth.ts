@@ -22,6 +22,7 @@ export const GOOGLE_SHEETS_SCOPES = [
 export const GOOGLE_WORKSPACE_SCOPES = [
   ...GOOGLE_SHEETS_SCOPES,
   'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/forms.responses.readonly',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',

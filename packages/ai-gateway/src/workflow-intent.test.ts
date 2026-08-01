@@ -39,6 +39,25 @@ describe('workflow intent coverage', () => {
     });
   });
 
+  it('routes a Google Drive Excel folder consolidation to cloud nodes instead of Desktop', () => {
+    expect(
+      detectWorkflowIntent(
+        '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel，匯總成一份 Excel，產生摘要報告、5 頁 Google Slides 與核准型 GAS。',
+      ),
+    ).toEqual({
+      needsDesktop: false,
+      needsGoogleConnection: true,
+      requiredNodeTypes: [
+        'ai.summarize',
+        'report.compose',
+        'google_slides.create',
+        'apps_script.deploy_template',
+        'google_drive.read_excel_folder',
+        'google_drive.create_excel_report',
+      ],
+    });
+  });
+
   it('accepts a connected Gmail summary and rejects missing or invented capabilities', () => {
     const output = AIPlannerOutputSchema.parse({
       assumptions: [],

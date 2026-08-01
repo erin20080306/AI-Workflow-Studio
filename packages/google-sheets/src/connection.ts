@@ -247,6 +247,21 @@ export class GoogleConnectionService {
     return (await this.repository.list(tenantId)).map(toView);
   }
 
+  async assertScopes(
+    tenantId: string,
+    connectionId: string,
+    requiredScopes: readonly string[],
+  ): Promise<void> {
+    const connection = await this.requireConnection(tenantId, connectionId);
+    const missing = requiredScopes.filter((scope) => !connection.scopes.includes(scope));
+    if (missing.length > 0) {
+      throw new GoogleSheetsError(
+        'GOOGLE_AUTHORIZATION_INVALID',
+        'The Google connection must be reconnected to authorize the requested Drive capability.',
+      );
+    }
+  }
+
   async health(
     tenantId: string,
     connectionId: string,

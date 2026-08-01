@@ -8,7 +8,7 @@ import type {
 import type { PlannerRequest } from './types';
 
 const GOOGLE_INTENT =
-  /gmail|google\s*(?:forms?|sheets?|slides?)|google\s*表單|google\s*試算表|google\s*簡報|郵件|電子郵件|信箱/iu;
+  /gmail|google\s*(?:drive|forms?|sheets?|slides?)|google\s*(?:雲端硬碟|表單|試算表|簡報)|drive\.google\.com|郵件|電子郵件|信箱/iu;
 const GMAIL_INTENT = /gmail|google\s*(?:mail|email)|郵件|電子郵件|信箱/iu;
 const FORM_INTENT = /google\s*(?:forms?|表單)|表單回覆|表單訂單/iu;
 const SHEETS_INTENT = /google\s*(?:sheets?|試算表)|雲端試算表/iu;
@@ -19,7 +19,11 @@ const APPS_SCRIPT_INTENT = /apps?\s*script|google\s*apps?\s*script|\bgas\b/iu;
 const EMAIL_DELIVERY_INTENT =
   /(?:寄|發送|寄送|send|email).{0,24}(?:email|mail|郵件|電子郵件|信箱|@)/iu;
 const EMAIL_NEGATION = /不要寄|不寄|勿寄|do\s+not\s+send|don't\s+send/iu;
-const EXCEL_INTENT = /excel|\.xlsx|活頁簿|試算表檔/iu;
+const EXCEL_INTENT = /excel|\.xlsx?|活頁簿|試算表檔/iu;
+const DRIVE_FOLDER_INTENT =
+  /drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/[A-Za-z0-9_-]{10,240}|google\s*(?:drive|雲端硬碟).{0,32}(?:folder|資料夾)/iu;
+const EXCEL_CONSOLIDATION_INTENT =
+  /(?:合併|匯總|彙整|整合|整理).{0,36}(?:excel|\.xlsx?|活頁簿)|(?:excel|\.xlsx?|活頁簿).{0,36}(?:合併|匯總|彙整|整合|整理)|merge|consolidat/iu;
 
 export interface WorkflowIntent {
   readonly needsDesktop: boolean;
@@ -33,6 +37,7 @@ export function detectWorkflowIntent(prompt: string): WorkflowIntent {
   const needsForms = FORM_INTENT.test(prompt);
   const needsSheets = SHEETS_INTENT.test(prompt);
   const needsExcel = EXCEL_INTENT.test(prompt);
+  const needsDriveExcel = needsExcel && DRIVE_FOLDER_INTENT.test(prompt);
   const needsSummary = SUMMARY_INTENT.test(prompt);
   if (needsGmail) required.add('gmail.read');
   if (needsForms) required.add('google_forms.read_responses');
@@ -48,9 +53,16 @@ export function detectWorkflowIntent(prompt: string): WorkflowIntent {
   if (APPS_SCRIPT_INTENT.test(prompt)) required.add('apps_script.deploy_template');
   if (EMAIL_DELIVERY_INTENT.test(prompt) && !EMAIL_NEGATION.test(prompt))
     required.add('gmail.send');
-  if (needsExcel) required.add('excel.read');
+  if (needsDriveExcel) {
+    required.add('google_drive.read_excel_folder');
+    if (EXCEL_CONSOLIDATION_INTENT.test(prompt)) {
+      required.add('google_drive.create_excel_report');
+    }
+  } else if (needsExcel) {
+    required.add('excel.read');
+  }
   return {
-    needsDesktop: needsExcel,
+    needsDesktop: needsExcel && !needsDriveExcel,
     needsGoogleConnection: GOOGLE_INTENT.test(prompt),
     requiredNodeTypes: [...required],
   };

@@ -46,11 +46,42 @@ The current scopes are:
 
 - `https://www.googleapis.com/auth/spreadsheets`
 - `https://www.googleapis.com/auth/drive.metadata.readonly`
+- `https://www.googleapis.com/auth/drive.file`
+- `https://www.googleapis.com/auth/drive.readonly`
+- `https://www.googleapis.com/auth/forms.responses.readonly`
+- `https://www.googleapis.com/auth/gmail.readonly`
+- `https://www.googleapis.com/auth/gmail.send`
+- `https://www.googleapis.com/auth/presentations`
+- `https://www.googleapis.com/auth/script.projects`
 
-Drive access is metadata-only and is used to list spreadsheet IDs, names, and
-modification times. The implementation follows Google's
+Drive content access is read-only and is used to discover and download selected
+folder workbooks. Existing connections must be explicitly re-authorized after
+this scope is added. External writes use the explicit `drive.file` scope only
+for files the application creates or opens with the user. The implementation
+follows Google's
 [web-server OAuth guidance](https://developers.google.com/identity/protocols/oauth2/web-server)
 and [OAuth security practices](https://developers.google.com/identity/protocols/oauth2/resources/best-practices).
+
+## Drive Excel folder operations
+
+The Drive Excel reader accepts one validated folder identifier from the
+authenticated Tenant connection. It supports Google Sheets and binary `.xls`
+or `.xlsx` files, recursively visits approved subfolders, locates the first
+usable header row, merges a union of columns, and appends `_source_file` and
+`_source_sheet` provenance fields. `.xlsx` files are parsed as inert workbook
+data in server memory; formulas are read only as stored results and macros or
+embedded code are never executed. Legacy `.xls` files are converted to
+temporary app-created Google Sheets and deleted after reading.
+
+The matching report writer creates a styled `.xlsx` workbook in server memory
+and uploads it as a new file in the same Drive folder. It never overwrites a
+customer file and uses an app-owned idempotency marker so a repeated workflow
+attempt returns the same metadata result. The workflow schema bounds each
+request to 20 MB per `.xlsx` source file, 5 MB for legacy `.xls` conversion,
+500 files, 500 sheets, and 100,000 merged rows. The complete limits are visible
+in the reviewed workflow before execution, and external outputs still require
+approval. Read operations fail closed when an existing OAuth connection lacks
+`drive.readonly`.
 
 ## Token protection
 
@@ -72,7 +103,7 @@ both local ciphertexts in a `finally` path.
 
 | Operation         | Behavior                                                        |
 | ----------------- | --------------------------------------------------------------- |
-| List spreadsheets | Drive metadata only, newest first, maximum 100                  |
+| List spreadsheets | Read-only Drive discovery, newest first, maximum 100            |
 | List sheets       | Sheet ID, title, row count, and column count only               |
 | Read              | A1 range, rows, unformatted scalar values                       |
 | Append            | Raw values, inserted rows, guarded against ambiguous retries    |

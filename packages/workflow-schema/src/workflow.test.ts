@@ -132,8 +132,44 @@ describe('WorkflowSchema', () => {
 
   it('registers exactly the first-version allowlist with no duplicate type/version pairs', () => {
     const keys = NODE_CATALOG.map((node) => `${node.type}@${node.version}`);
-    expect(NODE_CATALOG).toHaveLength(34);
-    expect(new Set(keys).size).toBe(34);
+    expect(NODE_CATALOG).toHaveLength(36);
+    expect(new Set(keys).size).toBe(36);
+  });
+
+  it('accepts a bounded cloud Drive Excel consolidation with an approval-gated report', () => {
+    const workflow = WorkflowSchema.parse({
+      description: 'Read and consolidate approved Drive workbooks.',
+      edges: [{ from: 'read_drive', to: 'write_report' }],
+      executionTarget: { type: 'cloud' },
+      name: 'Drive Excel consolidation',
+      nodes: [
+        {
+          config: {
+            connectionId: '00000000-0000-4000-8000-000000000009',
+            folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
+          },
+          id: 'read_drive',
+          type: 'google_drive.read_excel_folder',
+          version: 1,
+        },
+        {
+          config: {
+            connectionId: '00000000-0000-4000-8000-000000000009',
+            folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
+            outputName: 'AI-cost-summary.xlsx',
+            overwrite: false,
+          },
+          id: 'write_report',
+          type: 'google_drive.create_excel_report',
+          version: 1,
+        },
+      ],
+      schemaVersion: 1,
+      trigger: { config: {}, type: 'manual.trigger' },
+    });
+
+    expect(validateWorkflow(workflow)).toMatchObject({ issues: [], success: true });
+    expect(summarizeWorkflowRisks(workflow).requiresApproval).toBe(true);
   });
 
   it('accepts a bounded inline source feeding an AI summary and report', () => {

@@ -22,6 +22,7 @@ import {
   type ProductionAiProvider,
 } from '@/lib/ai-model-catalog';
 import { getAiProviderHealth, type AiProviderHealthStatus } from '@/lib/ai-provider-health';
+import { candidateRoutingTiers } from '@/lib/ai-model-routing-policy';
 import type { AiProviderSelection } from '@/lib/ai-model-selection';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
@@ -229,43 +230,52 @@ export async function resolveAiModelRoute(
   }
 
   const mappings = await listAiModelMappings();
-  const requestedProviders =
-    input.provider === 'auto'
-      ? providerPriority(input.operation, requestedTier)
-      : input.provider === 'mock'
-        ? []
-        : [input.provider];
+  const routingTiers = candidateRoutingTiers(input.tier, requestedTier);
+  const healthByProvider = new Map<
+    ProductionAiProvider,
+    Awaited<ReturnType<typeof getAiProviderHealth>>
+  >();
   let explicitProviderError: AiGatewayError | undefined;
-  for (const provider of requestedProviders) {
-    if (input.excludedProviders?.includes(provider) === true) continue;
-    if (!environment.providers[provider]) continue;
-    const mapping = mappings.find(
-      (candidate) =>
-        candidate.provider === provider && candidate.tier === requestedTier && candidate.enabled,
-    );
-    if (mapping === undefined) continue;
+  for (const routingTier of routingTiers) {
+    const requestedProviders =
+      input.provider === 'auto'
+        ? providerPriority(input.operation, routingTier)
+        : input.provider === 'mock'
+          ? []
+          : [input.provider];
+    for (const provider of requestedProviders) {
+      if (input.excludedProviders?.includes(provider) === true) continue;
+      if (!environment.providers[provider]) continue;
+      const mapping = mappings.find(
+        (candidate) =>
+          candidate.provider === provider && candidate.tier === routingTier && candidate.enabled,
+      );
+      if (mapping === undefined) continue;
 
-    const health = await getAiProviderHealth(provider);
-    if (health.status !== 'available') {
-      if (input.provider !== 'auto') explicitProviderError = providerHealthError(health.status);
-      continue;
-    }
-    const model = resolveAccountModelForTier(
-      mapping.provider,
-      mapping.tier,
-      mapping.model,
-      health.models,
-    );
-    if (model === undefined) {
-      if (input.provider !== 'auto') {
-        explicitProviderError = new AiGatewayError(
-          'AI_PROVIDER_NOT_CONFIGURED',
-          'No tier-compatible text model is available to this provider account.',
-        );
+      const cachedHealth = healthByProvider.get(provider);
+      const health = cachedHealth ?? (await getAiProviderHealth(provider));
+      healthByProvider.set(provider, health);
+      if (health.status !== 'available') {
+        if (input.provider !== 'auto') explicitProviderError = providerHealthError(health.status);
+        continue;
       }
-      continue;
+      const model = resolveAccountModelForTier(
+        mapping.provider,
+        mapping.tier,
+        mapping.model,
+        health.models,
+      );
+      if (model === undefined) {
+        if (input.provider !== 'auto') {
+          explicitProviderError = new AiGatewayError(
+            'AI_PROVIDER_NOT_CONFIGURED',
+            'No tier-compatible text model is available to this provider account.',
+          );
+        }
+        continue;
+      }
+      return { ...mapping, model, plan };
     }
-    return { ...mapping, model, plan };
   }
 
   if (explicitProviderError !== undefined) throw explicitProviderError;

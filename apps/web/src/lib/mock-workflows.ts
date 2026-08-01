@@ -116,6 +116,14 @@ export const NODE_PRESENTATION: Readonly<
     category: { en: 'Google Forms', zhHant: 'Google 表單' },
     label: { en: 'Read form responses', zhHant: '讀取表單回覆' },
   },
+  'google_drive.create_excel_report': {
+    category: { en: 'Google Drive', zhHant: 'Google 雲端硬碟' },
+    label: { en: 'Create cloud Excel report', zhHant: '建立雲端 Excel 報表' },
+  },
+  'google_drive.read_excel_folder': {
+    category: { en: 'Google Drive', zhHant: 'Google 雲端硬碟' },
+    label: { en: 'Read Drive Excel folder', zhHant: '讀取 Drive Excel 資料夾' },
+  },
   'google_sheets.append': {
     category: { en: 'Google Sheets', zhHant: 'Google Sheets' },
     label: { en: 'Append spreadsheet data', zhHant: '附加試算表資料' },

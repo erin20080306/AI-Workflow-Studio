@@ -3,6 +3,37 @@ import { describe, expect, it } from 'vitest';
 
 import { safeGoogleNodeFailure } from './cloud-workflow-errors';
 import { buildCloudAiSummaryInstructions } from './cloud-workflow-input';
+import { appsScriptParentId, buildProfessionalSlides } from './cloud-workflow-output';
+
+describe('cloud Slides and approved GAS planning', () => {
+  it('creates exactly the requested slide count and keeps references bounded', () => {
+    const slides = buildProfessionalSlides(
+      '摘要重點一包含足夠文字\n摘要重點二包含足夠文字\nhttps://example.com/chart.png',
+      {
+        includeImages: true,
+        includeReferences: true,
+        maxSlides: 5,
+        title: '成本摘要',
+      },
+      '2026-08-01',
+    );
+
+    expect(slides).toHaveLength(5);
+    expect(slides[0]?.title).toBe('成本摘要');
+    expect(slides[1]).toMatchObject({ imageUrl: 'https://example.com/chart.png' });
+    expect(slides.every((slide) => slide.body.length >= 1 && slide.body.length <= 8)).toBe(true);
+  });
+
+  it('binds the allowlisted Slides GAS template only to a validated presentation output', () => {
+    expect(
+      appsScriptParentId({
+        kind: 'google_slides_presentation',
+        presentationId: '1PresentationResourceId123456789',
+      }),
+    ).toBe('1PresentationResourceId123456789');
+    expect(appsScriptParentId({ kind: 'inline_text', text: 'not a presentation' })).toBeUndefined();
+  });
+});
 
 describe('cloud AI summary input', () => {
   it('keeps large structured and CJK sources within the chat request boundary', () => {

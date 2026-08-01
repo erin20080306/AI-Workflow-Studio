@@ -51,6 +51,11 @@ const FileNameTemplateSchema = z
     'File name template must not contain path separators',
   );
 
+const ExcelOutputNameSchema = FileNameTemplateSchema.refine(
+  (name) => name.toLowerCase().endsWith('.xlsx'),
+  'Excel output name must end with .xlsx',
+);
+
 const OutputFileConfigSchema = z
   .object({
     folderAliasId: UuidSchema,
@@ -406,6 +411,34 @@ export const GoogleSheetsSyncNodeSchema = node(
   }).strict(),
 );
 
+export const GoogleDriveReadExcelFolderNodeSchema = node(
+  'google_drive.read_excel_folder',
+  z
+    .object({
+      connectionId: UuidSchema,
+      folderId: GoogleResourceIdSchema,
+      headerScanRows: z.number().int().min(1).max(100).default(30),
+      includeSubfolders: z.boolean().default(true),
+      maxFileSizeBytes: z.number().int().min(1).max(20_000_000).default(5_000_000),
+      maxFiles: z.number().int().min(1).max(500).default(100),
+      maxRows: z.number().int().min(1).max(100_000).default(20_000),
+      maxSheets: z.number().int().min(1).max(500).default(100),
+    })
+    .strict(),
+);
+export const GoogleDriveCreateExcelReportNodeSchema = node(
+  'google_drive.create_excel_report',
+  z
+    .object({
+      connectionId: UuidSchema,
+      folderId: GoogleResourceIdSchema,
+      outputName: ExcelOutputNameSchema,
+      overwrite: z.literal(false).default(false),
+      reportTitle: NonEmptyLabelSchema.optional(),
+    })
+    .strict(),
+);
+
 export const GmailReadNodeSchema = node(
   'gmail.read',
   z
@@ -540,6 +573,8 @@ export const WorkflowNodeSchema = z.discriminatedUnion('type', [
   GoogleSheetsAppendNodeSchema,
   GoogleSheetsUpdateNodeSchema,
   GoogleSheetsSyncNodeSchema,
+  GoogleDriveReadExcelFolderNodeSchema,
+  GoogleDriveCreateExcelReportNodeSchema,
   GmailReadNodeSchema,
   GoogleFormsReadResponsesNodeSchema,
   AiSummarizeNodeSchema,

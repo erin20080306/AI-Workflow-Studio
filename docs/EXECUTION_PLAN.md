@@ -606,3 +606,29 @@ on the existing language switcher. Keep original audit and notification records
 unchanged so the immutable execution history remains complete. Unknown custom
 workflow values and future event codes must remain visible without unsafe or
 invented translation.
+
+## Phase 49 — Drive Excel reporting and approved Slides automation
+
+Status: in progress
+
+Extend Intelligent Work with one bounded Google Drive flow for a selected
+folder: recursively discover Excel workbooks and Google Sheets, normalize
+header rows, merge the records with source provenance, write a new `.xlsx`
+report without overwriting customer files, produce an AI summary and
+professional report, create the requested number of Google Slides, and deploy
+only an allowlisted Apps Script template bound to the created presentation.
+
+Every external write remains approval-gated and idempotent. `.xlsx` workbooks
+are parsed as inert data without evaluating formulas or embedded code; legacy
+`.xls` workbooks may be converted only through temporary app-created Google
+Sheets and must be cleaned up after reading. File, sheet, row, and byte limits
+must fail closed.
+The OAuth connection must include read-only Drive content access and be
+re-authorized when the scope set changes. Auto model routing may downgrade to a
+lower-cost configured tier after a bounded provider/model failure, while an
+explicitly selected tier must never be silently changed.
+
+Acceptance requires the complete local quality gate, Production deployment,
+OAuth re-consent, a real Drive-folder run with all six reviewed nodes, explicit
+write approvals, and verification of the generated Excel, report, Slides, GAS,
+audit timeline, and absence of sent email.

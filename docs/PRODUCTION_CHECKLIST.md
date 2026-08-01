@@ -116,7 +116,9 @@ logs, screenshots, or support tickets.
 - [ ] Confirm no personal access token, GitHub OAuth user token, or installation
       token is persisted or returned to the browser.
 - [ ] Keep Google consent scopes limited to spreadsheet access and read-only
-      Drive metadata.
+      Drive content. Re-authorize existing connections after adding
+      `drive.readonly` and verify folder/workbook access before enabling Drive
+      Excel workflows.
 - [ ] Verify token refresh, explicit revoke, disabled-client, and expired-token
       behavior in staging.
 - [ ] Document service ownership, quota alerts, and credential rotation.

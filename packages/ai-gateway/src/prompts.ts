@@ -13,6 +13,8 @@ const ALLOWED_NODE_TYPES = NODE_CATALOG.map((node) => node.type).join(', ');
 const EMAIL_ADDRESS_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
 const FORM_ID_PATTERN = /forms\/d\/(?:e\/)?([A-Za-z0-9_-]{10,240})/iu;
 const SHEET_ID_PATTERN = /spreadsheets\/d\/([A-Za-z0-9_-]{10,200})/iu;
+const DRIVE_FOLDER_ID_PATTERN =
+  /drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/([A-Za-z0-9_-]{10,240})/iu;
 const SHEET_RANGE_PATTERN = /\b([A-Z]{1,3}\d{1,7}:[A-Z]{1,3}\d{1,7})\b/u;
 
 function firstMatch(prompt: string, pattern: RegExp): string | undefined {
@@ -149,7 +151,7 @@ function buildConnectedDesktopExample(request: PlannerRequest): AIPlannerOutput 
 }
 
 export function buildPlannerGroundedPlan(request: PlannerRequest): AIPlannerOutput | undefined {
-  return buildConnectedDesktopExample(request);
+  return buildConnectedGoogleExample(request) ?? buildConnectedDesktopExample(request);
 }
 
 function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput | undefined {
@@ -161,6 +163,56 @@ function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput |
   const nodes: unknown[] = [];
   const edges: { from: string; to: string }[] = [];
   const sourceIds: string[] = [];
+  let driveFolderId: string | undefined;
+  if (required.has('data.inline')) {
+    nodes.push({
+      config: { content: request.prompt },
+      id: 'approved_source',
+      type: 'data.inline',
+      version: 1,
+    });
+    sourceIds.push('approved_source');
+  }
+
+  if (required.has('google_drive.read_excel_folder')) {
+    const folderId = firstMatch(request.prompt, DRIVE_FOLDER_ID_PATTERN);
+    if (folderId === undefined) return undefined;
+    driveFolderId = folderId;
+    nodes.push({
+      config: {
+        connectionId,
+        folderId,
+        headerScanRows: 30,
+        includeSubfolders: true,
+        maxFileSizeBytes: 5_000_000,
+        maxFiles: 500,
+        maxRows: 100_000,
+        maxSheets: 500,
+      },
+      id: 'read_drive_excel_folder',
+      type: 'google_drive.read_excel_folder',
+      version: 1,
+    });
+    sourceIds.push('read_drive_excel_folder');
+    if (required.has('google_drive.create_excel_report')) {
+      nodes.push({
+        config: {
+          connectionId,
+          folderId,
+          outputName: 'AI-Excel-雲端匯總.xlsx',
+          overwrite: false,
+          reportTitle:
+            request.context.locale === 'en'
+              ? 'AI consolidated Excel report'
+              : 'AI Excel 雲端匯總報表',
+        },
+        id: 'create_drive_excel_report',
+        type: 'google_drive.create_excel_report',
+        version: 1,
+      });
+      edges.push({ from: 'read_drive_excel_folder', to: 'create_drive_excel_report' });
+    }
+  }
   if (required.has('gmail.read')) {
     nodes.push({
       config: {
@@ -247,10 +299,12 @@ function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput |
   }
 
   const terminalSource = lastOutputIds[0];
+  let presentationNodeId: string | undefined;
   if (required.has('google_slides.create')) {
     nodes.push({
       config: {
         connectionId,
+        ...(driveFolderId === undefined ? {} : { folderId: driveFolderId }),
         includeImages: true,
         includeReferences: true,
         maxSlides: requestedSlideCount(request.prompt),
@@ -261,6 +315,29 @@ function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput |
       version: 1,
     });
     if (terminalSource !== undefined) edges.push({ from: terminalSource, to: 'create_slides' });
+    presentationNodeId = 'create_slides';
+  }
+
+  if (required.has('apps_script.deploy_template')) {
+    nodes.push({
+      config: {
+        connectionId,
+        deployment: 'api_executable',
+        template:
+          presentationNodeId === undefined ? 'sheet-cost-summary' : 'slides-executive-report',
+        title:
+          request.context.locale === 'en'
+            ? 'AI Workflow Studio approved automation'
+            : 'AI Workflow Studio 核准型自動化',
+      },
+      id: 'deploy_approved_apps_script',
+      type: 'apps_script.deploy_template',
+      version: 1,
+    });
+    const scriptSource = presentationNodeId ?? terminalSource;
+    if (scriptSource !== undefined) {
+      edges.push({ from: scriptSource, to: 'deploy_approved_apps_script' });
+    }
   }
 
   const recipient = EMAIL_ADDRESS_PATTERN.exec(request.prompt)?.[0];
@@ -328,6 +405,7 @@ Planning behavior:
 - Never ask the user to assemble nodes manually.
 - Cover every explicit source, transformation, output, and delivery step in the requirement. A validation-only draft is not sufficient when the requirement asks for Gmail, Google Sheets, Google Forms, a report, a presentation, or email delivery.
 - Gmail, Google Sheets, Google Forms, Google Slides, and Apps Script nodes must use a connectionId from googleConnectionIds. Never invent one.
+- Google Drive folder Excel requests must use google_drive.read_excel_folder and may create a non-overwriting google_drive.create_excel_report only when consolidation is requested.
 - For Gmail summaries use gmail.read → ai.summarize → report.compose. For Google Forms or Sheets summaries, read the selected source before summarizing. Add google_slides.create only when a presentation is requested. Add gmail.send only when an email recipient is explicitly supplied; default its sendMode to draft unless the user explicitly requests sending.
 - Apps Script may use only the registered apps_script.deploy_template templates. Never produce script source code in a workflow plan.
 
@@ -448,6 +526,9 @@ export function buildPlannerSafeFallback(
   const isDesktopExcelPlan = example.workflow.nodes.some(
     (node) => node.type === 'excel.create_report',
   );
+  const isDriveExcelPlan = example.workflow.nodes.some(
+    (node) => node.type === 'google_drive.read_excel_folder',
+  );
   const validationClasses = [...new Set(issues.map((issue) => issue.code))].sort();
   return AIPlannerOutputSchema.parse({
     ...example,
@@ -455,16 +536,20 @@ export function buildPlannerSafeFallback(
       'The provider response required server-side normalization before it could be released.',
       isDesktopExcelPlan
         ? 'The normalized Excel plan uses only the paired device and approved folder alias from the trusted request context.'
-        : 'This conservative draft stays read-only and does not execute or access an unapproved integration.',
+        : isDriveExcelPlan
+          ? 'The normalized cloud Excel plan uses only the approved Google connection and bounded Drive folder resource from the trusted request.'
+          : 'This conservative draft stays read-only and does not execute or access an unapproved integration.',
       ...(validationClasses.length === 0
         ? []
         : [`Rejected provider validation classes: ${validationClasses.join(', ')}.`]),
     ],
     explanation: isDesktopExcelPlan
       ? 'A complete, validated Desktop Agent flow was created from the approved folder alias: bounded Excel read, deterministic transformations, and a non-overwriting report.'
-      : example.workflow.nodes.some((node) => node.type === 'data.inline')
-        ? 'A complete, validated cloud flow was created from the approved text: source, AI summary, and auditable report.'
-        : 'A safe, disabled validation draft was created automatically. Connect an approved source or Desktop Agent before extending it with file access or execution.',
+      : isDriveExcelPlan
+        ? 'A complete, validated cloud flow was created: bounded Drive Excel consolidation, non-overwriting Excel report, AI report, Slides, and an allowlisted approval-gated Apps Script where requested.'
+        : example.workflow.nodes.some((node) => node.type === 'data.inline')
+          ? 'A complete, validated cloud flow was created from the approved text: source, AI summary, and auditable report.'
+          : 'A safe, disabled validation draft was created automatically. Connect an approved source or Desktop Agent before extending it with file access or execution.',
   });
 }
 

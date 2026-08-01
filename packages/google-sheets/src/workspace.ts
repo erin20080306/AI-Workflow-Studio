@@ -75,6 +75,7 @@ const MAX_REQUEST_BYTES = 2_000_000;
 
 export interface GoogleWorkspaceClientOptions {
   readonly appsScriptBaseUrl?: string;
+  readonly driveBaseUrl?: string;
   readonly fetchTransport?: GoogleFetch;
   readonly formsBaseUrl?: string;
   readonly gmailBaseUrl?: string;
@@ -221,6 +222,7 @@ function safeScriptTemplate(template: SafeAppsScriptTemplate): {
 
 export class GoogleWorkspaceClient {
   private readonly appsScriptBaseUrl: string;
+  private readonly driveBaseUrl: string;
   private readonly fetchTransport: GoogleFetch;
   private readonly formsBaseUrl: string;
   private readonly gmailBaseUrl: string;
@@ -230,6 +232,7 @@ export class GoogleWorkspaceClient {
     this.appsScriptBaseUrl = baseUrl(
       options.appsScriptBaseUrl ?? 'https://script.googleapis.com/v1',
     );
+    this.driveBaseUrl = baseUrl(options.driveBaseUrl ?? 'https://www.googleapis.com/drive/v3');
     this.fetchTransport = options.fetchTransport ?? fetch;
     this.formsBaseUrl = baseUrl(options.formsBaseUrl ?? 'https://forms.googleapis.com/v1');
     this.gmailBaseUrl = baseUrl(options.gmailBaseUrl ?? 'https://gmail.googleapis.com/gmail/v1');
@@ -425,6 +428,22 @@ export class GoogleWorkspaceClient {
       ...(signal === undefined ? {} : { signal }),
       url: `${this.slidesBaseUrl}/presentations`,
     });
+    if (input.folderId !== undefined) {
+      await this.request({
+        accessToken,
+        body: {},
+        method: 'PATCH',
+        schema: z.object({}).passthrough(),
+        ...(signal === undefined ? {} : { signal }),
+        url: `${this.driveBaseUrl}/files/${encodeURIComponent(
+          created.presentationId,
+        )}?${new URLSearchParams({
+          addParents: input.folderId,
+          fields: 'id,parents',
+          supportsAllDrives: 'true',
+        })}`,
+      });
+    }
     const requests = input.slides.flatMap((slide, index) => {
       const slideId = `slide_${String(index + 1).padStart(2, '0')}`;
       const titleId = `${slideId}_title`;
@@ -590,7 +609,7 @@ export class GoogleWorkspaceClient {
   private async request<T>(input: {
     readonly accessToken: string;
     readonly body?: unknown;
-    readonly method: 'GET' | 'POST' | 'PUT';
+    readonly method: 'GET' | 'PATCH' | 'POST' | 'PUT';
     readonly schema: z.ZodType<T>;
     readonly signal?: AbortSignal;
     readonly url: string;

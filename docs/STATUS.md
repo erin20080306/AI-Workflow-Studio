@@ -3589,3 +3589,50 @@ Status: completed
   → `AI 摘要` → `產生報告`, localized audit actions and localized completion
   notices. Switching to EN changed the same immutable records to English; the
   page was returned to Traditional Chinese after verification.
+
+## Phase 49 — Drive Excel reporting and approved Slides automation
+
+Status: implementation complete; Production acceptance pending
+
+### Implemented
+
+- Added validated `google_drive.read_excel_folder` and
+  `google_drive.create_excel_report` nodes. The reader recursively discovers
+  `.xls`, `.xlsx`, and Google Sheets in the selected folder, locates headers,
+  merges columns and rows with source provenance, and enforces bounded file,
+  sheet, row, and byte limits.
+- `.xlsx` workbooks are parsed as inert workbook data in server memory so large
+  folders do not require hundreds of temporary conversions; formulas are read
+  only as stored results and macros are never executed. Legacy `.xls` files use
+  temporary app-created Google Sheets that are deleted after reading. The
+  generated report is uploaded as a new `.xlsx` file in the same Drive folder,
+  never overwrites an existing customer file, and uses an idempotency marker to
+  suppress duplicate retries.
+- Natural-language Drive Excel requests now deterministically plan the complete
+  six-node graph: Drive read → Excel report plus AI summary → composed report →
+  professional Slides → approved GAS. Slides are moved into the requested
+  folder and the GAS template is bound to the created presentation.
+- Drive report, Slides, and GAS mutations remain explicit-approval operations.
+  GAS remains limited to reviewed templates; no arbitrary JavaScript, Python,
+  shell, SQL, or model-produced executable code is accepted.
+- Auto model routing now falls back through lower-cost configured tiers after a
+  bounded provider/model failure. An explicit member tier remains exact and is
+  never silently downgraded.
+- Google OAuth now requests `drive.readonly` in addition to the existing
+  Workspace scopes. Existing Production connections must be re-authorized
+  before the Drive reader can run.
+
+### Local validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 302 tests across 66 files, including Drive workbook
+  conversion/merge/export, six-node planning, approval catalog, exact Slides
+  count, GAS presentation binding, and model-tier fallback
+- `pnpm build:web`: passed — all 47 application pages compiled successfully.
+  The sandboxed Turbopack attempt could not bind its worker port; the identical
+  permitted retry passed.
+- `pnpm security:scan-client`: passed — 35 generated client files scanned
+- `pnpm build:desktop`: not applicable; no Desktop source or packaging code was
+  changed.

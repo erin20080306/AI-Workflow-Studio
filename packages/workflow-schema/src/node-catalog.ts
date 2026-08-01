@@ -72,6 +72,20 @@ export const NODE_CATALOG = [
     'cloud',
     'Synchronize approved data with Google Sheets.',
   ),
+  entry(
+    'google_drive.read_excel_folder',
+    'read',
+    'none',
+    'cloud',
+    'Read and consolidate bounded Excel workbooks from an approved Google Drive folder.',
+  ),
+  entry(
+    'google_drive.create_excel_report',
+    'external',
+    'always',
+    'cloud',
+    'Create a non-overwriting Excel report in an approved Google Drive folder.',
+  ),
   entry('gmail.read', 'read', 'none', 'cloud', 'Read bounded Gmail messages.'),
   entry(
     'google_forms.read_responses',

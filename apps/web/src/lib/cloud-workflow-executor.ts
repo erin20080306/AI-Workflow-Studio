@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { UsageSink } from '@ai-workflow-studio/ai-gateway';
 import {
+  GoogleDriveExcelClient,
   GoogleSheetsClient,
   GoogleWorkspaceClient,
   InMemoryGoogleOperationStore,
@@ -28,6 +29,7 @@ import { resolveAiModelRoute } from '@/lib/ai-model-routing';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { safeGoogleNodeFailure } from '@/lib/cloud-workflow-errors';
 import { buildCloudAiSummaryInstructions } from '@/lib/cloud-workflow-input';
+import { appsScriptParentId, buildProfessionalSlides } from '@/lib/cloud-workflow-output';
 import { googleConnectionService } from '@/lib/google-connections';
 import {
   consumeMeteredAllowance,
@@ -42,6 +44,29 @@ const GoogleResourceIdSchema = z
   .max(300)
   .regex(/^[A-Za-z0-9_-]+$/);
 const MAX_NODE_INPUT_CHARACTERS = 48_000;
+const GOOGLE_DRIVE_READONLY_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+const GoogleCellSchema = z.union([z.boolean(), z.null(), z.number(), z.string()]);
+const DriveExcelFolderOutputSchema = z
+  .object({
+    columns: z.array(z.string().min(1).max(200)).min(2).max(1_000),
+    files: z
+      .array(
+        z
+          .object({
+            fileId: GoogleResourceIdSchema,
+            fileName: z.string().trim().min(1).max(1_000),
+            rowCount: z.number().int().nonnegative(),
+            sheetCount: z.number().int().nonnegative(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(500),
+    folderId: GoogleResourceIdSchema,
+    kind: z.literal('google_drive_excel_folder'),
+    rows: z.array(z.record(z.string().min(1).max(200), GoogleCellSchema)).max(100_000),
+  })
+  .strict();
 
 function nodeConfig(type: string, config: unknown): JsonValue {
   const parsed = WorkflowNodeSchema.safeParse({
@@ -267,6 +292,118 @@ class SheetsReadExecutor extends CloudNodeExecutor {
   }
 }
 
+class DriveExcelFolderReadExecutor extends CloudNodeExecutor {
+  constructor(
+    context: WorkspaceContext,
+    private readonly driveExcel: GoogleDriveExcelClient,
+  ) {
+    super(context, 'google_drive.read_excel_folder', 'read');
+  }
+
+  async execute(
+    executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    _input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        connectionId: UuidSchema,
+        folderId: GoogleResourceIdSchema,
+        headerScanRows: z.number().int().min(1).max(100),
+        includeSubfolders: z.boolean(),
+        maxFileSizeBytes: z.number().int().min(1).max(20_000_000),
+        maxFiles: z.number().int().min(1).max(500),
+        maxRows: z.number().int().min(1).max(100_000),
+        maxSheets: z.number().int().min(1).max(500),
+      })
+      .strict()
+      .parse(config);
+    await this.countTool(this.type);
+    await googleConnectionService().assertScopes(this.context.actor.tenantId, parsed.connectionId, [
+      GOOGLE_DRIVE_READONLY_SCOPE,
+    ]);
+    const result = await this.driveExcel
+      .readExcelFolder(
+        await this.token(parsed.connectionId, executionContext.signal),
+        parsed.folderId,
+        {
+          headerScanRows: parsed.headerScanRows,
+          includeSubfolders: parsed.includeSubfolders,
+          maxFileSizeBytes: parsed.maxFileSizeBytes,
+          maxFiles: parsed.maxFiles,
+          maxRows: parsed.maxRows,
+          maxSheets: parsed.maxSheets,
+        },
+        executionContext.signal,
+      )
+      .catch((error: unknown) => {
+        throw safeGoogleNodeFailure(error, executionContext.nodeId);
+      });
+    return {
+      metrics: { processedFileCount: result.files.length, processedRowCount: result.rows.length },
+      output: JsonValueSchema.parse(result),
+    };
+  }
+}
+
+class DriveExcelReportCreateExecutor extends CloudNodeExecutor {
+  constructor(
+    context: WorkspaceContext,
+    private readonly driveExcel: GoogleDriveExcelClient,
+  ) {
+    super(context, 'google_drive.create_excel_report', 'external');
+  }
+
+  async execute(
+    executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
+    input: JsonValue,
+    config: JsonValue,
+  ) {
+    const parsed = z
+      .object({
+        connectionId: UuidSchema,
+        folderId: GoogleResourceIdSchema,
+        outputName: z
+          .string()
+          .trim()
+          .min(6)
+          .max(180)
+          .regex(/\.xlsx$/i),
+        overwrite: z.literal(false),
+        reportTitle: z.string().trim().min(1).max(200).optional(),
+      })
+      .strict()
+      .parse(config);
+    const source = DriveExcelFolderOutputSchema.parse(input);
+    if (source.folderId !== parsed.folderId) {
+      throw new WorkflowEngineError(
+        'WORKFLOW_SCHEMA_INVALID',
+        'The Excel report destination must match the approved source Drive folder.',
+      );
+    }
+    await this.countTool(this.type);
+    const result = await this.driveExcel
+      .createExcelReport(
+        await this.token(parsed.connectionId, executionContext.signal),
+        parsed.connectionId,
+        {
+          ...source,
+          idempotencyKey: `${executionContext.idempotencyKey}:${executionContext.nodeId}`,
+          outputName: parsed.outputName,
+          ...(parsed.reportTitle === undefined ? {} : { reportTitle: parsed.reportTitle }),
+        },
+        executionContext.signal,
+      )
+      .catch((error: unknown) => {
+        throw safeGoogleNodeFailure(error, executionContext.nodeId);
+      });
+    return {
+      metrics: { processedFileCount: 1, processedRowCount: source.rows.length },
+      output: JsonValueSchema.parse(result),
+    };
+  }
+}
+
 class AiSummarizeExecutor extends CloudNodeExecutor {
   constructor(context: WorkspaceContext) {
     super(context, 'ai.summarize', 'read');
@@ -358,7 +495,7 @@ class ReportComposeExecutor extends CloudNodeExecutor {
       .object({
         format: z.enum(['html', 'markdown']),
         includeReferences: z.boolean(),
-        title: z.string().trim().min(1).max(160),
+        title: z.string().trim().min(1).max(200),
       })
       .strict()
       .parse(config);
@@ -411,43 +548,12 @@ class SlidesCreateExecutor extends CloudNodeExecutor {
         includeImages: z.boolean(),
         includeReferences: z.boolean(),
         maxSlides: z.number().int().min(3).max(30),
-        title: z.string().trim().min(1).max(160),
+        title: z.string().trim().min(1).max(200),
       })
       .strict()
       .parse(config);
     await this.countTool(this.type);
-    const text = sourceText(input);
-    const lines = text
-      .replace(/^#+\s*/gm, '')
-      .split('\n')
-      .map((line) => line.replace(/^[-*•]\s*/, '').trim())
-      .filter((line) => line.length >= 8)
-      .slice(0, 40);
-    const urls = [...new Set(text.match(/https:\/\/[^\s)\]]+/g) ?? [])].slice(0, 8);
-    const retrievedAt = new Date().toISOString().slice(0, 10);
-    const sectionCount = Math.min(parsed.maxSlides, Math.max(3, Math.ceil(lines.length / 4)));
-    const slides = Array.from({ length: sectionCount }, (_, index) => {
-      const body = lines.slice(index * 4, index * 4 + 4);
-      return {
-        body: body.length > 0 ? body : ['內容待補充與核准。'],
-        ...(parsed.includeImages && index > 0
-          ? (() => {
-              const imageUrl = urls.find((url) => /\.(?:jpe?g|png|webp)(?:\?|$)/i.test(url));
-              return imageUrl === undefined ? {} : { imageUrl };
-            })()
-          : {}),
-        ...(parsed.includeReferences && urls.length > 0
-          ? {
-              references: urls.slice(0, 3).map((url, referenceIndex) => ({
-                label: `Reference ${referenceIndex + 1}`,
-                retrievedAt,
-                url,
-              })),
-            }
-          : {}),
-        title: index === 0 ? parsed.title : `重點 ${index}`,
-      };
-    });
+    const slides = buildProfessionalSlides(sourceText(input), parsed);
     const result = await this.workspace.createProfessionalDeck(
       await this.token(parsed.connectionId, executionContext.signal),
       {
@@ -527,7 +633,7 @@ class AppsScriptDeployExecutor extends CloudNodeExecutor {
 
   async execute(
     executionContext: Parameters<RegisteredWorkflowNodeExecutor['execute']>[0],
-    _input: JsonValue,
+    input: JsonValue,
     config: JsonValue,
   ) {
     const parsed = z
@@ -540,9 +646,15 @@ class AppsScriptDeployExecutor extends CloudNodeExecutor {
       .strict()
       .parse(config);
     await this.countTool(this.type);
+    const parentId =
+      parsed.template === 'slides-executive-report' ? appsScriptParentId(input) : undefined;
     const result = await this.workspace.deploySafeAppsScript(
       await this.token(parsed.connectionId, executionContext.signal),
-      { template: parsed.template as SafeAppsScriptTemplate, title: parsed.title },
+      {
+        ...(parentId === undefined ? {} : { parentId }),
+        template: parsed.template as SafeAppsScriptTemplate,
+        title: parsed.title,
+      },
       executionContext.signal,
     );
     return { output: JsonValueSchema.parse({ kind: 'apps_script_deployment', ...result }) };
@@ -553,10 +665,13 @@ function cloudRegistry(context: WorkspaceContext): NodeRegistry {
   const registry = new NodeRegistry();
   const workspace = new GoogleWorkspaceClient();
   const sheets = new GoogleSheetsClient({ operationStore: new InMemoryGoogleOperationStore() });
+  const driveExcel = new GoogleDriveExcelClient({ sheetsClient: sheets });
   registry.register(new InlineDataExecutor(context));
   registry.register(new GmailReadExecutor(context, workspace));
   registry.register(new FormsReadExecutor(context, workspace));
   registry.register(new SheetsReadExecutor(context, sheets));
+  registry.register(new DriveExcelFolderReadExecutor(context, driveExcel));
+  registry.register(new DriveExcelReportCreateExecutor(context, driveExcel));
   registry.register(new AiSummarizeExecutor(context));
   registry.register(new ReportComposeExecutor(context));
   registry.register(new SlidesCreateExecutor(context, workspace));

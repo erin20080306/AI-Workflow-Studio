@@ -7,8 +7,19 @@ import {
   listAccountModelsForTier,
   resolveAccountModelForTier,
 } from './ai-model-catalog';
+import { candidateRoutingTiers } from './ai-model-routing-policy';
 
 describe('server-only model mappings', () => {
+  it('lets Auto safely downgrade through lower-cost tiers while explicit levels stay exact', () => {
+    expect(candidateRoutingTiers('auto', 'standard')).toEqual(['standard', 'economy']);
+    expect(candidateRoutingTiers('auto', 'flagship')).toEqual([
+      'flagship',
+      'advanced',
+      'standard',
+      'economy',
+    ]);
+    expect(candidateRoutingTiers('standard', 'standard')).toEqual(['standard']);
+  });
   it('contains one allowlisted model for every production provider and level', () => {
     expect(DEFAULT_AI_MODEL_MAPPINGS).toHaveLength(12);
     expect(

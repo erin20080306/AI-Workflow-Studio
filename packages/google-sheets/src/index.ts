@@ -17,6 +17,13 @@ export {
 } from './client';
 export { GoogleSheetsError, type GoogleSheetsErrorCode } from './errors';
 export {
+  GoogleDriveExcelClient,
+  type DriveExcelFolderResult,
+  type DriveExcelReportResult,
+  type DriveExcelSource,
+  type GoogleDriveExcelClientOptions,
+} from './drive-excel';
+export {
   GOOGLE_SHEETS_SCOPES,
   GOOGLE_WORKSPACE_SCOPES,
   GoogleOAuthClient,

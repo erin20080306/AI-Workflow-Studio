@@ -165,4 +165,46 @@ describe('planner prompts', () => {
     });
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });
+
+  it('grounds a Drive Excel folder into report, Slides, and approval-gated GAS nodes', () => {
+    const googleRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
+      },
+      prompt:
+        '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel，匯總成一份 Excel，產生摘要報告、5 頁 Google Slides 與核准型 GAS。',
+    };
+    const example = buildPlannerShapeExample(googleRequest);
+
+    expect(example.workflow.executionTarget).toEqual({ type: 'cloud' });
+    expect(example.workflow.nodes.map((node) => node.type)).toEqual([
+      'google_drive.read_excel_folder',
+      'google_drive.create_excel_report',
+      'ai.summarize',
+      'report.compose',
+      'google_slides.create',
+      'apps_script.deploy_template',
+    ]);
+    expect(example.workflow.edges).toEqual([
+      { from: 'read_drive_excel_folder', to: 'create_drive_excel_report' },
+      { from: 'read_drive_excel_folder', to: 'summarize_sources' },
+      { from: 'summarize_sources', to: 'compose_report' },
+      { from: 'compose_report', to: 'create_slides' },
+      { from: 'create_slides', to: 'deploy_approved_apps_script' },
+    ]);
+    expect(example.workflow.nodes[0]).toMatchObject({
+      config: {
+        folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
+        includeSubfolders: true,
+      },
+      type: 'google_drive.read_excel_folder',
+    });
+    expect(example.workflow.nodes.at(-1)).toMatchObject({
+      config: { deployment: 'api_executable', template: 'slides-executive-report' },
+      type: 'apps_script.deploy_template',
+    });
+    expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+  });
 });
