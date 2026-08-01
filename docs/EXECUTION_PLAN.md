@@ -62,6 +62,8 @@ test, and build checks and has been committed.
 | 44    | Site data and actions         | Validated collections, forms, workflows, and server actions remain schema-bound   | completed |
 | 45    | Site files and analytics      | Private media, delivery metrics, and site settings remain quota and Tenant safe   | pending   |
 | 46    | Full-stack site acceptance    | AI-built public and admin experiences pass role, data, file, and action E2E gates | pending   |
+| 47    | Intelligent Work automation   | Natural-language Work flows complete approved cloud and Desktop acceptance        | completed |
+| 48    | Bilingual run operations      | Steps, audit events, actors, and notifications follow the selected UI language    | completed |
 
 ## Phase 0 — Repository audit
 
@@ -595,3 +597,12 @@ email was sent, plus a real bounded Excel consolidation and professional report
 artifact. Do not mark the phase complete until the database migration, source
 deployment, production model route, Google connection, audit trail, and final
 result have all been verified.
+
+## Phase 48 — Bilingual run operations
+
+Present stored workflow names, allowlisted node types, audit event codes, actor
+types, and platform notification text in Traditional Chinese or English based
+on the existing language switcher. Keep original audit and notification records
+unchanged so the immutable execution history remains complete. Unknown custom
+workflow values and future event codes must remain visible without unsafe or
+invented translation.

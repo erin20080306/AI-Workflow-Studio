@@ -3552,3 +3552,40 @@ Status: completed
   routes were used for live acceptance. The new Desktop packaging and permanent
   regression-test changes are source changes for the next signed Desktop
   release; they do not alter the accepted cloud execution boundary.
+
+## Phase 48 — Bilingual run operations
+
+Status: completed
+
+### Implemented
+
+- Added a presentation-only localization boundary for workflow names,
+  allowlisted node types, audit actions, actor types, and platform notification
+  text. Immutable stored audit and notification records remain unchanged.
+- Replaced technical node identifiers in Run details with readable Traditional
+  Chinese or English step names. Unknown customer-defined values and future
+  event codes remain visible instead of receiving an invented translation.
+- Added bidirectional handling for the existing English Production Cloud
+  notices and the Traditional Chinese Desktop notices, including dynamic
+  workflow-completion messages.
+
+### Validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 293 tests across 65 files, including five bilingual Run
+  detail regression tests
+- `pnpm build:web`: passed — all 47 application pages compiled successfully.
+  The sandboxed Turbopack attempt could not bind its worker port; the identical
+  permitted retry passed.
+- `pnpm security:scan-client`: passed — 35 generated client files scanned
+- `pnpm build:desktop`: not applicable; no Desktop source or packaging code was
+  changed
+- Vercel Production deployment `dpl_HTJN3B1zxpPzWLLGBdfpiWcwDDod` completed and
+  was aliased to `https://www.erin-aiworkflowstudio.com`.
+- Authenticated Production acceptance reopened successful Run
+  `bb978787-ab86-49ed-b4cb-fa7af0551cd8`. Traditional Chinese showed `需求資料來源`
+  → `AI 摘要` → `產生報告`, localized audit actions and localized completion
+  notices. Switching to EN changed the same immutable records to English; the
+  page was returned to Traditional Chinese after verification.

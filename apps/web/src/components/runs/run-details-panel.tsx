@@ -6,6 +6,13 @@ import { z } from 'zod';
 
 import { CheckIcon, RunsIcon, ShieldIcon } from '@/components/icons';
 import { useLanguage } from '@/components/language-provider';
+import {
+  localizeActorType,
+  localizeAuditAction,
+  localizeNotification,
+  localizeRunStep,
+  localizeWorkflowName,
+} from '@/components/runs/run-details-i18n';
 
 const statusStyle: Readonly<Record<WorkflowRunView['status'], string>> = {
   awaiting_approval: 'bg-amber-100 text-amber-800',
@@ -195,7 +202,9 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                   {text.attempt} {run.attempts} / {run.maxAttempts}
                 </span>
               </div>
-              <h2 className="mt-4 text-xl font-semibold text-slate-950">{run.workflowName}</h2>
+              <h2 className="mt-4 text-xl font-semibold text-slate-950">
+                {localizeWorkflowName(run.workflowName, locale)}
+              </h2>
               <p className="mt-1 text-xs text-slate-500">
                 {text.timeout}{' '}
                 {new Date(run.timeoutAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW')}
@@ -261,10 +270,11 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                   {index + 1}
                 </span>
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{step.nodeId}</p>
+                  <p className="text-sm font-semibold text-slate-900" title={step.nodeType}>
+                    {localizeRunStep(step.nodeId, step.nodeType, locale)}
+                  </p>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {step.nodeType} · {step.processedFileCount} {text.files} ·{' '}
-                    {step.processedRowCount} {text.rows}
+                    {step.processedFileCount} {text.files} · {step.processedRowCount} {text.rows}
                   </p>
                 </div>
                 <span className="w-fit rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">
@@ -344,9 +354,11 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
           <div className="mt-4 space-y-4">
             {[...run.audit].reverse().map((entry) => (
               <div className="border-l border-white/15 pl-4" key={entry.id}>
-                <p className="text-xs font-semibold text-white">{entry.action}</p>
+                <p className="text-xs font-semibold text-white">
+                  {localizeAuditAction(entry.action, locale)}
+                </p>
                 <p className="mt-1 text-[10px] text-slate-400">
-                  {entry.actorType} ·{' '}
+                  {localizeActorType(entry.actorType, locale)} ·{' '}
                   {new Date(entry.createdAt).toLocaleString(locale === 'en' ? 'en-US' : 'zh-TW')}
                 </p>
               </div>
@@ -358,12 +370,19 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
           <CheckIcon className="size-6 text-emerald-600" />
           <h2 className="mt-4 text-base font-semibold text-slate-950">{text.notifications}</h2>
           <div className="mt-4 space-y-3">
-            {[...run.notifications].reverse().map((notification) => (
-              <div className="rounded-xl bg-slate-50 p-3" key={notification.id}>
-                <p className="text-xs font-semibold text-slate-900">{notification.title}</p>
-                <p className="mt-1 text-[11px] leading-5 text-slate-500">{notification.message}</p>
-              </div>
-            ))}
+            {[...run.notifications].reverse().map((notification) => {
+              const localized = localizeNotification(
+                notification.title,
+                notification.message,
+                locale,
+              );
+              return (
+                <div className="rounded-xl bg-slate-50 p-3" key={notification.id}>
+                  <p className="text-xs font-semibold text-slate-900">{localized.title}</p>
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">{localized.message}</p>
+                </div>
+              );
+            })}
           </div>
         </section>
       </aside>
