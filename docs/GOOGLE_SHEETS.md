@@ -91,6 +91,11 @@ legacy files use Drive's resumable upload protocol, remain capped at the same
 20 MB reviewed source limit, are converted only to a temporary Google Sheet,
 and are deleted after their inert cell values have been read.
 
+Independent `.xlsx` downloads use a fixed eight-request concurrency ceiling and
+are merged back in the deterministic Drive filename order. This keeps large
+folders within the Cloud execution window without changing file, worksheet,
+row, or byte limits.
+
 ## Token protection
 
 Access and refresh tokens are encrypted separately with AES-256-GCM. The

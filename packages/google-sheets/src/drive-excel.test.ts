@@ -126,6 +126,54 @@ describe('GoogleDriveExcelClient', () => {
     expect(calls.some((call) => call.includes('/upload/'))).toBe(false);
   });
 
+  it('bounds concurrent XLSX downloads and preserves deterministic file order', async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet('成本').addRows([
+      ['品號', '成本'],
+      ['A-01', 120],
+    ]);
+    const workbookBytes = await workbook.xlsx.writeBuffer();
+    let activeDownloads = 0;
+    let maximumDownloads = 0;
+    const fetchTransport: GoogleFetch = async (input) => {
+      const url = String(input);
+      if (url.includes('alt=media')) {
+        activeDownloads += 1;
+        maximumDownloads = Math.max(maximumDownloads, activeDownloads);
+        await Promise.resolve();
+        activeDownloads -= 1;
+        return new Response(workbookBytes);
+      }
+      if (url.includes('/drive/v3/files?')) {
+        return Response.json({
+          files: Array.from({ length: 10 }, (_, index) => ({
+            id: `1BinaryWorkbookResourceId${String(index).padStart(3, '0')}`,
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            name: `成本-${String(9 - index).padStart(2, '0')}.xlsx`,
+            size: String(workbookBytes.byteLength),
+          })),
+        });
+      }
+      return new Response('not found', { status: 404 });
+    };
+    const client = new GoogleDriveExcelClient({ fetchTransport });
+
+    const result = await client.readExcelFolder(TOKEN, FOLDER_ID, {
+      headerScanRows: 10,
+      includeSubfolders: true,
+      maxFileSizeBytes: 5_000_000,
+      maxFiles: 20,
+      maxRows: 100,
+      maxSheets: 20,
+    });
+
+    expect(maximumDownloads).toBeGreaterThan(1);
+    expect(maximumDownloads).toBeLessThanOrEqual(8);
+    expect(result.files.map((file) => file.fileName)).toEqual(
+      Array.from({ length: 10 }, (_, index) => `成本-${String(index).padStart(2, '0')}.xlsx`),
+    );
+  });
+
   it('uses a bounded resumable conversion for a legacy XLS workbook larger than 5 MB', async () => {
     const legacyBytes = new Uint8Array(5_000_001);
     const calls: string[] = [];

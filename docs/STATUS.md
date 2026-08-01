@@ -3637,6 +3637,10 @@ Status: implementation complete; Production acceptance pending
   legacy file larger than the 5 MB multipart boundary now uses Drive's bounded
   resumable-upload protocol for temporary Google Sheets conversion and remains
   capped by the same reviewed 20 MB source limit.
+- Production retry passed the former request-validation boundary and exposed
+  the 120-second single-node execution timeout while reading the 481-workbook
+  folder. Independent `.xlsx` downloads now use a fixed concurrency ceiling of
+  eight, while results remain merged in deterministic filename order.
 
 ### Local validation
 

@@ -35,6 +35,7 @@ const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 const MAX_API_RESPONSE_BYTES = 10_000_000;
 const MAX_MULTIPART_BYTES = 5_000_000;
 const MAX_RESUMABLE_BYTES = 20_000_000;
+const XLSX_DOWNLOAD_CONCURRENCY = 8;
 
 export interface DriveExcelSource {
   readonly fileId: string;
@@ -95,6 +96,31 @@ function isExcelFile(file: DriveExcelFile): boolean {
     name.endsWith('.xls') ||
     name.endsWith('.xlsx')
   );
+}
+
+function isLegacyExcelFile(file: DriveExcelFile): boolean {
+  return file.mimeType === XLS_MIME || file.name.toLowerCase().endsWith('.xls');
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  mapper: (value: T, index: number) => Promise<R>,
+): Promise<readonly R[]> {
+  const results: R[] = [];
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const value = values[index];
+      if (value !== undefined) results[index] = await mapper(value, index);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => await worker()),
+  );
+  return results;
 }
 
 function normalizedHeader(value: GoogleCell, index: number): string {
@@ -268,6 +294,28 @@ export class GoogleDriveExcelClient {
         'The selected Google Drive folder contains no supported Excel workbooks.',
       );
     }
+    for (const file of files) {
+      if (
+        file.mimeType !== GOOGLE_SHEET_MIME &&
+        file.size !== undefined &&
+        file.size > limits.maxFileSizeBytes
+      ) {
+        throw new GoogleSheetsError(
+          'GOOGLE_REQUEST_INVALID',
+          `Workbook ${file.name} exceeds the configured file-size limit.`,
+        );
+      }
+    }
+    const downloadedXlsx = await mapWithConcurrency(
+      files,
+      XLSX_DOWNLOAD_CONCURRENCY,
+      async (file): Promise<readonly ExcelGrid[] | undefined> => {
+        if (file.mimeType === GOOGLE_SHEET_MIME || isLegacyExcelFile(file)) return undefined;
+        return await readXlsxGrids(
+          await this.downloadFile(accessToken, file, limits.maxFileSizeBytes, signal),
+        );
+      },
+    );
 
     const columns: string[] = ['_source_file', '_source_sheet'];
     const columnSet = new Set(columns);
@@ -275,27 +323,19 @@ export class GoogleDriveExcelClient {
     const sources: DriveExcelSource[] = [];
     let sheetCount = 0;
 
-    for (const file of files) {
+    for (const [fileIndex, file] of files.entries()) {
       let spreadsheetId = file.id;
       let temporaryId: string | undefined;
-      let localGrids: readonly ExcelGrid[] | undefined;
+      const localGrids = downloadedXlsx[fileIndex];
       try {
         if (file.mimeType !== GOOGLE_SHEET_MIME) {
-          if (file.size !== undefined && file.size > limits.maxFileSizeBytes) {
-            throw new GoogleSheetsError(
-              'GOOGLE_REQUEST_INVALID',
-              `Workbook ${file.name} exceeds the configured file-size limit.`,
+          if (isLegacyExcelFile(file)) {
+            const content = await this.downloadFile(
+              accessToken,
+              file,
+              limits.maxFileSizeBytes,
+              signal,
             );
-          }
-          const content = await this.downloadFile(
-            accessToken,
-            file,
-            limits.maxFileSizeBytes,
-            signal,
-          );
-          if (file.mimeType !== XLS_MIME && !file.name.toLowerCase().endsWith('.xls')) {
-            localGrids = await readXlsxGrids(content);
-          } else {
             const converted = await this.uploadFile(
               accessToken,
               {
