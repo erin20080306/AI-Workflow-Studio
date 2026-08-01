@@ -41,6 +41,13 @@ export const NODE_CATALOG = [
   entry('excel.merge', 'read', 'none', 'desktop', 'Merge in-memory spreadsheet data.'),
   entry('excel.write', 'write', 'first_run', 'desktop', 'Write a new Excel file.'),
   entry('excel.create_report', 'write', 'first_run', 'desktop', 'Create a new Excel report.'),
+  entry(
+    'excel.open_file',
+    'external',
+    'always',
+    'desktop',
+    'Open an approved workbook in Microsoft Excel.',
+  ),
   entry('excel.split_by_field', 'write', 'first_run', 'desktop', 'Create split Excel outputs.'),
   entry('data.map_columns', 'read', 'none', 'either', 'Map columns deterministically.'),
   entry('data.filter', 'read', 'none', 'either', 'Filter rows deterministically.'),
@@ -78,6 +85,13 @@ export const NODE_CATALOG = [
     'none',
     'cloud',
     'Read and consolidate bounded Excel workbooks from an approved Google Drive folder.',
+  ),
+  entry(
+    'google_drive.download_excel_folder',
+    'write',
+    'first_run',
+    'desktop',
+    'Download bounded Drive workbooks into an approved Desktop folder.',
   ),
   entry(
     'google_drive.create_excel_report',

@@ -60,6 +60,12 @@ export interface DriveExcelFolderManifest {
   readonly kind: 'google_drive_excel_manifest';
 }
 
+export interface DriveExcelDownloadResult {
+  readonly bytes: Uint8Array;
+  readonly fileName: string;
+  readonly mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+}
+
 export interface DriveExcelReadOptions {
   readonly headerScanRows: number;
   readonly includeSubfolders: boolean;
@@ -653,6 +659,64 @@ export class GoogleDriveExcelClient {
       }
     }
     return { files, folderId, kind: 'google_drive_excel_manifest' };
+  }
+
+  async downloadExcelManifestFile(
+    accessToken: string,
+    fileInput: DriveExcelManifestFile,
+    maxBytes: number,
+    signal?: AbortSignal,
+  ): Promise<DriveExcelDownloadResult> {
+    const parsedFile = z
+      .object({
+        id: GoogleIdSchema,
+        mimeType: z.string().trim().min(1).max(300),
+        name: z.string().trim().min(1).max(1_000),
+        size: z.number().int().nonnegative().optional(),
+      })
+      .strict()
+      .parse(fileInput);
+    const file: DriveExcelFile = {
+      id: parsedFile.id,
+      mimeType: parsedFile.mimeType,
+      name: parsedFile.name,
+      ...(parsedFile.size === undefined ? {} : { size: parsedFile.size }),
+    };
+    const boundedMaxBytes = z.number().int().min(1).max(MAX_RESUMABLE_BYTES).parse(maxBytes);
+    if (!isExcelFile(file) || isLegacyExcelFile(file)) {
+      throw new GoogleSheetsError(
+        'GOOGLE_REQUEST_INVALID',
+        'Desktop transfer supports Google Sheets and .xlsx workbooks only.',
+      );
+    }
+    if (file.size !== undefined && file.size > boundedMaxBytes) {
+      throw new GoogleSheetsError(
+        'GOOGLE_REQUEST_INVALID',
+        'The requested workbook exceeds the configured file-size limit.',
+      );
+    }
+    const isGoogleSheet = file.mimeType === GOOGLE_SHEET_MIME;
+    const bytes = await this.binaryRequest(
+      accessToken,
+      isGoogleSheet
+        ? `${this.driveBaseUrl}/files/${encodeURIComponent(file.id)}/export?${new URLSearchParams({
+            mimeType: XLSX_MIME,
+          })}`
+        : `${this.driveBaseUrl}/files/${encodeURIComponent(file.id)}?alt=media&supportsAllDrives=true`,
+      { method: 'GET' },
+      boundedMaxBytes,
+      signal,
+    );
+    const baseName =
+      file.name
+        .replace(/\.xlsx$/iu, '')
+        .slice(0, 220)
+        .trim() || 'workbook';
+    return {
+      bytes,
+      fileName: `${baseName}.xlsx`,
+      mimeType: XLSX_MIME,
+    };
   }
 
   async readExcelManifest(

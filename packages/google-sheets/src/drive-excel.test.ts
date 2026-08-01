@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { GoogleSheetsClient, InMemoryGoogleOperationStore } from './client';
 import { GoogleDriveExcelClient } from './drive-excel';
@@ -9,6 +9,75 @@ const TOKEN = 'google-access-token-for-drive-excel-tests';
 const FOLDER_ID = '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ';
 
 describe('GoogleDriveExcelClient', () => {
+  it('downloads native XLSX files and exports Google Sheets with the bounded XLSX MIME', async () => {
+    const bytes = new Uint8Array([80, 75, 3, 4]);
+    const calls: string[] = [];
+    const fetchTransport: GoogleFetch = async (input) => {
+      calls.push(String(input));
+      return new Response(bytes);
+    };
+    const client = new GoogleDriveExcelClient({ fetchTransport });
+
+    const native = await client.downloadExcelManifestFile(
+      TOKEN,
+      {
+        id: '1NativeWorkbookResource12345',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        name: 'native.xlsx',
+        size: bytes.byteLength,
+      },
+      1_000,
+    );
+    const sheet = await client.downloadExcelManifestFile(
+      TOKEN,
+      {
+        id: '1GoogleSheetResource1234567',
+        mimeType: 'application/vnd.google-apps.spreadsheet',
+        name: 'sheet',
+      },
+      1_000,
+    );
+
+    expect(native.fileName).toBe('native.xlsx');
+    expect(sheet.fileName).toBe('sheet.xlsx');
+    expect(calls[0]).toContain('alt=media');
+    expect(calls[1]).toContain('/export?mimeType=');
+    expect(calls[1]).toContain(
+      encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+    );
+  });
+
+  it('rejects legacy and oversized workbooks before transfer', async () => {
+    const fetchTransport = vi.fn<GoogleFetch>();
+    const client = new GoogleDriveExcelClient({ fetchTransport });
+
+    await expect(
+      client.downloadExcelManifestFile(
+        TOKEN,
+        {
+          id: '1LegacyWorkbookResource123456',
+          mimeType: 'application/vnd.ms-excel',
+          name: 'legacy.xls',
+          size: 100,
+        },
+        1_000,
+      ),
+    ).rejects.toMatchObject({ code: 'GOOGLE_REQUEST_INVALID' });
+    await expect(
+      client.downloadExcelManifestFile(
+        TOKEN,
+        {
+          id: '1OversizedWorkbookResource1234',
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          name: 'oversized.xlsx',
+          size: 1_001,
+        },
+        1_000,
+      ),
+    ).rejects.toMatchObject({ code: 'GOOGLE_REQUEST_INVALID' });
+    expect(fetchTransport).not.toHaveBeenCalled();
+  });
+
   it('discovers a Drive spreadsheet, finds its header, and consolidates source rows', async () => {
     const fetchTransport: GoogleFetch = async (input) => {
       const url = String(input);

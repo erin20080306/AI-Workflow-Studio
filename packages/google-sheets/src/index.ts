@@ -18,6 +18,7 @@ export {
 export { GoogleSheetsError, type GoogleSheetsErrorCode } from './errors';
 export {
   GoogleDriveExcelClient,
+  type DriveExcelDownloadResult,
   type DriveExcelFolderManifest,
   type DriveExcelFolderResult,
   type DriveExcelManifestFile,

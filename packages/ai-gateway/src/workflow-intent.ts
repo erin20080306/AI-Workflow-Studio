@@ -106,8 +106,19 @@ export function validateWorkflowIntentCoverage(
 ): readonly WorkflowValidationIssue[] {
   const intent = detectWorkflowIntent(request.prompt);
   const actual = new Set(output.workflow.nodes.map((node) => node.type));
+  const isDesktopDriveOperation =
+    output.workflow.executionTarget.type === 'desktop' &&
+    actual.has('google_drive.download_excel_folder');
   const issues = intent.requiredNodeTypes
-    .filter((type) => !actual.has(type))
+    .filter((type) => {
+      if (actual.has(type)) return false;
+      if (!isDesktopDriveOperation) return true;
+      if (type === 'google_drive.read_excel_folder') return false;
+      if (type === 'google_drive.create_excel_report' && actual.has('excel.create_report')) {
+        return false;
+      }
+      return true;
+    })
     .map((type): WorkflowValidationIssue => ({
       code: 'WORKFLOW_SCHEMA_INVALID',
       message: `The workflow does not cover the requested ${type} capability.`,

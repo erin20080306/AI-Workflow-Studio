@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -87,6 +87,25 @@ describe('FolderGrantStore', () => {
     await expect(
       store.resolveAuthorizedPath(grant.folderAliasId, DEVICE_ID, 'nested/orders.csv', 'write'),
     ).rejects.toMatchObject({ code: 'FOLDER_PERMISSION_DENIED' });
+  });
+
+  it('rejects a symlinked Agent work root before creating any outside directory', async () => {
+    const { authorized, grant, outside, store } = await fixture();
+    await store.authorize(authorized, DEVICE_ID, {
+      read: true,
+      watch: true,
+      write: true,
+    });
+    await symlink(outside, join(authorized, '.ai-workflow-studio'));
+
+    await expect(
+      store.resolveAuthorizedWorkDirectory(
+        grant.folderAliasId,
+        DEVICE_ID,
+        '10000000-0000-4000-8000-000000000899',
+      ),
+    ).rejects.toMatchObject({ code: 'FOLDER_TRAVERSAL_REJECTED' });
+    await expect(stat(join(outside, 'jobs'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('never exposes canonical paths through folder views', async () => {

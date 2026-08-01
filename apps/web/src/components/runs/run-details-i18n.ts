@@ -32,6 +32,7 @@ const nodeTypes: Readonly<Record<string, LocalizedValue>> = {
   'data.validate': { en: 'Validate data', 'zh-Hant': '驗證資料' },
   'excel.create_report': { en: 'Create Excel report', 'zh-Hant': '建立 Excel 報告' },
   'excel.merge': { en: 'Merge Excel data', 'zh-Hant': '合併 Excel 資料' },
+  'excel.open_file': { en: 'Open result in Excel', 'zh-Hant': '用 Excel 開啟結果' },
   'excel.read': { en: 'Read Excel data', 'zh-Hant': '讀取 Excel 資料' },
   'excel.split_by_field': { en: 'Split Excel output', 'zh-Hant': '拆分 Excel 輸出' },
   'excel.write': { en: 'Write Excel file', 'zh-Hant': '寫入 Excel 檔案' },
@@ -43,6 +44,18 @@ const nodeTypes: Readonly<Record<string, LocalizedValue>> = {
   'folder.rename_file': { en: 'Rename file', 'zh-Hant': '重新命名檔案' },
   'gmail.read': { en: 'Read Gmail messages', 'zh-Hant': '讀取 Gmail 郵件' },
   'gmail.send': { en: 'Create or send Gmail message', 'zh-Hant': '建立或寄送 Gmail 郵件' },
+  'google_drive.download_excel_folder': {
+    en: 'Download Drive workbooks to Desktop',
+    'zh-Hant': '下載 Drive 活頁簿到本機',
+  },
+  'google_drive.create_excel_report': {
+    en: 'Create Drive Excel report',
+    'zh-Hant': '建立 Drive Excel 報告',
+  },
+  'google_drive.read_excel_folder': {
+    en: 'Read Drive Excel folder',
+    'zh-Hant': '讀取 Drive Excel 資料夾',
+  },
   'google_forms.read_responses': {
     en: 'Read Google Forms responses',
     'zh-Hant': '讀取 Google 表單回覆',

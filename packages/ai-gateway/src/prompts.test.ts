@@ -179,37 +179,40 @@ describe('planner prompts', () => {
         googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
       },
       prompt:
-        '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel，匯總成一份 Excel，產生摘要報告、5 頁 Google Slides 與核准型 GAS，不要寄送郵件。',
+        '從 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 下載 Excel 到已核准資料夾，在本機匯總成一份 Excel 並開啟結果。',
     };
     const example = buildPlannerShapeExample(googleRequest);
 
-    expect(example.workflow.executionTarget).toEqual({ type: 'cloud' });
+    expect(example.workflow.executionTarget).toEqual({
+      deviceId: '10000000-0000-4000-8000-000000000913',
+      type: 'desktop',
+    });
     expect(example.workflow.nodes.map((node) => node.type)).toEqual([
-      'google_drive.read_excel_folder',
-      'google_drive.create_excel_report',
-      'ai.summarize',
-      'report.compose',
-      'google_slides.create',
-      'apps_script.deploy_template',
+      'google_drive.download_excel_folder',
+      'excel.read',
+      'excel.merge',
+      'excel.create_report',
+      'excel.open_file',
     ]);
     expect(example.workflow.edges).toEqual([
-      { from: 'read_drive_excel_folder', to: 'create_drive_excel_report' },
-      { from: 'read_drive_excel_folder', to: 'summarize_sources' },
-      { from: 'summarize_sources', to: 'compose_report' },
-      { from: 'compose_report', to: 'create_slides' },
-      { from: 'create_slides', to: 'deploy_approved_apps_script' },
+      { from: 'download_drive_workbooks', to: 'read_local_workbooks' },
+      { from: 'read_local_workbooks', to: 'merge_local_workbooks' },
+      { from: 'merge_local_workbooks', to: 'create_local_report' },
+      { from: 'create_local_report', to: 'open_excel_result' },
     ]);
     expect(example.workflow.nodes[0]).toMatchObject({
       config: {
+        connectionId: '10000000-0000-4000-8000-000000000911',
+        folderAliasId: '10000000-0000-4000-8000-000000000912',
         folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
         includeSubfolders: true,
         maxFileSizeBytes: 20_000_000,
       },
-      type: 'google_drive.read_excel_folder',
+      type: 'google_drive.download_excel_folder',
     });
     expect(example.workflow.nodes.at(-1)).toMatchObject({
-      config: { deployment: 'api_executable', template: 'slides-executive-report' },
-      type: 'apps_script.deploy_template',
+      config: { application: 'excel' },
+      type: 'excel.open_file',
     });
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });

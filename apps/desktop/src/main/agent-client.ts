@@ -44,9 +44,35 @@ const JobMutationResponseSchema = z
     job: AgentJobSchema,
   })
   .strict();
+const DriveExcelTransferFileSchema = z
+  .object({
+    downloadToken: z.string().min(40).max(2_000),
+    fileId: z
+      .string()
+      .min(8)
+      .max(300)
+      .regex(/^[A-Za-z0-9_-]+$/),
+    fileName: z.string().trim().min(1).max(220),
+    mimeType: z.enum(['google_sheet', 'xlsx']),
+    size: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+const DriveExcelTransferManifestSchema = z
+  .object({
+    expiresAt: z.iso.datetime({ offset: true }),
+    files: z.array(DriveExcelTransferFileSchema).min(1).max(500),
+    folderId: z
+      .string()
+      .min(8)
+      .max(300)
+      .regex(/^[A-Za-z0-9_-]+$/),
+  })
+  .strict();
 
 const MAX_RESPONSE_BYTES = 1_000_000;
+const MAX_BINARY_RESPONSE_BYTES = 20_000_000;
 const REQUEST_TIMEOUT_MS = 15_000;
+const BINARY_REQUEST_TIMEOUT_MS = 60_000;
 const HEALTHY_POLL_MS = 15_000;
 const MIN_RECONNECT_MS = 5_000;
 const MAX_RECONNECT_MS = 60_000;
@@ -70,8 +96,13 @@ export type AgentFetch = (input: string | URL | Request, init?: RequestInit) => 
 
 export interface AgentJobReporter {
   readonly signal: AbortSignal;
+  downloadDriveExcelFile(nodeId: string, file: DriveExcelTransferFile): Promise<Uint8Array>;
+  listDriveExcelFiles(nodeId: string): Promise<DriveExcelTransferManifest>;
   reportStep(step: StepResult): Promise<void>;
 }
+
+export type DriveExcelTransferFile = z.infer<typeof DriveExcelTransferFileSchema>;
+export type DriveExcelTransferManifest = z.infer<typeof DriveExcelTransferManifestSchema>;
 
 export type AgentJobHandler = (
   job: AgentJob,
@@ -366,6 +397,22 @@ export class AgentClient {
     return schema.parse(value);
   }
 
+  private async requestBinary(url: string, init: RequestInit): Promise<Uint8Array> {
+    const timeout = AbortSignal.timeout(BINARY_REQUEST_TIMEOUT_MS);
+    const signal = init.signal == null ? timeout : AbortSignal.any([timeout, init.signal]);
+    const response = await this.fetchTransport(url, { ...init, signal });
+    if (!response.ok) throw new AgentHttpError(response.status);
+    const declaredLength = Number(response.headers.get('content-length') ?? '0');
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BINARY_RESPONSE_BYTES) {
+      throw new Error('Agent binary response is too large.');
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > MAX_BINARY_RESPONSE_BYTES) {
+      throw new Error('Agent binary response is too large.');
+    }
+    return bytes;
+  }
+
   private async runCycle(): Promise<void> {
     if (!this.executorRunning) {
       return;
@@ -475,6 +522,29 @@ export class AgentClient {
         JobMutationResponseSchema,
       );
     };
+    const listDriveExcelFiles = async (nodeId: string) => {
+      return await this.requestJson(
+        `${session.agentBaseUrl}/api/agent/jobs/${job.id}/drive-excel/${encodeURIComponent(nodeId)}/manifest`,
+        {
+          headers: this.claimHeaders(session, claim.claimToken),
+          method: 'GET',
+          signal: controller.signal,
+        },
+        DriveExcelTransferManifestSchema,
+      );
+    };
+    const downloadDriveExcelFile = async (nodeId: string, fileInput: DriveExcelTransferFile) => {
+      const file = DriveExcelTransferFileSchema.parse(fileInput);
+      const query = new URLSearchParams({ token: file.downloadToken });
+      return await this.requestBinary(
+        `${session.agentBaseUrl}/api/agent/jobs/${job.id}/drive-excel/${encodeURIComponent(nodeId)}/files/${encodeURIComponent(file.fileId)}?${query}`,
+        {
+          headers: this.claimHeaders(session, claim.claimToken),
+          method: 'GET',
+          signal: controller.signal,
+        },
+      );
+    };
 
     try {
       this.logger.info('AGENT_JOB_STARTED', 'Desktop execution started for a claimed job.', {
@@ -482,6 +552,8 @@ export class AgentClient {
         jobId: job.id,
       });
       const result = await this.executeJobHandler?.(claim.job, {
+        downloadDriveExcelFile,
+        listDriveExcelFiles,
         reportStep,
         signal: controller.signal,
       });

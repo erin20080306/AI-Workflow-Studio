@@ -267,6 +267,15 @@ export const ExcelCreateReportNodeSchema = node(
     reportTitle: NonEmptyLabelSchema.optional(),
   }).strict(),
 );
+export const ExcelOpenFileNodeSchema = node(
+  'excel.open_file',
+  z
+    .object({
+      application: z.literal('excel').default('excel'),
+      folderAliasId: UuidSchema,
+    })
+    .strict(),
+);
 export const ExcelSplitByFieldNodeSchema = node(
   'excel.split_by_field',
   z
@@ -426,6 +435,19 @@ export const GoogleDriveReadExcelFolderNodeSchema = node(
     })
     .strict(),
 );
+export const GoogleDriveDownloadExcelFolderNodeSchema = node(
+  'google_drive.download_excel_folder',
+  z
+    .object({
+      connectionId: UuidSchema,
+      folderAliasId: UuidSchema,
+      folderId: GoogleResourceIdSchema,
+      includeSubfolders: z.boolean().default(true),
+      maxFileSizeBytes: z.number().int().min(1).max(20_000_000).default(20_000_000),
+      maxFiles: z.number().int().min(1).max(500).default(500),
+    })
+    .strict(),
+);
 export const GoogleDriveCreateExcelReportNodeSchema = node(
   'google_drive.create_excel_report',
   z
@@ -560,6 +582,7 @@ export const WorkflowNodeSchema = z.discriminatedUnion('type', [
   ExcelMergeNodeSchema,
   ExcelWriteNodeSchema,
   ExcelCreateReportNodeSchema,
+  ExcelOpenFileNodeSchema,
   ExcelSplitByFieldNodeSchema,
   DataMapColumnsNodeSchema,
   DataFilterNodeSchema,
@@ -574,6 +597,7 @@ export const WorkflowNodeSchema = z.discriminatedUnion('type', [
   GoogleSheetsUpdateNodeSchema,
   GoogleSheetsSyncNodeSchema,
   GoogleDriveReadExcelFolderNodeSchema,
+  GoogleDriveDownloadExcelFolderNodeSchema,
   GoogleDriveCreateExcelReportNodeSchema,
   GmailReadNodeSchema,
   GoogleFormsReadResponsesNodeSchema,

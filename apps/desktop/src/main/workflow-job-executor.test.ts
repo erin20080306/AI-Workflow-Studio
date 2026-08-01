@@ -5,7 +5,7 @@ import {
   readSpreadsheet,
   writeSpreadsheetAtomic,
 } from '@ai-workflow-studio/local-executor';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -13,12 +13,28 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { FolderGrantStore } from './folder-grants';
 import { DesktopSpreadsheetExecutor } from './local-executor';
 import { DesktopWorkflowJobExecutor } from './workflow-job-executor';
+import type { AgentJobReporter } from './agent-client';
 
 const DEVICE_ID = '10000000-0000-4000-8000-000000000861';
 const TENANT_ID = '10000000-0000-4000-8000-000000000862';
 const JOB_ID = '10000000-0000-4000-8000-000000000863';
 const RUN_ID = '10000000-0000-4000-8000-000000000864';
 const temporaryDirectories: string[] = [];
+
+function createReporter(steps: StepResult[]): AgentJobReporter {
+  return {
+    async downloadDriveExcelFile() {
+      throw new Error('This test does not transfer Drive workbooks.');
+    },
+    async listDriveExcelFiles() {
+      throw new Error('This test does not transfer Drive workbooks.');
+    },
+    async reportStep(step: StepResult) {
+      steps.push(structuredClone(step));
+    },
+    signal: new AbortController().signal,
+  };
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -29,6 +45,182 @@ afterEach(async () => {
 });
 
 describe('DesktopWorkflowJobExecutor', () => {
+  it('downloads Drive workbooks into an approved folder, consolidates them, and opens the result', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'aiws-drive-desktop-job-'));
+    temporaryDirectories.push(directory);
+    const firstSource = join(directory, 'source-a.xlsx');
+    const secondSource = join(directory, 'source-b.xlsx');
+    await writeSpreadsheetAtomic(
+      [
+        {
+          columns: ['Item', 'Amount'],
+          name: 'Source A',
+          rows: [{ Amount: 120, Item: 'A' }],
+        },
+      ],
+      { outputPath: firstSource, overwrite: false },
+    );
+    await writeSpreadsheetAtomic(
+      [
+        {
+          columns: ['Item', 'Amount'],
+          name: 'Source B',
+          rows: [{ Amount: 300, Item: 'B' }],
+        },
+      ],
+      { outputPath: secondSource, overwrite: false },
+    );
+    const sourceBytes = new Map([
+      ['1DriveWorkbookSourceAlpha123', new Uint8Array(await readFile(firstSource))],
+      ['1DriveWorkbookSourceBeta1234', new Uint8Array(await readFile(secondSource))],
+    ]);
+    const grants = new FolderGrantStore(join(directory, '.agent', 'folder-grants.json'));
+    const grant = await grants.authorize(directory, DEVICE_ID, {
+      read: true,
+      watch: false,
+      write: true,
+    });
+    const opened: string[] = [];
+    const spreadsheet = new DesktopSpreadsheetExecutor(
+      grants,
+      new ProcessingLedger(join(directory, '.agent', 'processing-ledger.json')),
+      async (path) => {
+        opened.push(path);
+        return '';
+      },
+    );
+    const executor = new DesktopWorkflowJobExecutor(spreadsheet);
+    const steps: StepResult[] = [];
+    const reporter: AgentJobReporter = {
+      async downloadDriveExcelFile(_nodeId, file) {
+        const bytes = sourceBytes.get(file.fileId);
+        if (bytes === undefined) throw new Error('Unexpected Drive workbook request.');
+        return bytes;
+      },
+      async listDriveExcelFiles() {
+        return {
+          expiresAt: '2026-08-01T12:00:00.000Z',
+          files: [
+            {
+              downloadToken: 'x'.repeat(40),
+              fileId: '1DriveWorkbookSourceAlpha123',
+              fileName: 'source-a.xlsx',
+              mimeType: 'xlsx',
+              size: sourceBytes.get('1DriveWorkbookSourceAlpha123')?.byteLength,
+            },
+            {
+              downloadToken: 'y'.repeat(40),
+              fileId: '1DriveWorkbookSourceBeta1234',
+              fileName: 'source-b.xlsx',
+              mimeType: 'xlsx',
+              size: sourceBytes.get('1DriveWorkbookSourceBeta1234')?.byteLength,
+            },
+          ],
+          folderId: '1DriveFolderResource123456789',
+        };
+      },
+      async reportStep(step) {
+        steps.push(structuredClone(step));
+      },
+      signal: new AbortController().signal,
+    };
+    const job: AgentJob = {
+      attempt: 1,
+      availableAt: '2026-08-01T10:00:00.000Z',
+      deviceId: DEVICE_ID,
+      id: '10000000-0000-4000-8000-000000005031',
+      idempotencyKey: 'desktop-drive-operation-1',
+      maxAttempts: 3,
+      status: 'claimed',
+      tenantId: TENANT_ID,
+      workflow: {
+        description: 'Download, merge, save, and open approved workbooks.',
+        edges: [
+          { from: 'download', to: 'read' },
+          { from: 'read', to: 'merge' },
+          { from: 'merge', to: 'write' },
+          { from: 'write', to: 'open' },
+        ],
+        executionTarget: { deviceId: DEVICE_ID, type: 'desktop' },
+        name: 'Drive Desktop Excel operation',
+        nodes: [
+          {
+            config: {
+              connectionId: '10000000-0000-4000-8000-000000005032',
+              folderAliasId: grant.folderAliasId,
+              folderId: '1DriveFolderResource123456789',
+              includeSubfolders: true,
+              maxFileSizeBytes: 20_000_000,
+              maxFiles: 500,
+            },
+            id: 'download',
+            type: 'google_drive.download_excel_folder',
+            version: 1,
+          },
+          {
+            config: {
+              headerMode: 'auto',
+              headerRow: 1,
+              headerScanRows: 30,
+              maxFileSizeBytes: 20_000_000,
+              maxRows: 100_000,
+              maxSheets: 200,
+              sheetMode: 'all',
+            },
+            id: 'read',
+            type: 'excel.read',
+            version: 1,
+          },
+          {
+            config: { columnMode: 'union', includeSourceFile: true },
+            id: 'merge',
+            type: 'excel.merge',
+            version: 1,
+          },
+          {
+            config: {
+              folderAliasId: grant.folderAliasId,
+              outputName: 'AI-Excel-本機匯總.xlsx',
+              overwrite: false,
+              reportTitle: 'AI Excel report',
+            },
+            id: 'write',
+            type: 'excel.create_report',
+            version: 1,
+          },
+          {
+            config: { application: 'excel', folderAliasId: grant.folderAliasId },
+            id: 'open',
+            type: 'excel.open_file',
+            version: 1,
+          },
+        ],
+        schemaVersion: 1,
+        trigger: { config: {}, type: 'manual.trigger' },
+      },
+      workflowRunId: '10000000-0000-4000-8000-000000005033',
+    };
+
+    await expect(executor.execute(job, reporter)).resolves.toMatchObject({
+      status: 'succeeded',
+      stepCount: 5,
+    });
+    const resultPath = join(directory, 'AI-Excel-本機匯總.xlsx');
+    const result = await readSpreadsheet(resultPath, { maxRows: 10, maxSheets: 2 });
+
+    expect(result.sheets[0]?.rows).toEqual([
+      { Amount: 120, Item: 'A' },
+      { Amount: 300, Item: 'B' },
+    ]);
+    expect(opened).toEqual([await realpath(resultPath)]);
+    expect(steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ nodeId: 'download', status: 'succeeded' }),
+        expect.objectContaining({ nodeId: 'open', status: 'succeeded' }),
+      ]),
+    );
+  });
+
   it('runs a claimed workflow only through a folder grant and suppresses duplicate output', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'aiws-job-executor-'));
     temporaryDirectories.push(directory);
@@ -114,13 +306,7 @@ describe('DesktopWorkflowJobExecutor', () => {
     };
     const sourceHash = await hashFile(sourcePath);
     const steps: StepResult[] = [];
-    const controller = new AbortController();
-    const reporter = {
-      async reportStep(step: StepResult) {
-        steps.push(structuredClone(step));
-      },
-      signal: controller.signal,
-    };
+    const reporter = createReporter(steps);
 
     await expect(executor.execute(job, reporter)).resolves.toMatchObject({
       status: 'succeeded',
@@ -293,12 +479,7 @@ describe('DesktopWorkflowJobExecutor', () => {
       workflowRunId: '10000000-0000-4000-8000-000000000866',
     };
     const steps: StepResult[] = [];
-    const reporter = {
-      async reportStep(step: StepResult) {
-        steps.push(structuredClone(step));
-      },
-      signal: new AbortController().signal,
-    };
+    const reporter = createReporter(steps);
 
     await expect(executor.execute(job, reporter)).resolves.toMatchObject({
       processedFileCount: 5,

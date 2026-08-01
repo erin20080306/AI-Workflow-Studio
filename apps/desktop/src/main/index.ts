@@ -9,6 +9,7 @@ import {
   protocol,
   safeStorage,
   session,
+  shell,
   Tray,
   type IpcMainInvokeEvent,
 } from 'electron';
@@ -367,6 +368,7 @@ async function initialize(): Promise<void> {
   spreadsheetExecutor = new DesktopSpreadsheetExecutor(
     folderGrants,
     new ProcessingLedger(join(userData, 'processing-ledger.json')),
+    async (absolutePath) => await shell.openPath(absolutePath),
   );
   const workflowJobExecutor = new DesktopWorkflowJobExecutor(spreadsheetExecutor);
   const vault = new TokenVault(join(userData, 'device-session.enc'), secureCipher());

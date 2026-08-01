@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 44 — Site data and actions (completed)
+Phase 49 — Drive-to-Desktop Excel handoff (in progress)
 
 ## Repository baseline
 
@@ -3683,8 +3683,33 @@ Status: implementation complete; Production acceptance pending
   execute only after the durable Drive source reaches its manifest boundary.
   Unknown node IDs, malformed checkpoints, cursor/file mismatches, overlapping
   leases, row/sheet/file limits, and oversized durable state fail closed.
+- A new paired-Desktop handoff foundation avoids sending Google OAuth tokens or
+  raw local paths across the control plane. A claimed Agent renews its lease,
+  obtains a bounded manifest, and downloads each Google Sheet export or native
+  `.xlsx` through a short-lived HMAC token bound to the exact job, node, and file.
+  Filenames are kept outside the signed URL token and sanitized for macOS and
+  Windows before use.
+- The Desktop Agent stages at most 500 workbooks, each at most 20 MB, with a
+  bounded six-download pool inside an authorized per-Run job directory. Writes
+  are no-overwrite, atomic, hash-verified, retry-idempotent, and reject traversal
+  and symlink work directories. Workbook reading uses a separate bounded pool,
+  creates a new consolidated report, and can open only the verified `.xlsx`
+  result through an injected operating-system handler.
+- The grounded planner emits the five-step Drive download → local read → local
+  merge → local report → open result graph only when the trusted request contains
+  a paired device, approved folder alias, Google connection, and Drive folder.
+  The local runtime separately requires read and write permission on that alias.
+  The Gateway now validates grounded plans against intent and trusted execution
+  context before bypassing a provider. An Excel-only flow no longer pretends to
+  satisfy requested AI summary, report, Slides, GAS, or email work.
+- This foundation does **not** satisfy visible human-like Computer Use. The merge
+  still runs in the bounded local executor and only the completed workbook is
+  opened. No claim is made that Excel menus, mouse, keyboard, browser Gmail, or
+  other native application UI were operated. That acceptance belongs to pending
+  Phase 50 and requires packaged-Agent, operating-system permission, state
+  verification, user takeover, and high-impact approval tests.
 
-### Local validation
+### Local validation after the resumable Cloud implementation
 
 - `pnpm format:check`: passed
 - `pnpm lint`: passed
@@ -3701,3 +3726,22 @@ Status: implementation complete; Production acceptance pending
 - `pnpm security:scan-client`: passed — 35 generated client files scanned
 - `pnpm build:desktop`: not applicable; no Desktop source or packaging code was
   changed.
+
+### Paired-Desktop handoff validation
+
+- `pnpm format:check`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm test`: passed — 323 tests across 69 files, including claim-bound Drive
+  transfer tokens, native workbook download and Google Sheets export, bounded
+  staging, retry idempotency, filename collision handling, pre-creation symlink
+  rejection, approved-folder containment, consolidated workbook creation, and
+  the injected result-open boundary.
+- `pnpm build:web`: passed — all 47 application pages compiled successfully.
+  The sandboxed Turbopack attempt could not create its worker process; the
+  identical permitted retry passed.
+- `pnpm build:desktop`: passed — main, preload, and renderer bundles compiled.
+- `pnpm security:scan-client`: passed — 35 generated client files scanned.
+- Production deployment and packaged-Agent acceptance have not been performed
+  for this handoff. Visible mouse, keyboard, Excel-menu, browser, Gmail, and LINE
+  operation remains unimplemented and must not be presented as completed.

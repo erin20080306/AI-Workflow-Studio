@@ -252,4 +252,90 @@ describe('AgentClient', () => {
       '"processedRows":3',
     );
   });
+
+  it('uses the active claim for bounded Drive manifests and binary workbook transfers', async () => {
+    let completed = false;
+    const requestHeaders: { readonly headers: Headers; readonly url: string }[] = [];
+    const pendingJob = jobPayload().jobs[0];
+    const workbookBytes = new Uint8Array([80, 75, 3, 4]);
+    const fetchTransport: AgentFetch = async (input, init) => {
+      const url = String(input);
+      requestHeaders.push({ headers: new Headers(init?.headers), url });
+      if (url.endsWith('/heartbeat')) {
+        return jsonResponse({ acceptedAt: new Date().toISOString(), deviceStatus: 'online' });
+      }
+      if (url.endsWith('/jobs')) return jsonResponse(completed ? { jobs: [] } : jobPayload());
+      if (url.endsWith('/claim')) {
+        return jsonResponse({
+          claimToken: `clm_${'C'.repeat(43)}`,
+          job: { ...pendingJob, attempt: 1, status: 'claimed' },
+        });
+      }
+      if (url.endsWith('/manifest')) {
+        return jsonResponse({
+          expiresAt: '2026-08-01T12:00:00.000Z',
+          files: [
+            {
+              downloadToken: 'signed-transfer-token-value-with-forty-characters',
+              fileId: '1DriveWorkbookResource123456',
+              fileName: 'cost.xlsx',
+              mimeType: 'xlsx',
+              size: workbookBytes.byteLength,
+            },
+          ],
+          folderId: '1DriveFolderResource123456789',
+        });
+      }
+      if (url.includes('/files/1DriveWorkbookResource123456?')) {
+        return new Response(workbookBytes, {
+          headers: { 'content-length': String(workbookBytes.byteLength) },
+        });
+      }
+      if (url.endsWith('/complete')) {
+        completed = true;
+        return jsonResponse({
+          duplicate: false,
+          job: { ...pendingJob, attempt: 1, status: 'succeeded' },
+        });
+      }
+      return jsonResponse({ error: 'unexpected route' }, 404);
+    };
+    const executeJob = vi.fn(async (_job, reporter) => {
+      const manifest = await reporter.listDriveExcelFiles('download_workbooks');
+      const file = manifest.files[0];
+      if (file === undefined) throw new Error('Expected a workbook manifest entry.');
+      const downloaded = await reporter.downloadDriveExcelFile('download_workbooks', file);
+      expect(downloaded).toEqual(workbookBytes);
+      return { processedFiles: 1 };
+    });
+    const client = new AgentClient({
+      agentVersion: '0.1.0-test',
+      executeJob,
+      fetchTransport,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      onStatus: vi.fn(),
+      vault: {
+        async clear() {},
+        async load() {
+          return pairingSession();
+        },
+        async save() {},
+      },
+    });
+    await client.initialize();
+
+    await client.processOnce();
+
+    expect(executeJob).toHaveBeenCalledTimes(1);
+    const transferRequests = requestHeaders.filter((request) =>
+      request.url.includes('/drive-excel/'),
+    );
+    expect(transferRequests).toHaveLength(2);
+    expect(
+      transferRequests.every(
+        (request) => request.headers.get('x-job-claim-token') === `clm_${'C'.repeat(43)}`,
+      ),
+    ).toBe(true);
+    expect(transferRequests[1]?.url).toContain('token=signed-transfer-token-value');
+  });
 });

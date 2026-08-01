@@ -20,8 +20,9 @@ import {
   type SpreadsheetWriteResult,
   type ValidationRule,
 } from '@ai-workflow-studio/local-executor';
-import { lstat, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { link, lstat, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 
 import { FolderGrantStore } from './folder-grants';
 
@@ -42,10 +43,22 @@ export interface AuthorizedFileList {
   readonly pattern: string;
 }
 
+export interface DriveExcelStagingFile {
+  readonly fileId: string;
+  readonly fileName: string;
+}
+
+export interface DriveExcelStagingResult {
+  readonly folderAliasId: string;
+  readonly inputHashes: readonly string[];
+  readonly paths: readonly string[];
+}
+
 export class DesktopSpreadsheetExecutor {
   constructor(
     private readonly folderGrants: FolderGrantStore,
     private readonly ledger: ProcessingLedger,
+    private readonly openPath?: (absolutePath: string) => Promise<string>,
   ) {}
 
   capabilities(): readonly string[] {
@@ -55,6 +68,8 @@ export class DesktopSpreadsheetExecutor {
       'excel.merge',
       'excel.write',
       'excel.create_report',
+      'excel.open_file',
+      'google_drive.download_excel_folder',
       'data.filter',
       'data.sort',
       'data.group',
@@ -107,6 +122,105 @@ export class DesktopSpreadsheetExecutor {
       'read',
     );
     return await readSpreadsheet(filePath, options);
+  }
+
+  async stageDriveExcelFiles(
+    deviceId: string,
+    jobId: string,
+    folderAliasId: string,
+    files: readonly DriveExcelStagingFile[],
+    download: (file: DriveExcelStagingFile) => Promise<Uint8Array>,
+  ): Promise<DriveExcelStagingResult> {
+    if (files.length === 0 || files.length > 500) {
+      throw new Error('Drive workbook staging requires between 1 and 500 files.');
+    }
+    const work = await this.folderGrants.resolveAuthorizedWorkDirectory(
+      folderAliasId,
+      deviceId,
+      jobId,
+    );
+    const usedNames = new Set<string>();
+    const prepared = files.map((file) => {
+      const baseName = safeWorkbookName(file.fileName);
+      let outputName = baseName;
+      if (usedNames.has(outputName.toLowerCase())) {
+        const extension = extname(baseName);
+        const fileIdHash = createHash('sha256').update(file.fileId).digest('hex').slice(0, 8);
+        outputName = `${baseName.slice(0, -extension.length)}-${fileIdHash}${extension}`;
+        let suffix = 2;
+        while (usedNames.has(outputName.toLowerCase())) {
+          outputName = `${baseName.slice(0, -extension.length)}-${fileIdHash}-${suffix}${extension}`;
+          suffix += 1;
+        }
+      }
+      usedNames.add(outputName.toLowerCase());
+      return { file, outputName };
+    });
+    const staged = await mapWithConcurrency(prepared, 6, async ({ file, outputName }) => {
+      let relativePath = `${work.relativePath}/${outputName}`;
+      let target = await this.folderGrants.resolveAuthorizedOutputPath(
+        folderAliasId,
+        deviceId,
+        relativePath,
+      );
+      const bytes = await download(file);
+      if (bytes.byteLength < 1 || bytes.byteLength > 20_000_000) {
+        throw new Error('A transferred Drive workbook has an invalid size.');
+      }
+      const inputHash = createHash('sha256').update(bytes).digest('hex');
+      let existingHash = await existingFileHash(target);
+      if (existingHash !== undefined && existingHash !== inputHash) {
+        const extension = extname(outputName);
+        outputName = `${outputName.slice(0, -extension.length)}-${inputHash.slice(0, 8)}${extension}`;
+        relativePath = `${work.relativePath}/${outputName}`;
+        target = await this.folderGrants.resolveAuthorizedOutputPath(
+          folderAliasId,
+          deviceId,
+          relativePath,
+        );
+        existingHash = await existingFileHash(target);
+        if (existingHash !== undefined && existingHash !== inputHash) {
+          throw new Error('A staged workbook name conflicts with an existing local file.');
+        }
+      }
+      if (existingHash !== inputHash) {
+        const temporary = join(work.absolutePath, `.${outputName}.${randomUUID()}.tmp`);
+        try {
+          await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 });
+          await link(temporary, target);
+        } catch (error) {
+          if (
+            (error as NodeJS.ErrnoException).code !== 'EEXIST' ||
+            (await existingFileHash(target)) !== inputHash
+          ) {
+            throw error;
+          }
+        } finally {
+          await rm(temporary, { force: true }).catch(() => undefined);
+        }
+      }
+      return { inputHash, relativePath };
+    });
+    return {
+      folderAliasId,
+      inputHashes: staged.map((file) => file.inputHash),
+      paths: staged.map((file) => file.relativePath),
+    };
+  }
+
+  async openWorkbook(deviceId: string, input: AuthorizedInput): Promise<void> {
+    if (this.openPath === undefined) throw new Error('Workbook opening is unavailable.');
+    const filePath = await this.folderGrants.resolveAuthorizedPath(
+      input.folderAliasId,
+      deviceId,
+      input.relativePath,
+      'read',
+    );
+    if (extname(filePath).toLowerCase() !== '.xlsx') {
+      throw new Error('Only an approved .xlsx workbook can be opened by this node.');
+    }
+    const result = await this.openPath(filePath);
+    if (result.trim() !== '') throw new Error('Microsoft Excel could not open the workbook.');
   }
 
   transform(
@@ -218,4 +332,50 @@ function filePattern(pattern: string): RegExp {
   }
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`^${escaped.replaceAll('*', '.*').replaceAll('?', '.')}$`, 'iu');
+}
+
+function safeWorkbookName(input: string): string {
+  let normalized = input
+    .normalize('NFKC')
+    .replace(/[\p{Cc}<>"/\\|?*:]/gu, '_')
+    .replace(/\.xlsx$/iu, '')
+    .trim()
+    .replace(/[. ]+$/u, '')
+    .slice(0, 180);
+  if (/^(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$/iu.test(normalized)) {
+    normalized = `${normalized}_`;
+  }
+  return `${normalized || 'workbook'}.xlsx`;
+}
+
+async function existingFileHash(path: string): Promise<string | undefined> {
+  try {
+    return createHash('sha256')
+      .update(await readFile(path))
+      .digest('hex');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+): Promise<readonly R[]> {
+  const results: R[] = [];
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const value = values[index];
+      if (value !== undefined) results[index] = await mapper(value);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => await worker()),
+  );
+  return results;
 }

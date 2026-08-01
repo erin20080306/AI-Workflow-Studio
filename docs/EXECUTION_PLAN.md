@@ -13,57 +13,59 @@ test, and build checks and has been committed.
 
 ## Phases
 
-| Phase | Scope                         | Acceptance gate                                                                   | Status    |
-| ----- | ----------------------------- | --------------------------------------------------------------------------------- | --------- |
-| 0     | Repository audit              | Repository state, build baseline, architecture, and risks documented              | completed |
-| 1     | Monorepo and guardrails       | Install, format, lint, typecheck, and unit tests pass                             | completed |
-| 2     | Next.js web foundation        | App Router shell, auth screens, mock mode, and production web build pass          | completed |
-| 3     | Supabase schema and tenancy   | Fresh migrations and tenant-isolation tests pass                                  | completed |
-| 4     | Workflow schema and engine    | Schema, registry, DAG, risk, dry-run, and executor tests pass                     | completed |
-| 5     | Workflow web UI               | Mock workflow E2E and web build pass                                              | completed |
-| 6     | AI gateway                    | Provider adapters build without keys; strict JSON and mock tests pass             | completed |
-| 7     | Pairing and job API           | Token, tenant, claim, lease, and revocation tests pass                            | completed |
-| 8     | Desktop agent foundation      | Development build and unsigned test package pass; folder access is constrained    | completed |
-| 9     | Local Excel executor          | Fixture, idempotency, atomic output, backup, and traversal tests pass             | completed |
-| 10    | Google Sheets connector       | Mock OAuth/Sheets tests pass; credentials are optional and server-only            | completed |
-| 11    | Run orchestration             | End-to-end mock run, reconnect, approval, and de-duplication pass                 | completed |
-| 12    | GitHub release and Vercel     | CI, production web build, platform desktop builds, and secret checks pass         | completed |
-| 13    | Security and final acceptance | Security review, go-live additions, and all MVP acceptance criteria pass          | completed |
-| 14    | Hosted Web staging            | Hosted migrations, Auth configuration, Vercel deployment, and smoke test pass     | completed |
-| 15    | Remote CI repair              | Linux quality checks and macOS/Windows package jobs pass remotely                 | completed |
-| 16    | Platform Admin bootstrap      | A verified Auth user has an active server-granted Super Admin role                | completed |
-| 17    | AI conversation workspace     | Bilingual planner chat, safe modes, and configured model selection pass           | completed |
-| 18    | Durable multi-model chat      | Authenticated streaming conversations persist with tenant isolation               | completed |
-| 19    | Tool and artifact workspace   | Files, sources, tool registry, and generated artifacts are bounded and audited    | completed |
-| 20    | Approval-aware execution      | Reviewed plans can dispatch idempotent jobs with explicit approval gates          | completed |
-| 21    | Schedules and connectors      | Recurring runs and selected business connectors pass integration tests            | completed |
-| 22    | Usage and operations          | Provider usage, quotas, billing controls, and production observability pass       | completed |
-| 23    | Website Studio foundation     | Guided briefs create validated, tenant-isolated website projects                  | completed |
-| 24    | AI website specification      | Multi-model guidance produces only validated component and content specs          | completed |
-| 25    | Tier-aware AI model routing   | Store plan, task complexity, readiness, and budget bound exact model access       | completed |
-| 26    | Responsive preview canvas     | Sandboxed desktop, tablet, and mobile previews remain isolated and deterministic  | completed |
-| 27    | Visual editing and versions   | Natural-language and direct edits are reversible, versioned, and auditable        | completed |
-| 28    | AI website image generation   | Bounded provider images become private, validated, quota-controlled assets        | completed |
-| 29    | Unified AI workspace          | Exact models, chat images, and confirmed deletion remain quota and Tenant safe    | completed |
-| 30    | Prompt-to-site and publishing | Prompt, follow-up, Canvas, edits, and approved public releases pass all gates     | completed |
-| 31    | Prompt-to-workflow automation | Short prompts create validated, persisted, approval-aware workflow drafts         | completed |
-| 32    | Account-verified AI models    | Three providers route only to account-listed, tier-compatible text model IDs      | completed |
-| 33    | Production site acceptance    | Live prompt-to-site, editing, approval, and public routes pass                    | completed |
-| 34    | Wildcard subdomain hosting    | Every active publication receives a verified stable platform subdomain            | completed |
-| 35    | Portable static export        | Paid users can download a bounded, secret-free, verifiable website ZIP            | completed |
-| 36    | Customer-selected subdomains  | Each site can reserve a safe unique label on the platform wildcard                | completed |
-| 37    | AI-first website brief        | One direction prompt creates a rich inferred brief with bounded follow-ups        | completed |
-| 38    | Paid GitHub site publishing   | Paid users can explicitly push an exact safe release through a GitHub App         | completed |
-| 39    | Guided site delivery          | Subdomain or pasted GitHub URL paths produce safe, actionable delivery guidance   | completed |
-| 40    | Guided site integrations      | Allowlisted payment/API modules guide setup without exposing credentials          | completed |
-| 41    | Website delivery acceptance   | Free/paid gates, pages, domains, ZIP, GitHub, and integrations pass end to end    | completed |
-| 42    | Full-stack website admin      | Safe CMS content and public form submissions work through a Tenant-safe backend   | completed |
-| 43    | Site users and access         | Generated sites can use allowlisted identity, roles, and protected portal pages   | completed |
-| 44    | Site data and actions         | Validated collections, forms, workflows, and server actions remain schema-bound   | completed |
-| 45    | Site files and analytics      | Private media, delivery metrics, and site settings remain quota and Tenant safe   | pending   |
-| 46    | Full-stack site acceptance    | AI-built public and admin experiences pass role, data, file, and action E2E gates | pending   |
-| 47    | Intelligent Work automation   | Natural-language Work flows complete approved cloud and Desktop acceptance        | completed |
-| 48    | Bilingual run operations      | Steps, audit events, actors, and notifications follow the selected UI language    | completed |
+| Phase | Scope                          | Acceptance gate                                                                     | Status      |
+| ----- | ------------------------------ | ----------------------------------------------------------------------------------- | ----------- |
+| 0     | Repository audit               | Repository state, build baseline, architecture, and risks documented                | completed   |
+| 1     | Monorepo and guardrails        | Install, format, lint, typecheck, and unit tests pass                               | completed   |
+| 2     | Next.js web foundation         | App Router shell, auth screens, mock mode, and production web build pass            | completed   |
+| 3     | Supabase schema and tenancy    | Fresh migrations and tenant-isolation tests pass                                    | completed   |
+| 4     | Workflow schema and engine     | Schema, registry, DAG, risk, dry-run, and executor tests pass                       | completed   |
+| 5     | Workflow web UI                | Mock workflow E2E and web build pass                                                | completed   |
+| 6     | AI gateway                     | Provider adapters build without keys; strict JSON and mock tests pass               | completed   |
+| 7     | Pairing and job API            | Token, tenant, claim, lease, and revocation tests pass                              | completed   |
+| 8     | Desktop agent foundation       | Development build and unsigned test package pass; folder access is constrained      | completed   |
+| 9     | Local Excel executor           | Fixture, idempotency, atomic output, backup, and traversal tests pass               | completed   |
+| 10    | Google Sheets connector        | Mock OAuth/Sheets tests pass; credentials are optional and server-only              | completed   |
+| 11    | Run orchestration              | End-to-end mock run, reconnect, approval, and de-duplication pass                   | completed   |
+| 12    | GitHub release and Vercel      | CI, production web build, platform desktop builds, and secret checks pass           | completed   |
+| 13    | Security and final acceptance  | Security review, go-live additions, and all MVP acceptance criteria pass            | completed   |
+| 14    | Hosted Web staging             | Hosted migrations, Auth configuration, Vercel deployment, and smoke test pass       | completed   |
+| 15    | Remote CI repair               | Linux quality checks and macOS/Windows package jobs pass remotely                   | completed   |
+| 16    | Platform Admin bootstrap       | A verified Auth user has an active server-granted Super Admin role                  | completed   |
+| 17    | AI conversation workspace      | Bilingual planner chat, safe modes, and configured model selection pass             | completed   |
+| 18    | Durable multi-model chat       | Authenticated streaming conversations persist with tenant isolation                 | completed   |
+| 19    | Tool and artifact workspace    | Files, sources, tool registry, and generated artifacts are bounded and audited      | completed   |
+| 20    | Approval-aware execution       | Reviewed plans can dispatch idempotent jobs with explicit approval gates            | completed   |
+| 21    | Schedules and connectors       | Recurring runs and selected business connectors pass integration tests              | completed   |
+| 22    | Usage and operations           | Provider usage, quotas, billing controls, and production observability pass         | completed   |
+| 23    | Website Studio foundation      | Guided briefs create validated, tenant-isolated website projects                    | completed   |
+| 24    | AI website specification       | Multi-model guidance produces only validated component and content specs            | completed   |
+| 25    | Tier-aware AI model routing    | Store plan, task complexity, readiness, and budget bound exact model access         | completed   |
+| 26    | Responsive preview canvas      | Sandboxed desktop, tablet, and mobile previews remain isolated and deterministic    | completed   |
+| 27    | Visual editing and versions    | Natural-language and direct edits are reversible, versioned, and auditable          | completed   |
+| 28    | AI website image generation    | Bounded provider images become private, validated, quota-controlled assets          | completed   |
+| 29    | Unified AI workspace           | Exact models, chat images, and confirmed deletion remain quota and Tenant safe      | completed   |
+| 30    | Prompt-to-site and publishing  | Prompt, follow-up, Canvas, edits, and approved public releases pass all gates       | completed   |
+| 31    | Prompt-to-workflow automation  | Short prompts create validated, persisted, approval-aware workflow drafts           | completed   |
+| 32    | Account-verified AI models     | Three providers route only to account-listed, tier-compatible text model IDs        | completed   |
+| 33    | Production site acceptance     | Live prompt-to-site, editing, approval, and public routes pass                      | completed   |
+| 34    | Wildcard subdomain hosting     | Every active publication receives a verified stable platform subdomain              | completed   |
+| 35    | Portable static export         | Paid users can download a bounded, secret-free, verifiable website ZIP              | completed   |
+| 36    | Customer-selected subdomains   | Each site can reserve a safe unique label on the platform wildcard                  | completed   |
+| 37    | AI-first website brief         | One direction prompt creates a rich inferred brief with bounded follow-ups          | completed   |
+| 38    | Paid GitHub site publishing    | Paid users can explicitly push an exact safe release through a GitHub App           | completed   |
+| 39    | Guided site delivery           | Subdomain or pasted GitHub URL paths produce safe, actionable delivery guidance     | completed   |
+| 40    | Guided site integrations       | Allowlisted payment/API modules guide setup without exposing credentials            | completed   |
+| 41    | Website delivery acceptance    | Free/paid gates, pages, domains, ZIP, GitHub, and integrations pass end to end      | completed   |
+| 42    | Full-stack website admin       | Safe CMS content and public form submissions work through a Tenant-safe backend     | completed   |
+| 43    | Site users and access          | Generated sites can use allowlisted identity, roles, and protected portal pages     | completed   |
+| 44    | Site data and actions          | Validated collections, forms, workflows, and server actions remain schema-bound     | completed   |
+| 45    | Site files and analytics       | Private media, delivery metrics, and site settings remain quota and Tenant safe     | pending     |
+| 46    | Full-stack site acceptance     | AI-built public and admin experiences pass role, data, file, and action E2E gates   | pending     |
+| 47    | Intelligent Work automation    | Natural-language Work flows complete approved cloud and Desktop acceptance          | completed   |
+| 48    | Bilingual run operations       | Steps, audit events, actors, and notifications follow the selected UI language      | completed   |
+| 49    | Drive-to-Desktop Excel handoff | Bounded Drive files reach an approved local workspace and open the verified result  | in-progress |
+| 50    | Visible Computer Use           | Paired agents visibly operate allowlisted apps with approval and state verification | pending     |
 
 ## Phase 0 — Repository audit
 
@@ -638,3 +640,43 @@ Acceptance requires the complete local quality gate, Production deployment,
 OAuth re-consent, a real Drive-folder run with all six reviewed nodes, explicit
 write approvals, and verification of the generated Excel, report, Slides, GAS,
 audit timeline, and absence of sent email.
+
+The large-folder Production result changed the required execution architecture.
+The paired Desktop alternative transfers only Google Sheets exports and native
+`.xlsx` workbooks through claim-bound, short-lived server tokens into a
+write-approved local job directory. It then performs bounded deterministic
+consolidation, writes a new workbook, and opens that verified output through the
+operating-system application association. The server never sends Google access
+tokens to the Agent, and the Agent never receives a raw local root path from the
+cloud.
+
+This handoff is a prerequisite, not acceptance of human-like UI automation.
+Background parsing, merging, and an operating-system `open` call must not be
+presented as mouse/keyboard operation in Excel. Requests that also require an AI
+summary, Slides, Apps Script, or email remain intent-incomplete until the
+architecture can hand the verified local artifact back to a separate reviewed
+artifact flow.
+
+## Phase 50 — Visible Computer Use
+
+Add an opt-in Computer Use runtime to the paired Desktop Agent. It must visibly
+launch and focus an allowlisted application, observe an accessibility or
+screenshot-derived state, execute only schema-validated mouse and keyboard
+actions, wait for a verifiable state change, and expose the current action in the
+Run timeline. The first accepted application is Microsoft Excel; file-manager,
+Gmail/Sheets browser, and LINE operations follow only after the common runtime
+passes.
+
+The user must grant operating-system screen/accessibility permission and approve
+the local app/folder scope. External sends, uploads, deletes, moves, renames, and
+other high-impact actions require explicit preview and approval. AI output may
+select only allowlisted semantic actions and must never supply executable shell,
+AppleScript, PowerShell, JavaScript, arbitrary coordinates, or hidden background
+commands. Logs contain redacted action/state summaries and hashes rather than
+screen contents, credentials, message bodies, or local paths.
+
+Acceptance requires real packaged-Agent testing on the supported operating
+systems, including a visible Excel consolidation with state checks, interruption
+and resume behavior, denied-permission behavior, user takeover, high-impact
+approval, and an audit trail that matches every visible action. API-only work or
+opening a completed file does not satisfy this phase.

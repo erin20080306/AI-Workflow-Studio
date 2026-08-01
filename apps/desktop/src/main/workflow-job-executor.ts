@@ -42,18 +42,10 @@ const EnvelopeSchema = z
       .max(1_000)
       .default([]),
     paths: z
-      .array(
-        z
-          .string()
-          .min(1)
-          .max(255)
-          .refine(
-            (value) => !value.includes('/') && !value.includes('\\') && !value.includes('..'),
-          ),
-      )
+      .array(z.string().min(1).max(1_024).refine(isSafeRelativeEnvelopePath))
       .max(1_000)
       .default([]),
-    tables: z.array(TableSchema).max(200).default([]),
+    tables: z.array(TableSchema).max(2_000).default([]),
     write: z
       .object({
         backupCreated: z.boolean().optional(),
@@ -75,10 +67,12 @@ type DesktopEnvelope = z.infer<typeof EnvelopeSchema>;
 
 const SUPPORTED_NODE_TYPES = [
   'folder.list_files',
+  'google_drive.download_excel_folder',
   'excel.read',
   'excel.merge',
   'excel.write',
   'excel.create_report',
+  'excel.open_file',
   'data.filter',
   'data.map_columns',
   'data.deduplicate',
@@ -96,6 +90,7 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
     readonly type: (typeof SUPPORTED_NODE_TYPES)[number],
     private readonly deviceId: string,
     private readonly spreadsheet: DesktopSpreadsheetExecutor,
+    private readonly reporter: AgentJobReporter,
   ) {
     const definition = NODE_CATALOG_BY_TYPE.get(type);
     if (definition === undefined) {
@@ -138,6 +133,33 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
       const envelope = parseEnvelope(input);
 
       switch (parsed.type) {
+        case 'google_drive.download_excel_folder': {
+          const manifest = await this.reporter.listDriveExcelFiles(context.nodeId);
+          const filesById = new Map(manifest.files.map((file) => [file.fileId, file]));
+          const staged = await this.spreadsheet.stageDriveExcelFiles(
+            this.deviceId,
+            context.runId,
+            parsed.config.folderAliasId,
+            manifest.files.map((file) => ({
+              fileId: file.fileId,
+              fileName: file.fileName,
+            })),
+            async (file) => {
+              const source = filesById.get(file.fileId);
+              if (source === undefined) throw new Error('Drive transfer manifest changed.');
+              return await this.reporter.downloadDriveExcelFile(context.nodeId, source);
+            },
+          );
+          return {
+            metrics: { processedFileCount: staged.paths.length },
+            output: jsonEnvelope({
+              folderAliasId: staged.folderAliasId,
+              inputHashes: [...staged.inputHashes],
+              paths: [...staged.paths],
+              tables: [],
+            }),
+          };
+        }
         case 'folder.list_files': {
           const paths = await this.spreadsheet.list(this.deviceId, {
             folderAliasId: parsed.config.folderAliasId,
@@ -161,29 +183,27 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
             throw new Error('No authorized spreadsheet files were selected.');
           }
           const folderAliasId = envelope.folderAliasId;
-          const documents = await Promise.all(
-            envelope.paths.map(async (relativePath) => {
-              return await this.spreadsheet.read(
-                this.deviceId,
-                {
-                  folderAliasId,
-                  relativePath,
-                },
-                {
-                  headerMode: parsed.config.headerMode,
-                  headerRow: parsed.config.headerRow,
-                  headerScanRows: parsed.config.headerScanRows,
-                  maxFileSizeBytes: parsed.config.maxFileSizeBytes,
-                  maxRows: parsed.config.maxRows,
-                  maxSheets: parsed.config.maxSheets,
-                  sheetMode: parsed.config.sheetMode,
-                  ...(parsed.config.sheetNames === undefined
-                    ? {}
-                    : { sheetNames: parsed.config.sheetNames }),
-                },
-              );
-            }),
-          );
+          const documents = await mapWithConcurrency(envelope.paths, 8, async (relativePath) => {
+            return await this.spreadsheet.read(
+              this.deviceId,
+              {
+                folderAliasId,
+                relativePath,
+              },
+              {
+                headerMode: parsed.config.headerMode,
+                headerRow: parsed.config.headerRow,
+                headerScanRows: parsed.config.headerScanRows,
+                maxFileSizeBytes: parsed.config.maxFileSizeBytes,
+                maxRows: parsed.config.maxRows,
+                maxSheets: parsed.config.maxSheets,
+                sheetMode: parsed.config.sheetMode,
+                ...(parsed.config.sheetNames === undefined
+                  ? {}
+                  : { sheetNames: parsed.config.sheetNames }),
+              },
+            );
+          });
           const tables = documents.flatMap((document) => document.sheets);
           return {
             metrics: {
@@ -311,6 +331,8 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
             },
             output: jsonEnvelope({
               ...envelope,
+              folderAliasId: parsed.config.folderAliasId,
+              paths: [parsed.config.outputName],
               write: {
                 duplicate: written.duplicate,
                 ...(written.result === undefined
@@ -324,6 +346,24 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
                     }),
               },
             }),
+          };
+        }
+        case 'excel.open_file': {
+          const relativePath = envelope.paths.at(-1);
+          if (
+            relativePath === undefined ||
+            (envelope.folderAliasId !== undefined &&
+              envelope.folderAliasId !== parsed.config.folderAliasId)
+          ) {
+            throw new Error('No approved output workbook is available to open.');
+          }
+          await this.spreadsheet.openWorkbook(this.deviceId, {
+            folderAliasId: parsed.config.folderAliasId,
+            relativePath,
+          });
+          return {
+            metrics: { processedFileCount: 1 },
+            output: jsonEnvelope(envelope),
           };
         }
         default:
@@ -341,7 +381,7 @@ export class DesktopWorkflowJobExecutor {
   async execute(job: AgentJob, reporter: AgentJobReporter): Promise<JsonValue> {
     const registry = new NodeRegistry();
     for (const type of SUPPORTED_NODE_TYPES) {
-      registry.register(new DesktopNodeExecutor(type, job.deviceId, this.spreadsheet));
+      registry.register(new DesktopNodeExecutor(type, job.deviceId, this.spreadsheet, reporter));
     }
     const engine = new WorkflowEngine(registry);
     const result = await engine.execute(job.workflow, {
@@ -389,6 +429,33 @@ export class DesktopWorkflowJobExecutor {
       stepCount: result.steps.length,
     });
   }
+}
+
+function isSafeRelativeEnvelopePath(value: string): boolean {
+  if (value.includes('\\') || value.includes('\0') || value.startsWith('/')) return false;
+  const segments = value.split('/');
+  return !segments.some((segment) => segment === '' || segment === '.' || segment === '..');
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+): Promise<readonly R[]> {
+  const results: R[] = [];
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const value = values[index];
+      if (value !== undefined) results[index] = await mapper(value);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => await worker()),
+  );
+  return results;
 }
 
 function safeDesktopExecutionError(error: unknown, nodeId: string): WorkflowEngineError {

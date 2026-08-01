@@ -150,8 +150,113 @@ function buildConnectedDesktopExample(request: PlannerRequest): AIPlannerOutput 
   });
 }
 
+function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutput | undefined {
+  const intent = detectWorkflowIntent(request.prompt);
+  const requested = new Set(intent.requiredNodeTypes);
+  const folderAliasId = request.context.allowedFolderAliasIds[0];
+  const connectionId = request.context.googleConnectionIds[0];
+  const folderId = firstMatch(request.prompt, DRIVE_FOLDER_ID_PATTERN);
+  if (
+    request.context.executionTarget.type !== 'desktop' ||
+    folderAliasId === undefined ||
+    connectionId === undefined ||
+    folderId === undefined ||
+    !requested.has('google_drive.read_excel_folder') ||
+    [...requested].some(
+      (type) =>
+        type !== 'google_drive.read_excel_folder' && type !== 'google_drive.create_excel_report',
+    )
+  ) {
+    return undefined;
+  }
+  const outputName = requestedWorkbookNames(request.prompt).at(-1) ?? 'AI-Excel-本機匯總.xlsx';
+  return AIPlannerOutputSchema.parse({
+    assumptions: [
+      'Google Drive transfers only supported .xlsx and Google Sheets workbooks into the selected approved Desktop folder.',
+      'The paired Desktop Agent performs bounded local consolidation and creates a new workbook without overwriting an existing file.',
+      'The finished workbook is opened visibly with the operating system Excel association; external delivery remains a separate approved operation.',
+    ],
+    explanation:
+      'Download approved Drive workbooks to the paired computer, read and merge them locally, create a non-overwriting Excel result, and open the finished workbook for visible review.',
+    mappingProposals: [],
+    workflow: {
+      description:
+        'Transfer approved Drive workbooks into an authorized local work folder and create an inspectable Excel consolidation.',
+      edges: [
+        { from: 'download_drive_workbooks', to: 'read_local_workbooks' },
+        { from: 'read_local_workbooks', to: 'merge_local_workbooks' },
+        { from: 'merge_local_workbooks', to: 'create_local_report' },
+        { from: 'create_local_report', to: 'open_excel_result' },
+      ],
+      executionTarget: request.context.executionTarget,
+      name: request.context.locale === 'en' ? 'Desktop Excel operation' : '本機 Excel 代操作',
+      nodes: [
+        {
+          config: {
+            connectionId,
+            folderAliasId,
+            folderId,
+            includeSubfolders: true,
+            maxFileSizeBytes: 20_000_000,
+            maxFiles: 500,
+          },
+          id: 'download_drive_workbooks',
+          type: 'google_drive.download_excel_folder',
+          version: 1,
+        },
+        {
+          config: {
+            headerMode: 'auto',
+            headerRow: 1,
+            headerScanRows: 30,
+            maxFileSizeBytes: 20_000_000,
+            maxRows: 100_000,
+            maxSheets: 200,
+            sheetMode: 'all',
+          },
+          id: 'read_local_workbooks',
+          type: 'excel.read',
+          version: 1,
+        },
+        {
+          config: { columnMode: 'union', includeSourceFile: true },
+          id: 'merge_local_workbooks',
+          type: 'excel.merge',
+          version: 1,
+        },
+        {
+          config: {
+            folderAliasId,
+            outputName,
+            overwrite: false,
+            reportTitle:
+              request.context.locale === 'en'
+                ? 'AI Workflow Studio Excel consolidation'
+                : 'AI Workflow Studio Excel 匯總',
+          },
+          id: 'create_local_report',
+          type: 'excel.create_report',
+          version: 1,
+        },
+        {
+          config: { application: 'excel', folderAliasId },
+          id: 'open_excel_result',
+          type: 'excel.open_file',
+          version: 1,
+        },
+      ],
+      schemaVersion: 1,
+      trigger: { config: {}, type: 'manual.trigger' },
+    },
+  });
+}
+
 export function buildPlannerGroundedPlan(request: PlannerRequest): AIPlannerOutput | undefined {
-  return buildConnectedGoogleExample(request) ?? buildConnectedDesktopExample(request);
+  return (
+    buildDesktopDriveExcelOperation(request) ??
+    buildConnectedGoogleExample(request) ??
+    buildConnectedDesktopExample(request)
+  );
 }
 
 function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput | undefined {
@@ -406,6 +511,7 @@ Planning behavior:
 - Cover every explicit source, transformation, output, and delivery step in the requirement. A validation-only draft is not sufficient when the requirement asks for Gmail, Google Sheets, Google Forms, a report, a presentation, or email delivery.
 - Gmail, Google Sheets, Google Forms, Google Slides, and Apps Script nodes must use a connectionId from googleConnectionIds. Never invent one.
 - Google Drive folder Excel requests must use google_drive.read_excel_folder and may create a non-overwriting google_drive.create_excel_report only when consolidation is requested.
+- When the trusted execution target is Desktop and both a Google connection and approved folder alias are available, a Drive Excel operation must use google_drive.download_excel_folder → excel.read → excel.merge → excel.create_report → excel.open_file. This is an operation flow; never add source code nodes.
 - For Gmail summaries use gmail.read → ai.summarize → report.compose. For Google Forms or Sheets summaries, read the selected source before summarizing. Add google_slides.create only when a presentation is requested. Add gmail.send only when an email recipient is explicitly supplied; default its sendMode to draft unless the user explicitly requests sending.
 - Apps Script may use only the registered apps_script.deploy_template templates. Never produce script source code in a workflow plan.
 
@@ -424,6 +530,8 @@ function repairFeedback(issues: readonly WorkflowValidationIssue[]): string {
 
 export function buildPlannerShapeExample(request: PlannerRequest): AIPlannerOutput {
   const intent = detectWorkflowIntent(request.prompt);
+  const desktopDriveExample = buildDesktopDriveExcelOperation(request);
+  if (desktopDriveExample !== undefined) return desktopDriveExample;
   const googleExample = buildConnectedGoogleExample(request);
   if (googleExample !== undefined) return googleExample;
   const desktopExample = buildConnectedDesktopExample(request);

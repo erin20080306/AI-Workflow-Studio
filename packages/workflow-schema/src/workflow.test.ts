@@ -132,8 +132,8 @@ describe('WorkflowSchema', () => {
 
   it('registers exactly the first-version allowlist with no duplicate type/version pairs', () => {
     const keys = NODE_CATALOG.map((node) => `${node.type}@${node.version}`);
-    expect(NODE_CATALOG).toHaveLength(36);
-    expect(new Set(keys).size).toBe(36);
+    expect(NODE_CATALOG).toHaveLength(38);
+    expect(new Set(keys).size).toBe(38);
   });
 
   it('accepts a bounded cloud Drive Excel consolidation with an approval-gated report', () => {

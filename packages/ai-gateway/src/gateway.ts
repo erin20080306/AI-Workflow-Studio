@@ -54,7 +54,10 @@ export class AiGateway {
     };
 
     const groundedPlan = buildPlannerGroundedPlan(request);
-    if (groundedPlan !== undefined) {
+    if (
+      groundedPlan !== undefined &&
+      validateWorkflowIntentCoverage(request, groundedPlan).length === 0
+    ) {
       await recordUsage(this.usageSink, {
         attempt: 1,
         durationMs: 0,

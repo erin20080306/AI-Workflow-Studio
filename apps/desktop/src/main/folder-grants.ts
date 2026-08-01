@@ -1,4 +1,4 @@
-import { lstat, realpath, stat } from 'node:fs/promises';
+import { lstat, mkdir, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -154,6 +154,36 @@ export class FolderGrantStore {
     return target;
   }
 
+  async resolveAuthorizedWorkDirectory(
+    folderAliasId: string,
+    deviceId: string,
+    jobId: string,
+  ): Promise<{ readonly absolutePath: string; readonly relativePath: string }> {
+    const safeJobId = z.string().uuid().parse(jobId);
+    const root = await this.resolveAuthorizedRoot(folderAliasId, deviceId, 'write');
+    const relativePath = `.ai-workflow-studio/jobs/${safeJobId}`;
+    let canonicalTarget = root;
+    for (const name of ['.ai-workflow-studio', 'jobs', safeJobId]) {
+      const segment = resolve(canonicalTarget, name);
+      this.assertContained(root, segment);
+      try {
+        await mkdir(segment, { mode: 0o700 });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+      const segmentStat = await lstat(segment);
+      if (segmentStat.isSymbolicLink() || !segmentStat.isDirectory()) {
+        throw new FolderAuthorizationError(
+          'FOLDER_TRAVERSAL_REJECTED',
+          'A Desktop Agent work directory must be a real directory.',
+        );
+      }
+      canonicalTarget = await realpath(segment);
+      this.assertContained(root, canonicalTarget);
+    }
+    return { absolutePath: canonicalTarget, relativePath };
+  }
+
   async resolveAuthorizedRoot(
     folderAliasId: string,
     deviceId: string,
@@ -199,11 +229,13 @@ export class FolderGrantStore {
   }
 
   private assertSafeRelativePath(relativePath: string): void {
+    const segments = relativePath.split(/[\\/]/u);
     if (
       relativePath.length === 0 ||
       relativePath.length > 1_024 ||
       relativePath.includes('\0') ||
-      isAbsolute(relativePath)
+      isAbsolute(relativePath) ||
+      segments.some((segment) => segment === '' || segment === '.' || segment === '..')
     ) {
       throw new FolderAuthorizationError(
         'FOLDER_TRAVERSAL_REJECTED',

@@ -68,6 +68,10 @@ export const NODE_PRESENTATION: Readonly<
     category: { en: 'Excel', zhHant: 'Excel' },
     label: { en: 'Merge Excel files', zhHant: '合併 Excel' },
   },
+  'excel.open_file': {
+    category: { en: 'Excel', zhHant: 'Excel' },
+    label: { en: 'Open result in Excel', zhHant: '用 Excel 開啟結果' },
+  },
   'excel.read': {
     category: { en: 'Excel', zhHant: 'Excel' },
     label: { en: 'Read Excel', zhHant: '讀取 Excel' },
@@ -119,6 +123,10 @@ export const NODE_PRESENTATION: Readonly<
   'google_drive.create_excel_report': {
     category: { en: 'Google Drive', zhHant: 'Google 雲端硬碟' },
     label: { en: 'Create cloud Excel report', zhHant: '建立雲端 Excel 報表' },
+  },
+  'google_drive.download_excel_folder': {
+    category: { en: 'Google Drive', zhHant: 'Google 雲端硬碟' },
+    label: { en: 'Download workbooks to Desktop', zhHant: '下載活頁簿到本機' },
   },
   'google_drive.read_excel_folder': {
     category: { en: 'Google Drive', zhHant: 'Google 雲端硬碟' },
