@@ -3662,9 +3662,14 @@ Status: implementation complete; Production acceptance pending
   Drive reader has a ten-minute per-step ceiling, and its deterministic bounded
   download pool is raised from 16 to 24. Retry initialization also starts a
   fresh bounded Run timeout window instead of retaining the previous attempt's
-  expired deadline. Production re-acceptance remains pending until this change
-  is deployed; all failed attempts produced no report, Slides, Apps Script
-  project, or email.
+  expired deadline. Commit `c82bedb` was deployed as Vercel Production
+  `dpl_2S2Yh4YAwCJn1Bkq3eTiKdCpCgM9`, and the canonical domain resolved to that
+  deployment. Attempt 2 correctly received a new Run deadline and remained
+  active beyond the former four-minute boundary, but the same Drive node still
+  exceeded its new 600-second limit. No report, Slides, Apps Script project, or
+  email was produced. Production acceptance therefore remains blocked on a
+  resumable cloud-batch architecture; a single Vercel invocation is not an
+  accepted execution strategy for this 481-workbook folder.
 
 ### Local validation
 
