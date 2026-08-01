@@ -13,6 +13,7 @@ const ALLOWED_NODE_TYPES = NODE_CATALOG.map((node) => node.type).join(', ');
 const EMAIL_ADDRESS_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
 const FORM_ID_PATTERN = /forms\/d\/(?:e\/)?([A-Za-z0-9_-]{10,240})/iu;
 const SHEET_ID_PATTERN = /spreadsheets\/d\/([A-Za-z0-9_-]{10,200})/iu;
+const SHEET_RANGE_PATTERN = /\b([A-Z]{1,3}\d{1,7}:[A-Z]{1,3}\d{1,7})\b/u;
 
 function firstMatch(prompt: string, pattern: RegExp): string | undefined {
   return pattern.exec(prompt)?.[1];
@@ -22,6 +23,13 @@ function requestedSlideCount(prompt: string): number {
   const requested = /(?:建立|產生|create)?\s*(\d{1,2})\s*(?:頁|張|slides?)/iu.exec(prompt)?.[1];
   const count = requested === undefined ? 10 : Number(requested);
   return Math.min(30, Math.max(3, count));
+}
+
+function requestedSheetName(prompt: string): string | undefined {
+  return (
+    /(?:工作表名稱|sheet\s*name)\s*[:：]?\s*[「"']?([^\s」"',，。]{1,100})/iu.exec(prompt)?.[1] ??
+    /的\s*[「"']([^」"']{1,100})[」"']/u.exec(prompt)?.[1]
+  );
 }
 
 function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput | undefined {
@@ -54,13 +62,16 @@ function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput |
 
   if (required.has('google_sheets.read')) {
     const spreadsheetId = firstMatch(request.prompt, SHEET_ID_PATTERN);
-    const sheetName =
-      /(?:工作表名稱|sheet\s*name)\s*[:：]?\s*[「"']?([^\s」"',，。]{1,100})/iu.exec(
-        request.prompt,
-      )?.[1];
+    const sheetName = requestedSheetName(request.prompt);
     if (spreadsheetId === undefined || sheetName === undefined) return undefined;
+    const range = firstMatch(request.prompt, SHEET_RANGE_PATTERN);
     nodes.push({
-      config: { connectionId, sheetName, spreadsheetId },
+      config: {
+        connectionId,
+        ...(range === undefined ? {} : { range: `'${sheetName.replaceAll("'", "''")}'!${range}` }),
+        sheetName,
+        spreadsheetId,
+      },
       id: 'read_sheet',
       type: 'google_sheets.read',
       version: 1,

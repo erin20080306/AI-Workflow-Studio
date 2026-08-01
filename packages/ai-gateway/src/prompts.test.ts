@@ -93,4 +93,32 @@ describe('planner prompts', () => {
     });
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });
+
+  it('grounds a connected Sheets URL with a quoted sheet name and bounded range', () => {
+    const googleRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
+      },
+      prompt:
+        '讀取 Google 試算表 https://docs.google.com/spreadsheets/d/1dd6qUl0w0xBtkeIyLR8zGsiwI0378XMEePeekgjnuKw/edit 的「工作表1」A1:C20，產生摘要與報告。',
+    };
+    const example = buildPlannerShapeExample(googleRequest);
+
+    expect(example.workflow.nodes.map((node) => node.type)).toEqual([
+      'google_sheets.read',
+      'ai.summarize',
+      'report.compose',
+    ]);
+    expect(example.workflow.nodes[0]).toMatchObject({
+      config: {
+        range: "'工作表1'!A1:C20",
+        sheetName: '工作表1',
+        spreadsheetId: '1dd6qUl0w0xBtkeIyLR8zGsiwI0378XMEePeekgjnuKw',
+      },
+      type: 'google_sheets.read',
+    });
+    expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+  });
 });
