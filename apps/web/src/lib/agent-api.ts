@@ -7,6 +7,7 @@ import {
 } from '@ai-workflow-studio/agent-protocol';
 
 const MAX_AGENT_BODY_BYTES = 32_000;
+const MAX_AGENT_CLOUD_STEP_BODY_BYTES = 96_000;
 
 const statusByCode = {
   AGENT_AUTHENTICATION_FAILED: 401,
@@ -36,9 +37,9 @@ export function claimedJobCredentials(request: Request): ClaimedJobCredentials {
   };
 }
 
-export async function readAgentJson(request: Request): Promise<unknown> {
+async function readBoundedAgentJson(request: Request, maximumBytes: number): Promise<unknown> {
   const declaredLength = Number(request.headers.get('content-length') ?? '0');
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_AGENT_BODY_BYTES) {
+  if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) {
     throw new AgentProtocolError('AGENT_REQUEST_INVALID', 'Agent request body is too large.');
   }
   let body: string;
@@ -47,7 +48,7 @@ export async function readAgentJson(request: Request): Promise<unknown> {
   } catch {
     throw new AgentProtocolError('AGENT_REQUEST_INVALID', 'Agent request body could not be read.');
   }
-  if (new TextEncoder().encode(body).byteLength > MAX_AGENT_BODY_BYTES) {
+  if (new TextEncoder().encode(body).byteLength > maximumBytes) {
     throw new AgentProtocolError('AGENT_REQUEST_INVALID', 'Agent request body is too large.');
   }
   try {
@@ -55,6 +56,14 @@ export async function readAgentJson(request: Request): Promise<unknown> {
   } catch {
     throw new AgentProtocolError('AGENT_REQUEST_INVALID', 'Agent request body must be valid JSON.');
   }
+}
+
+export async function readAgentJson(request: Request): Promise<unknown> {
+  return await readBoundedAgentJson(request, MAX_AGENT_BODY_BYTES);
+}
+
+export async function readAgentCloudStepJson(request: Request): Promise<unknown> {
+  return await readBoundedAgentJson(request, MAX_AGENT_CLOUD_STEP_BODY_BYTES);
 }
 
 export function agentApiError(error: unknown): Response {

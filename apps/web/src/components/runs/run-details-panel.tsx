@@ -90,7 +90,11 @@ const copy = {
     destructive: 'Destructive',
     external: 'External',
     files: 'files',
+    generatedReport: 'Generated report',
+    generatedSummary: 'AI summary',
+    gasDeployment: 'Approved GAS deployment',
     notifications: 'Notifications',
+    openSlides: 'Open Google Slides',
     operationFailed: 'The action did not complete. Refresh to confirm the current status.',
     refresh: 'Refresh',
     reject: 'Reject',
@@ -111,7 +115,11 @@ const copy = {
     destructive: '破壞性',
     external: '外部服務',
     files: '個檔案',
+    generatedReport: '已產生報告',
+    generatedSummary: 'AI 摘要',
+    gasDeployment: '已核准 GAS 部署',
     notifications: '通知',
+    openSlides: '開啟 Google Slides',
     operationFailed: '操作未完成；請重新整理後確認目前狀態。',
     refresh: '重新整理',
     reject: '拒絕',
@@ -280,6 +288,41 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                   {step.status === 'running' && step.currentAction !== undefined ? (
                     <p className="mt-1 text-xs font-semibold text-indigo-700" aria-live="polite">
                       {localizeComputerUseAction(step.currentAction, locale)}
+                    </p>
+                  ) : null}
+                  {step.result?.kind === 'ai_summary' ? (
+                    <div className="mt-3 rounded-xl border border-indigo-100 bg-white p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-600">
+                        {text.generatedSummary}
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-700">
+                        {step.result.text}
+                      </p>
+                    </div>
+                  ) : null}
+                  {step.result?.kind === 'business_report' ? (
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-bold text-slate-900">
+                        {text.generatedReport} · {step.result.title}
+                      </p>
+                      <p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-slate-700">
+                        {step.result.content}
+                      </p>
+                    </div>
+                  ) : null}
+                  {step.result?.kind === 'google_slides_presentation' ? (
+                    <a
+                      className="mt-3 inline-flex rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700"
+                      href={step.result.url}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {text.openSlides} · {step.result.slideCount}
+                    </a>
+                  ) : null}
+                  {step.result?.kind === 'apps_script_deployment' ? (
+                    <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+                      {text.gasDeployment} · {step.result.deploymentId}
                     </p>
                   ) : null}
                 </div>

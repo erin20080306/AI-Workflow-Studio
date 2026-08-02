@@ -1,4 +1,4 @@
-import { type AgentJob, type StepResult } from '@ai-workflow-studio/agent-protocol';
+import { type AgentJob, type JsonValue, type StepResult } from '@ai-workflow-studio/agent-protocol';
 import {
   ProcessingLedger,
   hashFile,
@@ -26,6 +26,9 @@ function createReporter(steps: StepResult[]): AgentJobReporter {
   return {
     async downloadDriveExcelFile() {
       throw new Error('This test does not transfer Drive workbooks.');
+    },
+    async executeCloudStep() {
+      throw new Error('This test does not continue into a cloud step.');
     },
     async listDriveExcelFiles() {
       throw new Error('This test does not transfer Drive workbooks.');
@@ -208,6 +211,9 @@ describe('DesktopWorkflowJobExecutor', () => {
         if (bytes === undefined) throw new Error('Unexpected Drive workbook request.');
         return bytes;
       },
+      async executeCloudStep() {
+        throw new Error('This test does not continue into a cloud step.');
+      },
       async listDriveExcelFiles() {
         return {
           expiresAt: '2026-08-01T12:00:00.000Z',
@@ -332,6 +338,232 @@ describe('DesktopWorkflowJobExecutor', () => {
       expect.arrayContaining([
         expect.objectContaining({ nodeId: 'download', status: 'succeeded' }),
         expect.objectContaining({ nodeId: 'open', status: 'succeeded' }),
+      ]),
+    );
+  });
+
+  it('relays only a bounded spreadsheet profile into approved cloud report steps', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'aiws-hybrid-report-job-'));
+    temporaryDirectories.push(directory);
+    await writeFile(
+      join(directory, 'orders.csv'),
+      'Status,Amount\nPaid,120\nPending,80\nPaid,200\n',
+      'utf8',
+    );
+    const grants = new FolderGrantStore(join(directory, '.agent', 'folder-grants.json'));
+    const grant = await grants.authorize(directory, DEVICE_ID, {
+      read: true,
+      watch: false,
+      write: true,
+    });
+    const spreadsheet = new DesktopSpreadsheetExecutor(
+      grants,
+      new ProcessingLedger(join(directory, '.agent', 'processing-ledger.json')),
+    );
+    const executor = new DesktopWorkflowJobExecutor(spreadsheet);
+    const cloudInputs: { readonly input: JsonValue; readonly nodeId: string }[] = [];
+    const steps: StepResult[] = [];
+    const reporter: AgentJobReporter = {
+      async downloadDriveExcelFile() {
+        throw new Error('This test does not transfer Drive workbooks.');
+      },
+      async executeCloudStep(nodeId, input) {
+        cloudInputs.push({ input: structuredClone(input), nodeId });
+        if (nodeId === 'summarize') {
+          return {
+            duplicate: false,
+            output: {
+              kind: 'ai_summary',
+              model: 'test-model',
+              provider: 'mock',
+              text: 'Paid orders lead the sample.',
+            },
+            processedFileCount: 0,
+            processedRowCount: 0,
+          };
+        }
+        if (nodeId === 'compose') {
+          return {
+            duplicate: false,
+            output: {
+              content: '# Report\n\nPaid orders lead the sample.',
+              format: 'markdown',
+              includeReferences: true,
+              kind: 'business_report',
+              title: 'AI report',
+            },
+            processedFileCount: 0,
+            processedRowCount: 0,
+          };
+        }
+        if (nodeId === 'slides') {
+          return {
+            duplicate: false,
+            output: {
+              kind: 'google_slides_presentation',
+              presentationId: 'presentation_12345678',
+              slideCount: 8,
+              url: 'https://docs.google.com/presentation/d/presentation_12345678/edit',
+            },
+            processedFileCount: 1,
+            processedRowCount: 0,
+          };
+        }
+        return {
+          duplicate: false,
+          output: {
+            deploymentId: 'deployment_12345678',
+            kind: 'apps_script_deployment',
+            scriptId: 'script_12345678',
+          },
+          processedFileCount: 1,
+          processedRowCount: 0,
+        };
+      },
+      async listDriveExcelFiles() {
+        throw new Error('This test does not transfer Drive workbooks.');
+      },
+      async reportStep(step) {
+        steps.push(structuredClone(step));
+      },
+      signal: new AbortController().signal,
+    };
+    const connectionId = '10000000-0000-4000-8000-000000005052';
+    const job: AgentJob = {
+      attempt: 1,
+      availableAt: '2026-08-02T06:00:00.000Z',
+      deviceId: DEVICE_ID,
+      id: '10000000-0000-4000-8000-000000005051',
+      idempotencyKey: 'desktop-cloud-report-1',
+      maxAttempts: 3,
+      status: 'claimed',
+      tenantId: TENANT_ID,
+      workflow: {
+        description: 'Create local Excel and approved cloud report artifacts.',
+        edges: [
+          { from: 'list', to: 'read' },
+          { from: 'read', to: 'write' },
+          { from: 'write', to: 'summarize' },
+          { from: 'summarize', to: 'compose' },
+          { from: 'compose', to: 'slides' },
+          { from: 'slides', to: 'gas' },
+        ],
+        executionTarget: { deviceId: DEVICE_ID, type: 'desktop' },
+        name: 'Hybrid Excel report',
+        nodes: [
+          {
+            config: { folderAliasId: grant.folderAliasId, pattern: 'orders.csv' },
+            id: 'list',
+            type: 'folder.list_files',
+            version: 1,
+          },
+          {
+            config: {
+              headerMode: 'auto',
+              headerRow: 1,
+              headerScanRows: 30,
+              maxFileSizeBytes: 1_000_000,
+              maxRows: 1_000,
+              maxSheets: 10,
+              sheetMode: 'all',
+            },
+            id: 'read',
+            type: 'excel.read',
+            version: 1,
+          },
+          {
+            config: {
+              folderAliasId: grant.folderAliasId,
+              outputName: 'AI-Excel-report.xlsx',
+              overwrite: false,
+              reportTitle: 'AI Excel report',
+            },
+            id: 'write',
+            type: 'excel.create_report',
+            version: 1,
+          },
+          {
+            config: {
+              includeCaseStudy: false,
+              includeRecommendations: true,
+              language: 'zh-Hant',
+              maxCharacters: 6_000,
+              provider: 'mock',
+              style: 'professional',
+              tier: 'auto',
+            },
+            id: 'summarize',
+            type: 'ai.summarize',
+            version: 1,
+          },
+          {
+            config: { format: 'markdown', includeReferences: true, title: 'AI report' },
+            id: 'compose',
+            type: 'report.compose',
+            version: 1,
+          },
+          {
+            config: {
+              connectionId,
+              includeImages: true,
+              includeReferences: true,
+              maxSlides: 8,
+              title: 'AI presentation',
+            },
+            id: 'slides',
+            type: 'google_slides.create',
+            version: 1,
+          },
+          {
+            config: {
+              connectionId,
+              deployment: 'api_executable',
+              template: 'slides-executive-report',
+              title: 'Approved report automation',
+            },
+            id: 'gas',
+            type: 'apps_script.deploy_template',
+            version: 1,
+          },
+        ],
+        schemaVersion: 1,
+        trigger: { config: {}, type: 'manual.trigger' },
+      },
+      workflowRunId: '10000000-0000-4000-8000-000000005053',
+    };
+
+    await expect(executor.execute(job, reporter)).resolves.toMatchObject({
+      status: 'succeeded',
+      stepCount: 7,
+    });
+    expect(cloudInputs[0]).toMatchObject({
+      input: {
+        fileCount: 1,
+        kind: 'desktop_excel_profile',
+        rowCount: 3,
+        sheetCount: 1,
+      },
+      nodeId: 'summarize',
+    });
+    expect(JSON.stringify(cloudInputs[0])).not.toContain(directory);
+    expect(cloudInputs[0]?.input).toMatchObject({
+      columns: expect.arrayContaining([
+        expect.objectContaining({ name: 'Amount', numeric: expect.objectContaining({ sum: 400 }) }),
+        expect.objectContaining({ name: 'Status' }),
+      ]),
+    });
+    expect(steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: 'summarize',
+          output: expect.objectContaining({ kind: 'ai_summary' }),
+          status: 'succeeded',
+        }),
+        expect.objectContaining({
+          nodeId: 'slides',
+          output: expect.objectContaining({ kind: 'google_slides_presentation' }),
+          status: 'succeeded',
+        }),
       ]),
     );
   });

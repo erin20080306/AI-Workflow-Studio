@@ -32,7 +32,11 @@ import { plannerAccessDecision } from '@/lib/control-plane-access';
 import { getEnvironment } from '@/lib/env';
 import { listGoogleConnections } from '@/lib/google-connections';
 import { reserveAssistantUsage, type AssistantUsageReservation } from '@/lib/usage-control-server';
-import { selectWorkflowPlanningContext } from '@/lib/workflow-planning-context';
+import {
+  selectAutomaticFolderAliasId,
+  selectTrustedFolderAliasIds,
+  selectWorkflowPlanningContext,
+} from '@/lib/workflow-planning-context';
 
 const MAX_REQUEST_BYTES = 20_000;
 const ApiPlannerRequestSchema = PlannerRequestSchema.extend({
@@ -160,11 +164,29 @@ export async function POST(request: Request): Promise<Response> {
 
   const serverPlanningContext = selectWorkflowPlanningContext(
     await listAssistantExecutionTargets(workspace),
+    validatedPlannerRequest.context.executionTarget,
   );
   const googleConnectionIds = await listGoogleConnections()
     .then((connections) => connections.map((connection) => connection.id))
     .catch(() => [] as readonly string[]);
   const intent = detectWorkflowIntent(validatedPlannerRequest.prompt);
+  const trustedExecutionTarget = intent.needsDesktop
+    ? serverPlanningContext.executionTarget
+    : ({ type: 'cloud' } as const);
+  const explicitlySelectedFolderAliasIds = selectTrustedFolderAliasIds(
+    serverPlanningContext.allowedFolderAliasIds,
+    validatedPlannerRequest.context.allowedFolderAliasIds,
+  );
+  const automaticFolderAliasId = selectAutomaticFolderAliasId(
+    serverPlanningContext.selectedTarget,
+    validatedPlannerRequest.prompt,
+  );
+  const trustedFolderAliasIds =
+    explicitlySelectedFolderAliasIds.length > 0
+      ? explicitlySelectedFolderAliasIds
+      : automaticFolderAliasId === undefined
+        ? []
+        : [automaticFolderAliasId];
   if (intent.needsGoogleConnection && googleConnectionIds.length === 0) {
     return Response.json(
       {
@@ -176,7 +198,7 @@ export async function POST(request: Request): Promise<Response> {
       { headers: { 'cache-control': 'no-store' }, status: 409 },
     );
   }
-  if (intent.needsDesktop && serverPlanningContext.executionTarget.type !== 'desktop') {
+  if (intent.needsDesktop && trustedExecutionTarget.type !== 'desktop') {
     return Response.json(
       {
         error: {
@@ -188,12 +210,23 @@ export async function POST(request: Request): Promise<Response> {
       { headers: { 'cache-control': 'no-store' }, status: 409 },
     );
   }
+  if (intent.needsDesktop && trustedFolderAliasIds.length === 0) {
+    return Response.json(
+      {
+        error: {
+          code: 'AI_DESKTOP_REQUIRED',
+          message: 'Select an approved local folder before planning this workflow.',
+        },
+      },
+      { headers: { 'cache-control': 'no-store' }, status: 409 },
+    );
+  }
   const trustedPlannerRequest = {
     ...validatedPlannerRequest,
     context: {
       ...validatedPlannerRequest.context,
-      allowedFolderAliasIds: serverPlanningContext.allowedFolderAliasIds,
-      executionTarget: serverPlanningContext.executionTarget,
+      allowedFolderAliasIds: trustedFolderAliasIds,
+      executionTarget: trustedExecutionTarget,
       googleConnectionIds,
     },
   };

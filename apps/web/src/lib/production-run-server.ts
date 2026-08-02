@@ -1,7 +1,10 @@
 import 'server-only';
 
+import { createHash } from 'node:crypto';
+
 import {
   RunOrchestrationError,
+  RunStepResultSchema,
   WorkflowRunViewSchema,
   type AgentCompletionInput,
   type AgentFailureInput,
@@ -19,12 +22,18 @@ import {
   summarizeWorkflowRisks,
   validateWorkflow,
   type JsonValue,
+  type AgentJob,
   type Workflow,
 } from '@ai-workflow-studio/workflow-schema';
 import { z } from 'zod';
 
 import type { WorkspaceContext } from '@/lib/auth/context';
-import { advanceDriveExcelBatch, executeCloudWorkflow } from '@/lib/cloud-workflow-executor';
+import type { AgentCloudNode } from '@/lib/agent-cloud-step-schema';
+import {
+  advanceDriveExcelBatch,
+  executeCloudWorkflow,
+  executeCloudWorkflowNode,
+} from '@/lib/cloud-workflow-executor';
 import {
   DriveExcelCheckpointSchema,
   DriveExcelFolderOutputSchema,
@@ -98,6 +107,10 @@ const StepRowSchema = z.object({
 const ComputerUseProgressSchema = z
   .object({
     computerUseAction: z.enum([
+      'drive.download_items',
+      'drive.open_folder',
+      'drive.select_items',
+      'drive.verify_download',
       'excel.autofit_used_range',
       'excel.open_workbook',
       'excel.save_workbook',
@@ -114,6 +127,15 @@ const DriveStepRowSchema = z
     started_at: TimestampSchema.nullable(),
     status: z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled', 'timed_out']),
     updated_at: TimestampSchema,
+  })
+  .strict();
+const AgentCloudStepRowSchema = z
+  .object({
+    input_summary: z.record(z.string(), z.unknown()),
+    output_summary: z.record(z.string(), z.unknown()),
+    processed_file_count: z.number().int().nonnegative(),
+    processed_row_count: z.number().int().nonnegative(),
+    status: z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled', 'timed_out']),
   })
   .strict();
 const DriveBatchLeaseSchema = z
@@ -556,6 +578,9 @@ async function runView(tenantId: string, runId: string): Promise<WorkflowRunView
         ? {
             currentAction: ComputerUseProgressSchema.parse(step.output_summary).computerUseAction,
           }
+        : {}),
+      ...(RunStepResultSchema.safeParse(step.output_summary).success
+        ? { result: RunStepResultSchema.parse(step.output_summary) }
         : {}),
       processedFileCount: step.processed_file_count,
       processedRowCount: step.processed_row_count,
@@ -1351,6 +1376,7 @@ export async function syncProductionAgentProgress(input: AgentProgressInput): Pr
   }
   const safeStep = StepResultSchema.parse(parsed.step);
   const computerUseProgress = ComputerUseProgressSchema.safeParse(safeStep.output);
+  const publicResult = RunStepResultSchema.safeParse(safeStep.output);
   const update = await admin
     .from('workflow_run_steps')
     .update({
@@ -1360,7 +1386,9 @@ export async function syncProductionAgentProgress(input: AgentProgressInput): Pr
       output_summary:
         safeStep.status === 'running' && computerUseProgress.success
           ? computerUseProgress.data
-          : {},
+          : publicResult.success
+            ? publicResult.data
+            : {},
       processed_file_count: safeStep.processedFileCount,
       processed_row_count: safeStep.processedRowCount,
       started_at: safeStep.startedAt ?? null,
@@ -1541,6 +1569,153 @@ async function systemWorkspaceContextForRun(
       status: parsedSubscription.data?.status ?? 'incomplete',
     },
     tenant: parsedTenant.data,
+  };
+}
+
+export async function executeProductionAgentCloudStep(
+  job: AgentJob,
+  node: AgentCloudNode,
+  inputValue: JsonValue,
+  signal?: AbortSignal,
+): Promise<{
+  readonly duplicate: boolean;
+  readonly output: JsonValue;
+  readonly processedFileCount: number;
+  readonly processedRowCount: number;
+}> {
+  if (getEnvironment().mockMode) {
+    throw new RunOrchestrationError(
+      'RUN_INVALID',
+      'Desktop-to-Cloud continuation requires an authenticated production workspace.',
+    );
+  }
+  const input = JsonValueSchema.parse(inputValue);
+  const inputHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  const admin = createSupabaseAdminClient();
+  const runResult = await admin
+    .from('workflow_runs')
+    .select('*')
+    .eq('tenant_id', job.tenantId)
+    .eq('id', job.workflowRunId)
+    .in('status', ['queued', 'running'])
+    .single();
+  if (runResult.error !== null) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The approved Desktop run is unavailable for cloud continuation.',
+    );
+  }
+  const run = RunRowSchema.parse(runResult.data);
+  const attempt = Math.max(1, run.attempt);
+  const stepResult = await admin
+    .from('workflow_run_steps')
+    .select('input_summary, output_summary, processed_file_count, processed_row_count, status')
+    .eq('tenant_id', job.tenantId)
+    .eq('workflow_run_id', job.workflowRunId)
+    .eq('node_id', node.id)
+    .eq('node_type', node.type)
+    .eq('attempt', attempt)
+    .single();
+  if (stepResult.error !== null) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The approved cloud continuation step is unavailable.',
+    );
+  }
+  const step = AgentCloudStepRowSchema.parse(stepResult.data);
+  const storedHash =
+    typeof step.input_summary.agentCloudInputHash === 'string'
+      ? step.input_summary.agentCloudInputHash
+      : undefined;
+  if (step.status === 'succeeded' && storedHash === inputHash) {
+    return {
+      duplicate: true,
+      output: JsonValueSchema.parse(step.output_summary),
+      processedFileCount: step.processed_file_count,
+      processedRowCount: step.processed_row_count,
+    };
+  }
+  if (storedHash !== undefined && storedHash !== inputHash) {
+    throw new RunOrchestrationError(
+      'RUN_CONFLICT',
+      'The cloud continuation input changed after execution began.',
+    );
+  }
+  const startedAt = new Date().toISOString();
+  const claimed = await admin
+    .from('workflow_run_steps')
+    .update({
+      input_summary: { agentCloudInputHash: inputHash, nodeType: node.type },
+      started_at: startedAt,
+      status: 'running',
+      updated_at: startedAt,
+    })
+    .eq('tenant_id', job.tenantId)
+    .eq('workflow_run_id', job.workflowRunId)
+    .eq('node_id', node.id)
+    .eq('node_type', node.type)
+    .eq('attempt', attempt)
+    .in('status', ['pending', 'running'])
+    .select('id');
+  if (
+    claimed.error !== null ||
+    z.array(z.object({ id: UuidSchema })).parse(claimed.data).length !== 1
+  ) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The cloud continuation step could not be claimed.',
+    );
+  }
+  const context = await systemWorkspaceContextForRun(run);
+  const executed = await executeCloudWorkflowNode(context, node, input, {
+    idempotencyKey: `${job.idempotencyKey}:${node.id}`,
+    runId: job.workflowRunId,
+    ...(signal === undefined ? {} : { signal }),
+  });
+  const output = z.record(z.string(), z.unknown()).parse(JsonValueSchema.parse(executed.output));
+  const processedFileCount = executed.metrics?.processedFileCount ?? 0;
+  const processedRowCount = executed.metrics?.processedRowCount ?? 0;
+  const completedAt = new Date().toISOString();
+  const saved = await admin
+    .from('workflow_run_steps')
+    .update({
+      completed_at: completedAt,
+      output_summary: output,
+      processed_file_count: processedFileCount,
+      processed_row_count: processedRowCount,
+      status: 'succeeded',
+      updated_at: completedAt,
+    })
+    .eq('tenant_id', job.tenantId)
+    .eq('workflow_run_id', job.workflowRunId)
+    .eq('node_id', node.id)
+    .eq('node_type', node.type)
+    .eq('attempt', attempt)
+    .eq('input_summary->>agentCloudInputHash', inputHash)
+    .select('id');
+  if (
+    saved.error !== null ||
+    z.array(z.object({ id: UuidSchema })).parse(saved.data).length !== 1
+  ) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The cloud continuation result could not be saved.',
+    );
+  }
+  await admin.from('audit_logs').insert({
+    action: 'agent_cloud_step.succeeded',
+    actor_device_id: job.deviceId,
+    correlation_id: job.workflowRunId,
+    metadata: { nodeType: node.type },
+    resource_id: job.workflowRunId,
+    resource_type: 'workflow_run',
+    tenant_id: job.tenantId,
+  });
+  return {
+    duplicate: false,
+    output: JsonValueSchema.parse(output),
+    processedFileCount,
+    processedRowCount,
   };
 }
 

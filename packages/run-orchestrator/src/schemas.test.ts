@@ -65,6 +65,22 @@ describe('WorkflowRunViewSchema', () => {
 
     expect(parsed.steps[0]?.currentAction).toBe('excel.verify_active_workbook');
     expect(
+      WorkflowRunViewSchema.parse({
+        ...runView,
+        steps: [
+          {
+            attempt: 1,
+            currentAction: 'drive.verify_download',
+            nodeId: 'visible_download',
+            nodeType: 'google_drive.visible_download_folder',
+            processedFileCount: 0,
+            processedRowCount: 0,
+            status: 'running',
+          },
+        ],
+      }).steps[0]?.currentAction,
+    ).toBe('drive.verify_download');
+    expect(
       WorkflowRunViewSchema.safeParse({
         ...runView,
         steps: [
@@ -76,6 +92,51 @@ describe('WorkflowRunViewSchema', () => {
             processedFileCount: 0,
             processedRowCount: 0,
             status: 'running',
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('exposes only validated report artifacts and trusted Google Slides links', () => {
+    const parsed = WorkflowRunViewSchema.parse({
+      ...runView,
+      steps: [
+        {
+          attempt: 1,
+          nodeId: 'create_slides',
+          nodeType: 'google_slides.create',
+          processedFileCount: 1,
+          processedRowCount: 0,
+          result: {
+            kind: 'google_slides_presentation',
+            presentationId: 'presentation_12345678',
+            slideCount: 8,
+            url: 'https://docs.google.com/presentation/d/presentation_12345678/edit',
+          },
+          status: 'succeeded',
+        },
+      ],
+    });
+
+    expect(parsed.steps[0]?.result).toMatchObject({ kind: 'google_slides_presentation' });
+    expect(
+      WorkflowRunViewSchema.safeParse({
+        ...runView,
+        steps: [
+          {
+            attempt: 1,
+            nodeId: 'create_slides',
+            nodeType: 'google_slides.create',
+            processedFileCount: 1,
+            processedRowCount: 0,
+            result: {
+              kind: 'google_slides_presentation',
+              presentationId: 'presentation_12345678',
+              slideCount: 8,
+              url: 'https://attacker.invalid/presentation_12345678',
+            },
+            status: 'succeeded',
           },
         ],
       }).success,

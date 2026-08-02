@@ -84,6 +84,10 @@ const nodeTypes: Readonly<Record<string, LocalizedValue>> = {
 };
 
 const auditActions: Readonly<Record<string, LocalizedValue>> = {
+  'agent_cloud_step.succeeded': {
+    en: 'Approved cloud continuation completed',
+    'zh-Hant': '已完成核准的雲端續接步驟',
+  },
   'agent_job.dispatch_failed': {
     en: 'Desktop Job dispatch failed',
     'zh-Hant': '桌面工作派送失敗',
@@ -227,6 +231,10 @@ export function localizeRunStep(nodeId: string, nodeType: string, locale: AppLoc
 
 export function localizeComputerUseAction(
   action:
+    | 'drive.download_items'
+    | 'drive.open_folder'
+    | 'drive.select_items'
+    | 'drive.verify_download'
     | 'excel.autofit_used_range'
     | 'excel.open_workbook'
     | 'excel.save_workbook'
@@ -234,6 +242,22 @@ export function localizeComputerUseAction(
   locale: AppLocale,
 ): string {
   const actions = {
+    'drive.download_items': {
+      en: 'Requesting the approved Drive download',
+      'zh-Hant': '正在要求核准的 Drive 下載',
+    },
+    'drive.open_folder': {
+      en: 'Opening the approved Drive folder',
+      'zh-Hant': '正在開啟核准的 Drive 資料夾',
+    },
+    'drive.select_items': {
+      en: 'Selecting the visible Drive items',
+      'zh-Hant': '正在選取畫面中的 Drive 項目',
+    },
+    'drive.verify_download': {
+      en: 'Verifying the completed local download',
+      'zh-Hant': '正在驗證完成的本機下載',
+    },
     'excel.autofit_used_range': {
       en: 'Auto-fitting used rows and columns',
       'zh-Hant': '正在自動調整使用中欄列',

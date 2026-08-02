@@ -652,10 +652,10 @@ cloud.
 
 This handoff is a prerequisite, not acceptance of human-like UI automation.
 Background parsing, merging, and an operating-system `open` call must not be
-presented as mouse/keyboard operation in Excel. Requests that also require an AI
-summary, Slides, Apps Script, or email remain intent-incomplete until the
-architecture can hand the verified local artifact back to a separate reviewed
-artifact flow.
+presented as mouse/keyboard operation in Excel. A later reviewed artifact flow
+may consume only a bounded, path-free statistical profile of the verified local
+result; it must not upload the workbook, absolute paths, credentials, or an
+unvalidated Agent payload.
 
 ## Phase 50 — Visible Computer Use
 
@@ -676,6 +676,15 @@ select only allowlisted semantic actions and must never supply executable shell,
 AppleScript, PowerShell, JavaScript, arbitrary coordinates, or hidden background
 commands. Logs contain redacted action/state summaries and hashes rather than
 screen contents, credentials, message bodies, or local paths.
+
+A Drive-to-Desktop request that also asks for an AI summary, report, Google
+Slides, or an allowlisted GAS template may continue inside the same approved Run.
+The claimed Agent may submit only a strictly validated, bounded statistical
+profile of its consolidated workbook to the exact reviewed cloud node. Every
+continuation is bound to the Run, job claim, node ID, input hash, original user,
+Tenant, model controls, Google connection, approval, and durable step result.
+The Run view may expose only validated summary/report content and trusted Google
+artifact identifiers or links.
 
 Acceptance requires real packaged-Agent testing on the supported operating
 systems, including a visible Excel consolidation with state checks, interruption

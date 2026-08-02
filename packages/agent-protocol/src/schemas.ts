@@ -64,6 +64,21 @@ export const CompleteJobRequestSchema = z
   })
   .strict();
 
+export const AgentCloudStepRequestSchema = z
+  .object({
+    input: JsonValueSchema,
+  })
+  .strict();
+
+export const AgentCloudStepResponseSchema = z
+  .object({
+    duplicate: z.boolean(),
+    output: JsonValueSchema,
+    processedFileCount: z.number().int().nonnegative().default(0),
+    processedRowCount: z.number().int().nonnegative().default(0),
+  })
+  .strict();
+
 export const FailJobRequestSchema = z
   .object({
     error: z
@@ -80,6 +95,8 @@ export const FailJobRequestSchema = z
 export const AgentJobListSchema = z.array(AgentJobSchema).max(100);
 
 export type ClaimJobRequest = z.infer<typeof ClaimJobRequestSchema>;
+export type AgentCloudStepRequest = z.infer<typeof AgentCloudStepRequestSchema>;
+export type AgentCloudStepResponse = z.infer<typeof AgentCloudStepResponseSchema>;
 export type CompleteJobRequest = z.infer<typeof CompleteJobRequestSchema>;
 export type FailJobRequest = z.infer<typeof FailJobRequestSchema>;
 export type HeartbeatRequest = z.infer<typeof HeartbeatRequestSchema>;

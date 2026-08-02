@@ -823,8 +823,7 @@ export function AssistantWorkspace({
         attachmentIds: selectedAttachmentIds,
         ...(conversationId === undefined ? {} : { conversationId }),
         context: {
-          allowedFolderAliasIds:
-            selectedExecutionTarget?.folderAliases.map((folder) => folder.id) ?? [],
+          allowedFolderAliasIds: [],
           executionTarget:
             selectedExecutionTarget === undefined
               ? { type: 'cloud' }

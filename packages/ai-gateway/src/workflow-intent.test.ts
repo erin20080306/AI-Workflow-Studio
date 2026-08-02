@@ -70,6 +70,25 @@ describe('workflow intent coverage', () => {
     });
   });
 
+  it('recognizes a Downloads-folder handoff with report artifacts as a mixed Desktop request', () => {
+    expect(
+      detectWorkflowIntent(
+        '開啟 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 雲端資料夾，把 Excel 下載到下載項目並整合，產生摘要報告、8 頁 Google Slides 與 GAS。',
+      ),
+    ).toEqual({
+      needsDesktop: true,
+      needsGoogleConnection: true,
+      requiredNodeTypes: [
+        'ai.summarize',
+        'report.compose',
+        'google_slides.create',
+        'apps_script.deploy_template',
+        'google_drive.read_excel_folder',
+        'google_drive.create_excel_report',
+      ],
+    });
+  });
+
   it('does not invent Slides or Apps Script when both outputs are explicitly negated', () => {
     const intent = detectWorkflowIntent(
       '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel 並匯總，不要建立簡報，也不要部署 GAS。',

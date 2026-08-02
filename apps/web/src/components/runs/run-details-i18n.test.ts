@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   localizeActorType,
   localizeAuditAction,
+  localizeComputerUseAction,
   localizeNotification,
   localizeRunStep,
   localizeWorkflowName,
@@ -25,6 +26,12 @@ describe('run details localization', () => {
     expect(localizeAuditAction('cloud_run.created', 'zh-Hant')).toBe('已建立雲端執行');
     expect(localizeAuditAction('run.running', 'zh-Hant')).toBe('開始執行');
     expect(localizeAuditAction('cloud_run.succeeded', 'en')).toBe('Cloud run succeeded');
+    expect(localizeAuditAction('agent_cloud_step.succeeded', 'zh-Hant')).toBe(
+      '已完成核准的雲端續接步驟',
+    );
+    expect(localizeComputerUseAction('drive.verify_download', 'zh-Hant')).toBe(
+      '正在驗證完成的本機下載',
+    );
     expect(localizeActorType('user', 'zh-Hant')).toBe('使用者');
     expect(localizeActorType('system', 'en')).toBe('System');
   });

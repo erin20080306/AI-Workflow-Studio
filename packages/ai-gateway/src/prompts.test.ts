@@ -219,4 +219,52 @@ describe('planner prompts', () => {
     });
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });
+
+  it('continues a visible Downloads-folder consolidation into platform summary, Slides, and GAS', () => {
+    const hybridRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        allowedFolderAliasIds: ['10000000-0000-4000-8000-000000000912'],
+        executionTarget: {
+          deviceId: '10000000-0000-4000-8000-000000000913',
+          type: 'desktop',
+        },
+        googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
+      },
+      prompt:
+        '開啟 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 雲端資料夾，把 Excel 下載到下載項目並整合，產生摘要報告、8 頁 Google Slides 與核准型 GAS。',
+    };
+    const example = buildPlannerShapeExample(hybridRequest);
+
+    expect(example.workflow.executionTarget).toEqual({
+      deviceId: '10000000-0000-4000-8000-000000000913',
+      type: 'desktop',
+    });
+    expect(example.workflow.nodes.map((node) => node.type)).toEqual([
+      'google_drive.visible_download_folder',
+      'excel.read',
+      'excel.merge',
+      'excel.create_report',
+      'excel.visible_review',
+      'ai.summarize',
+      'report.compose',
+      'google_slides.create',
+      'apps_script.deploy_template',
+    ]);
+    expect(
+      example.workflow.nodes.find((node) => node.type === 'google_slides.create'),
+    ).toMatchObject({
+      config: {
+        connectionId: '10000000-0000-4000-8000-000000000911',
+        folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
+        maxSlides: 8,
+      },
+    });
+    expect(example.workflow.nodes.at(-1)).toMatchObject({
+      config: { template: 'slides-executive-report' },
+      type: 'apps_script.deploy_template',
+    });
+    expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+  });
 });

@@ -69,11 +69,62 @@ const RunNotificationSchema = z
   })
   .strict();
 
+const GoogleResourceIdSchema = z
+  .string()
+  .min(8)
+  .max(300)
+  .regex(/^[A-Za-z0-9_-]+$/);
+
+export const RunStepResultSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('ai_summary'),
+      model: z.string().min(1).max(160),
+      provider: z.enum(['anthropic', 'gemini', 'mock', 'openai']),
+      text: z.string().max(20_000),
+    })
+    .strict(),
+  z
+    .object({
+      content: z.string().max(80_000),
+      format: z.enum(['html', 'markdown']),
+      includeReferences: z.boolean(),
+      kind: z.literal('business_report'),
+      title: z.string().min(1).max(200),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('google_slides_presentation'),
+      presentationId: GoogleResourceIdSchema,
+      slideCount: z.number().int().min(1).max(30),
+      url: z
+        .url()
+        .refine((value) =>
+          /^https:\/\/docs\.google\.com\/presentation\/d\/[A-Za-z0-9_-]+\/edit$/u.test(value),
+        ),
+    })
+    .strict(),
+  z
+    .object({
+      deploymentId: GoogleResourceIdSchema,
+      kind: z.literal('apps_script_deployment'),
+      requiredScopes: z.array(z.url().max(2_000)).max(20).optional(),
+      scriptId: GoogleResourceIdSchema,
+      versionNumber: z.number().int().positive().optional(),
+    })
+    .strict(),
+]);
+
 const RunStepViewSchema = StepResultSchema.omit({ output: true })
   .extend({
     attempt: z.number().int().min(1).max(100),
     currentAction: z
       .enum([
+        'drive.download_items',
+        'drive.open_folder',
+        'drive.select_items',
+        'drive.verify_download',
         'excel.autofit_used_range',
         'excel.open_workbook',
         'excel.save_workbook',
@@ -81,6 +132,7 @@ const RunStepViewSchema = StepResultSchema.omit({ output: true })
       ])
       .optional(),
     nodeType: z.string().min(1).max(120),
+    result: RunStepResultSchema.optional(),
   })
   .strict();
 

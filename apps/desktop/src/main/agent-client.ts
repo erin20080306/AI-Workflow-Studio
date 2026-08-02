@@ -1,4 +1,5 @@
 import {
+  AgentCloudStepResponseSchema,
   AgentJobListSchema,
   AgentJobSchema,
   JsonValueSchema,
@@ -73,6 +74,7 @@ const MAX_RESPONSE_BYTES = 1_000_000;
 const MAX_BINARY_RESPONSE_BYTES = 20_000_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const BINARY_REQUEST_TIMEOUT_MS = 60_000;
+const CLOUD_STEP_REQUEST_TIMEOUT_MS = 600_000;
 const HEALTHY_POLL_MS = 15_000;
 const MIN_RECONNECT_MS = 5_000;
 const MAX_RECONNECT_MS = 60_000;
@@ -97,6 +99,10 @@ export type AgentFetch = (input: string | URL | Request, init?: RequestInit) => 
 export interface AgentJobReporter {
   readonly signal: AbortSignal;
   downloadDriveExcelFile(nodeId: string, file: DriveExcelTransferFile): Promise<Uint8Array>;
+  executeCloudStep(
+    nodeId: string,
+    input: JsonValue,
+  ): Promise<z.infer<typeof AgentCloudStepResponseSchema>>;
   listDriveExcelFiles(nodeId: string): Promise<DriveExcelTransferManifest>;
   reportStep(step: StepResult): Promise<void>;
 }
@@ -377,8 +383,13 @@ export class AgentClient {
     return this.session;
   }
 
-  private async requestJson<T>(url: string, init: RequestInit, schema: z.ZodType<T>): Promise<T> {
-    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  private async requestJson<T>(
+    url: string,
+    init: RequestInit,
+    schema: z.ZodType<T>,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  ): Promise<T> {
+    const timeout = AbortSignal.timeout(timeoutMs);
     const signal = init.signal == null ? timeout : AbortSignal.any([timeout, init.signal]);
     const response = await this.fetchTransport(url, { ...init, signal });
     const text = await response.text();
@@ -545,6 +556,19 @@ export class AgentClient {
         },
       );
     };
+    const executeCloudStep = async (nodeId: string, input: JsonValue) => {
+      return await this.requestJson(
+        `${session.agentBaseUrl}/api/agent/jobs/${job.id}/cloud-steps/${encodeURIComponent(nodeId)}`,
+        {
+          body: JSON.stringify({ input: JsonValueSchema.parse(input) }),
+          headers: this.claimHeaders(session, claim.claimToken),
+          method: 'POST',
+          signal: controller.signal,
+        },
+        AgentCloudStepResponseSchema,
+        CLOUD_STEP_REQUEST_TIMEOUT_MS,
+      );
+    };
 
     try {
       this.logger.info('AGENT_JOB_STARTED', 'Desktop execution started for a claimed job.', {
@@ -553,6 +577,7 @@ export class AgentClient {
       });
       const result = await this.executeJobHandler?.(claim.job, {
         downloadDriveExcelFile,
+        executeCloudStep,
         listDriveExcelFiles,
         reportStep,
         signal: controller.signal,

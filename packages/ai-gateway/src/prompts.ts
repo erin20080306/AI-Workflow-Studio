@@ -2,6 +2,7 @@ import {
   AIPlannerOutputSchema,
   NODE_CATALOG,
   type AIPlannerOutput,
+  type WorkflowNodeType,
   type WorkflowValidationIssue,
 } from '@ai-workflow-studio/workflow-schema';
 
@@ -154,99 +155,192 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
   const intent = detectWorkflowIntent(request.prompt);
   const requested = new Set(intent.requiredNodeTypes);
   const folderAliasId = request.context.allowedFolderAliasIds[0];
+  const connectionId = request.context.googleConnectionIds[0];
   const folderId = firstMatch(request.prompt, DRIVE_FOLDER_ID_PATTERN);
+  const supportedRequestedTypes = new Set<WorkflowNodeType>([
+    'google_drive.read_excel_folder',
+    'google_drive.create_excel_report',
+    'ai.summarize',
+    'report.compose',
+    'google_slides.create',
+    'apps_script.deploy_template',
+  ]);
+  const needsCloudContinuation = [...requested].some((type) =>
+    [
+      'ai.summarize',
+      'report.compose',
+      'google_slides.create',
+      'apps_script.deploy_template',
+    ].includes(type),
+  );
   if (
     request.context.executionTarget.type !== 'desktop' ||
     folderAliasId === undefined ||
     folderId === undefined ||
     !requested.has('google_drive.read_excel_folder') ||
-    [...requested].some(
-      (type) =>
-        type !== 'google_drive.read_excel_folder' && type !== 'google_drive.create_excel_report',
-    )
+    [...requested].some((type) => !supportedRequestedTypes.has(type)) ||
+    (needsCloudContinuation && connectionId === undefined)
   ) {
     return undefined;
   }
   const outputName = requestedWorkbookNames(request.prompt).at(-1) ?? 'AI-Excel-本機匯總.xlsx';
+  const nodes: unknown[] = [
+    {
+      config: {
+        browser: 'chrome',
+        downloadTimeoutSeconds: 300,
+        folderAliasId,
+        folderId,
+        maxFileSizeBytes: 50_000_000,
+        maxFiles: 500,
+      },
+      id: 'download_drive_workbooks',
+      type: 'google_drive.visible_download_folder',
+      version: 1,
+    },
+    {
+      config: {
+        headerMode: 'auto',
+        headerRow: 1,
+        headerScanRows: 30,
+        maxFileSizeBytes: 20_000_000,
+        maxRows: 100_000,
+        maxSheets: 200,
+        sheetMode: 'all',
+      },
+      id: 'read_local_workbooks',
+      type: 'excel.read',
+      version: 1,
+    },
+    {
+      config: { columnMode: 'union', includeSourceFile: true },
+      id: 'merge_local_workbooks',
+      type: 'excel.merge',
+      version: 1,
+    },
+    {
+      config: {
+        folderAliasId,
+        outputName,
+        overwrite: false,
+        reportTitle:
+          request.context.locale === 'en'
+            ? 'AI Workflow Studio Excel consolidation'
+            : 'AI Workflow Studio Excel 匯總',
+      },
+      id: 'create_local_report',
+      type: 'excel.create_report',
+      version: 1,
+    },
+    {
+      config: {
+        actions: ['autofit_used_range', 'save_workbook', 'verify_active_workbook'],
+        application: 'excel',
+        folderAliasId,
+      },
+      id: 'open_excel_result',
+      type: 'excel.visible_review',
+      version: 1,
+    },
+  ];
+  const edges = [
+    { from: 'download_drive_workbooks', to: 'read_local_workbooks' },
+    { from: 'read_local_workbooks', to: 'merge_local_workbooks' },
+    { from: 'merge_local_workbooks', to: 'create_local_report' },
+    { from: 'create_local_report', to: 'open_excel_result' },
+  ];
+  let previousNodeId = 'open_excel_result';
+  if (requested.has('ai.summarize')) {
+    nodes.push({
+      config: {
+        includeCaseStudy: false,
+        includeRecommendations: true,
+        language: request.context.locale === 'en' ? 'en' : 'zh-Hant',
+        maxCharacters: 6_000,
+        provider: 'auto',
+        style: 'professional',
+        tier: 'auto',
+      },
+      id: 'summarize_local_result',
+      type: 'ai.summarize',
+      version: 1,
+    });
+    edges.push({ from: previousNodeId, to: 'summarize_local_result' });
+    previousNodeId = 'summarize_local_result';
+  }
+  if (requested.has('report.compose')) {
+    nodes.push({
+      config: {
+        format: 'markdown',
+        includeReferences: true,
+        title: request.context.locale === 'en' ? 'AI business report' : 'AI 專業摘要報告',
+      },
+      id: 'compose_local_result_report',
+      type: 'report.compose',
+      version: 1,
+    });
+    edges.push({ from: previousNodeId, to: 'compose_local_result_report' });
+    previousNodeId = 'compose_local_result_report';
+  }
+  let presentationNodeId: string | undefined;
+  if (requested.has('google_slides.create') && connectionId !== undefined) {
+    nodes.push({
+      config: {
+        connectionId,
+        folderId,
+        includeImages: true,
+        includeReferences: true,
+        maxSlides: requestedSlideCount(request.prompt),
+        title: request.context.locale === 'en' ? 'AI executive presentation' : 'AI 專業摘要簡報',
+      },
+      id: 'create_result_slides',
+      type: 'google_slides.create',
+      version: 1,
+    });
+    edges.push({ from: previousNodeId, to: 'create_result_slides' });
+    previousNodeId = 'create_result_slides';
+    presentationNodeId = previousNodeId;
+  }
+  if (requested.has('apps_script.deploy_template') && connectionId !== undefined) {
+    nodes.push({
+      config: {
+        connectionId,
+        deployment: 'api_executable',
+        template:
+          presentationNodeId === undefined ? 'sheet-cost-summary' : 'slides-executive-report',
+        title:
+          request.context.locale === 'en'
+            ? 'AI Workflow Studio approved automation'
+            : 'AI Workflow Studio 核准型自動化',
+      },
+      id: 'deploy_result_apps_script',
+      type: 'apps_script.deploy_template',
+      version: 1,
+    });
+    edges.push({ from: previousNodeId, to: 'deploy_result_apps_script' });
+  }
   return AIPlannerOutputSchema.parse({
     assumptions: [
-      'Google Drive transfers only supported .xlsx and Google Sheets workbooks into the selected approved Desktop folder.',
+      'Google Drive visibly downloads only supported .xls, .xlsx, or bounded Drive ZIP content into the selected approved Desktop folder.',
       'The paired Desktop Agent performs bounded local consolidation and creates a new workbook without overwriting an existing file.',
-      'The finished workbook is opened visibly with the operating system Excel association; external delivery remains a separate approved operation.',
+      ...(needsCloudContinuation
+        ? [
+            'Only a bounded path-free statistical profile of the consolidated workbook is relayed to approved cloud report steps; the local workbook and absolute paths remain on the Desktop Agent.',
+          ]
+        : []),
+      'Visible download, Excel review, Slides creation, and Apps Script deployment remain approval-gated and auditable.',
     ],
-    explanation:
-      'Download approved Drive workbooks to the paired computer, read and merge them locally, create a non-overwriting Excel result, and open the finished workbook for visible review.',
+    explanation: needsCloudContinuation
+      ? 'Visibly download approved Drive workbooks, merge them in the authorized Downloads workspace, create and review a new Excel result, then relay a bounded statistical profile to the platform for the requested AI summary, report, Slides, and approved GAS template.'
+      : 'Download approved Drive workbooks to the paired computer, read and merge them locally, create a non-overwriting Excel result, and open the finished workbook for visible review.',
     mappingProposals: [],
     workflow: {
       description:
-        'Transfer approved Drive workbooks into an authorized local work folder and create an inspectable Excel consolidation.',
-      edges: [
-        { from: 'download_drive_workbooks', to: 'read_local_workbooks' },
-        { from: 'read_local_workbooks', to: 'merge_local_workbooks' },
-        { from: 'merge_local_workbooks', to: 'create_local_report' },
-        { from: 'create_local_report', to: 'open_excel_result' },
-      ],
+        'Transfer approved Drive workbooks into an authorized local work folder, create an inspectable Excel consolidation, and continue into explicitly approved cloud report artifacts.',
+      edges,
       executionTarget: request.context.executionTarget,
       name: request.context.locale === 'en' ? 'Desktop Excel operation' : '本機 Excel 代操作',
-      nodes: [
-        {
-          config: {
-            browser: 'chrome',
-            downloadTimeoutSeconds: 300,
-            folderAliasId,
-            folderId,
-            maxFileSizeBytes: 50_000_000,
-            maxFiles: 500,
-          },
-          id: 'download_drive_workbooks',
-          type: 'google_drive.visible_download_folder',
-          version: 1,
-        },
-        {
-          config: {
-            headerMode: 'auto',
-            headerRow: 1,
-            headerScanRows: 30,
-            maxFileSizeBytes: 20_000_000,
-            maxRows: 100_000,
-            maxSheets: 200,
-            sheetMode: 'all',
-          },
-          id: 'read_local_workbooks',
-          type: 'excel.read',
-          version: 1,
-        },
-        {
-          config: { columnMode: 'union', includeSourceFile: true },
-          id: 'merge_local_workbooks',
-          type: 'excel.merge',
-          version: 1,
-        },
-        {
-          config: {
-            folderAliasId,
-            outputName,
-            overwrite: false,
-            reportTitle:
-              request.context.locale === 'en'
-                ? 'AI Workflow Studio Excel consolidation'
-                : 'AI Workflow Studio Excel 匯總',
-          },
-          id: 'create_local_report',
-          type: 'excel.create_report',
-          version: 1,
-        },
-        {
-          config: {
-            actions: ['autofit_used_range', 'save_workbook', 'verify_active_workbook'],
-            application: 'excel',
-            folderAliasId,
-          },
-          id: 'open_excel_result',
-          type: 'excel.visible_review',
-          version: 1,
-        },
-      ],
+      nodes,
       schemaVersion: 1,
       trigger: { config: {}, type: 'manual.trigger' },
     },
@@ -513,7 +607,7 @@ Planning behavior:
 - Cover every explicit source, transformation, output, and delivery step in the requirement. A validation-only draft is not sufficient when the requirement asks for Gmail, Google Sheets, Google Forms, a report, a presentation, or email delivery.
 - Gmail, Google Sheets, Google Forms, Google Slides, and Apps Script nodes must use a connectionId from googleConnectionIds. Never invent one.
 - Google Drive folder Excel requests must use google_drive.read_excel_folder and may create a non-overwriting google_drive.create_excel_report only when consolidation is requested.
-- When the trusted execution target is Desktop and an approved folder alias is available, a Drive Excel operation must use google_drive.visible_download_folder → excel.read → excel.merge → excel.create_report → excel.visible_review. The first and last nodes remain approval-gated and run only when the paired Agent has locally enabled Visible Computer Use. The visible download uses the user's already signed-in local Chrome session and never needs a Google API key. This is an operation flow; never add source code nodes.
+- When the trusted execution target is Desktop and an approved folder alias is available, a Drive Excel operation must use google_drive.visible_download_folder → excel.read → excel.merge → excel.create_report → excel.visible_review. The first and last nodes remain approval-gated and run only when the paired Agent has locally enabled Visible Computer Use. If the user also requests a summary, report, Slides, or GAS, continue only with ai.summarize → report.compose → google_slides.create → apps_script.deploy_template as requested; the Agent relays a bounded path-free workbook profile and the server executes only those reviewed cloud nodes. The visible download uses the user's already signed-in local Chrome session and never needs a Google API key. This is an operation flow; never add source code nodes.
 - For Gmail summaries use gmail.read → ai.summarize → report.compose. For Google Forms or Sheets summaries, read the selected source before summarizing. Add google_slides.create only when a presentation is requested. Add gmail.send only when an email recipient is explicitly supplied; default its sendMode to draft unless the user explicitly requests sending.
 - Apps Script may use only the registered apps_script.deploy_template templates. Never produce script source code in a workflow plan.
 

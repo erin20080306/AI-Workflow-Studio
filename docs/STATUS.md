@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 50 — Visible Computer Use (in progress; visible Drive slice built, packaged acceptance pending)
+Phase 50 — Visible Computer Use (in progress; visible Drive/report continuation built, packaged acceptance pending)
 
 ## Repository baseline
 
@@ -3870,3 +3870,48 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
   stable `com.aiworkflowstudio.agent` identifier. This keeps Accessibility
   consent attached to the Agent bundle during local acceptance; it is not an
   Apple Developer ID signature or notarization.
+
+### Desktop-to-Cloud report continuation
+
+- Extended the grounded visible Drive plan so one approved natural-language
+  request can continue after local Excel consolidation into `ai.summarize`,
+  `report.compose`, `google_slides.create`, and the allowlisted
+  `apps_script.deploy_template` node when those outputs are explicitly
+  requested. The local Excel result remains a new non-overwriting workbook in
+  the approved folder.
+- Added a claim-bound Agent continuation route. It accepts only the four reviewed
+  cloud node types from the immutable job, renews the existing lease, reconstructs
+  the original authorized workspace on the server, and persists each result with
+  a node-specific input hash before the Agent can complete the Run. A retry with
+  the same hash reuses the saved result; a changed input fails closed.
+- The Desktop Agent does not upload the workbook, rows, raw paths, filenames, or
+  Google credentials. It computes a bounded path-free profile with row, sheet,
+  file, numeric, and capped categorical statistics. Strict per-node schemas
+  require profile → AI summary → report → Slides → GAS predecessor types and
+  reject local paths, arbitrary payloads, or reordered continuation steps.
+- The planner now honors a user-selected online Agent only after matching it to
+  the Tenant-owned device list. A Downloads request chooses only a read/write
+  alias named Downloads/下載項目; it never substitutes another folder. Ambiguous
+  writable folders fail closed. Google-only work remains Cloud-targeted even
+  when an Agent is online.
+- Run details now display the validated AI summary and report content, a
+  allowlisted `docs.google.com` Slides link, GAS deployment metadata, and the
+  bilingual visible Drive action. Raw spreadsheet envelopes and untrusted URLs
+  never enter the client Run schema.
+
+### Validation after Desktop-to-Cloud continuation
+
+- `pnpm format:check`: passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed across all 14 applicable workspace projects.
+- `pnpm test`: passed — 351 tests across 71 files, with one separately gated real
+  operating-system acceptance test skipped by the deterministic suite.
+- `pnpm build:web`: passed — all 47 application pages and the new claim-bound
+  Agent cloud-step route compiled. The sandboxed Turbopack attempt could not bind
+  its worker port; the identical permitted retry passed.
+- `pnpm build:desktop`: passed — main, preload, and renderer bundles compiled.
+- `pnpm security:scan-client`: passed — 35 generated browser files scanned.
+- No Production deployment, Google write, real Drive download, workbook upload,
+  GAS deployment, or packaged-Agent acceptance was performed in this slice.
+  Phase 50 remains in progress until the documented macOS and Windows real-app
+  acceptance gates pass.

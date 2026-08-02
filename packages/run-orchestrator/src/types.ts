@@ -45,14 +45,47 @@ export interface RunNotification {
   readonly title: string;
 }
 
+export type RunStepResult =
+  | {
+      readonly kind: 'ai_summary';
+      readonly model: string;
+      readonly provider: 'anthropic' | 'gemini' | 'mock' | 'openai';
+      readonly text: string;
+    }
+  | {
+      readonly content: string;
+      readonly format: 'html' | 'markdown';
+      readonly includeReferences: boolean;
+      readonly kind: 'business_report';
+      readonly title: string;
+    }
+  | {
+      readonly kind: 'google_slides_presentation';
+      readonly presentationId: string;
+      readonly slideCount: number;
+      readonly url: string;
+    }
+  | {
+      readonly deploymentId: string;
+      readonly kind: 'apps_script_deployment';
+      readonly requiredScopes?: readonly string[];
+      readonly scriptId: string;
+      readonly versionNumber?: number;
+    };
+
 export interface RunStepView extends StepResult {
   readonly attempt: number;
   readonly currentAction?:
+    | 'drive.download_items'
+    | 'drive.open_folder'
+    | 'drive.select_items'
+    | 'drive.verify_download'
     | 'excel.autofit_used_range'
     | 'excel.open_workbook'
     | 'excel.save_workbook'
     | 'excel.verify_active_workbook';
   readonly nodeType: string;
+  readonly result?: RunStepResult;
 }
 
 export interface WorkflowRunView {

@@ -223,7 +223,7 @@ export function WorkflowComposer({
       const response = await fetch('/api/ai/plan', {
         body: JSON.stringify({
           context: {
-            allowedFolderAliasIds: planningContext.allowedFolderAliasIds,
+            allowedFolderAliasIds: [],
             executionTarget: planningContext.executionTarget,
             googleConnectionIds: [],
             locale,

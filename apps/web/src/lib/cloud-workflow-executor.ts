@@ -22,6 +22,7 @@ import {
   type JsonValue,
   type RiskLevel,
   type Workflow,
+  type WorkflowNode,
 } from '@ai-workflow-studio/workflow-schema';
 import { z } from 'zod';
 
@@ -678,6 +679,32 @@ function cloudRegistry(context: WorkspaceContext): NodeRegistry {
   registry.register(new GmailSendExecutor(context, workspace));
   registry.register(new AppsScriptDeployExecutor(context, workspace));
   return registry;
+}
+
+export async function executeCloudWorkflowNode(
+  context: WorkspaceContext,
+  node: WorkflowNode,
+  input: JsonValue,
+  execution: {
+    readonly idempotencyKey: string;
+    readonly runId: string;
+    readonly signal?: AbortSignal;
+  },
+) {
+  const executor = cloudRegistry(context).get(node.type, node.version);
+  const config = executor.validateConfig(node.config);
+  return await executor.execute(
+    {
+      idempotencyKey: execution.idempotencyKey,
+      mode: 'live',
+      nodeId: node.id,
+      now: () => new Date(),
+      runId: execution.runId,
+      signal: execution.signal ?? new AbortController().signal,
+    },
+    JsonValueSchema.parse(input),
+    config,
+  );
 }
 
 export async function executeCloudWorkflow(

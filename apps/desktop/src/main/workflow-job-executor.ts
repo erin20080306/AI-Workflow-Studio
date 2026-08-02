@@ -87,7 +87,26 @@ const SUPPORTED_NODE_TYPES = [
   'data.group',
   'data.aggregate',
   'data.validate',
+  'ai.summarize',
+  'report.compose',
+  'google_slides.create',
+  'apps_script.deploy_template',
 ] as const;
+
+const AGENT_CLOUD_NODE_TYPES = new Set<string>([
+  'ai.summarize',
+  'report.compose',
+  'google_slides.create',
+  'apps_script.deploy_template',
+]);
+const CLOUD_PROFILE_MAX_COLUMNS = 40;
+const CLOUD_PROFILE_MAX_SHEET_NAMES = 30;
+const CLOUD_PROFILE_MAX_TOP_VALUES = 8;
+const CLOUD_PROFILE_MAX_VALUE_CHARACTERS = 80;
+
+function isAgentCloudNodeType(type: string): boolean {
+  return AGENT_CLOUD_NODE_TYPES.has(type);
+}
 
 class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
   readonly riskLevel: RiskLevel;
@@ -138,7 +157,9 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
         type: this.type,
         version: this.version,
       });
-      const envelope = parseEnvelope(input);
+      const envelope = isAgentCloudNodeType(parsed.type)
+        ? EnvelopeSchema.parse({})
+        : parseEnvelope(input);
 
       switch (parsed.type) {
         case 'google_drive.download_excel_folder': {
@@ -449,6 +470,20 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
             output: jsonEnvelope(envelope),
           };
         }
+        case 'ai.summarize':
+        case 'report.compose':
+        case 'google_slides.create':
+        case 'apps_script.deploy_template': {
+          const cloudInput = cloudContinuationInput(input);
+          const result = await this.reporter.executeCloudStep(context.nodeId, cloudInput);
+          return {
+            metrics: {
+              processedFileCount: result.processedFileCount,
+              processedRowCount: result.processedRowCount,
+            },
+            output: result.output,
+          };
+        }
         default:
           throw new Error(`Desktop node ${parsed.type} is not supported.`);
       }
@@ -650,6 +685,8 @@ function stepResult(step: {
     readonly processedRowCount?: number;
   };
   readonly nodeId: string;
+  readonly nodeType: string;
+  readonly output?: JsonValue;
   readonly startedAt: string;
   readonly status: 'cancelled' | 'failed' | 'planned' | 'succeeded' | 'timed_out';
 }): StepResult {
@@ -667,9 +704,107 @@ function stepResult(step: {
           },
         }),
     nodeId: step.nodeId,
+    ...(step.output === undefined || !isAgentCloudNodeType(step.nodeType)
+      ? {}
+      : { output: JsonValueSchema.parse(step.output) }),
     processedFileCount: step.metrics.processedFileCount ?? 0,
     processedRowCount: step.metrics.processedRowCount ?? 0,
     startedAt: step.startedAt,
     status,
   };
+}
+
+function cloudContinuationInput(input: JsonValue): JsonValue {
+  const envelope = EnvelopeSchema.safeParse(input);
+  if (!envelope.success) return JsonValueSchema.parse(input);
+  const allColumns = new Set(envelope.data.tables.flatMap((table) => table.columns));
+  const columnOrder = [...allColumns].slice(0, CLOUD_PROFILE_MAX_COLUMNS);
+  const statistics = new Map<
+    string,
+    {
+      categorical: Map<string, number>;
+      nonEmptyCount: number;
+      numericCount: number;
+      numericMaximum?: number;
+      numericMinimum?: number;
+      numericSumOverflowed: boolean;
+      numericSum: number;
+      otherValueCount: number;
+    }
+  >(
+    columnOrder.map((column) => [
+      column,
+      {
+        categorical: new Map<string, number>(),
+        nonEmptyCount: 0,
+        numericCount: 0,
+        numericSumOverflowed: false,
+        numericSum: 0,
+        otherValueCount: 0,
+      },
+    ]),
+  );
+  let rowCount = 0;
+  for (const table of envelope.data.tables) {
+    rowCount += table.rows.length;
+    for (const row of table.rows) {
+      for (const column of columnOrder) {
+        const value = row[column];
+        if (value === undefined || value === null || value === '') continue;
+        const summary = statistics.get(column);
+        if (summary === undefined) continue;
+        summary.nonEmptyCount += 1;
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          summary.numericCount += 1;
+          const nextSum = summary.numericSum + value;
+          if (Number.isFinite(nextSum)) {
+            summary.numericSum = nextSum;
+          } else {
+            summary.numericSum = nextSum < 0 ? -Number.MAX_VALUE : Number.MAX_VALUE;
+            summary.numericSumOverflowed = true;
+          }
+          summary.numericMinimum = Math.min(summary.numericMinimum ?? value, value);
+          summary.numericMaximum = Math.max(summary.numericMaximum ?? value, value);
+          continue;
+        }
+        const label = String(value).slice(0, CLOUD_PROFILE_MAX_VALUE_CHARACTERS);
+        if (summary.categorical.has(label) || summary.categorical.size < 40) {
+          summary.categorical.set(label, (summary.categorical.get(label) ?? 0) + 1);
+        } else {
+          summary.otherValueCount += 1;
+        }
+      }
+    }
+  }
+  return JsonValueSchema.parse({
+    columns: columnOrder.map((column) => {
+      const summary = statistics.get(column);
+      if (summary === undefined) return { name: column };
+      return {
+        name: column,
+        nonEmptyCount: summary.nonEmptyCount,
+        numeric: {
+          count: summary.numericCount,
+          ...(summary.numericMaximum === undefined ? {} : { maximum: summary.numericMaximum }),
+          ...(summary.numericMinimum === undefined ? {} : { minimum: summary.numericMinimum }),
+          sum: summary.numericSum,
+          sumOverflowed: summary.numericSumOverflowed,
+        },
+        otherValueCount: summary.otherValueCount,
+        topValues: [...summary.categorical.entries()]
+          .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+          .slice(0, CLOUD_PROFILE_MAX_TOP_VALUES)
+          .map(([value, count]) => ({ count, value })),
+      };
+    }),
+    fileCount: envelope.data.paths.length,
+    kind: 'desktop_excel_profile',
+    rowCount,
+    sheetCount: envelope.data.tables.length,
+    sheetNames: envelope.data.tables
+      .slice(0, CLOUD_PROFILE_MAX_SHEET_NAMES)
+      .map((table) => table.name),
+    truncatedColumns: Math.max(0, allColumns.size - CLOUD_PROFILE_MAX_COLUMNS),
+    truncatedSheetNames: Math.max(0, envelope.data.tables.length - CLOUD_PROFILE_MAX_SHEET_NAMES),
+  });
 }

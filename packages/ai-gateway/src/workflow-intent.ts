@@ -30,7 +30,7 @@ const DRIVE_FOLDER_INTENT =
 const EXCEL_CONSOLIDATION_INTENT =
   /(?:合併|匯總|彙整|整合|整理).{0,36}(?:excel|\.xlsx?|活頁簿)|(?:excel|\.xlsx?|活頁簿).{0,36}(?:合併|匯總|彙整|整合|整理)|merge|consolidat/iu;
 const DESKTOP_OPERATION_INTENT =
-  /本機|桌面|desktop|local\s+(?:computer|machine|excel)|microsoft\s+excel|(?:可見|實際)(?:開啟|操作)|開啟(?:結果|檔案|excel)/iu;
+  /本機|桌面|下載區|下載項目|desktop|downloads?|local\s+(?:computer|machine|excel)|microsoft\s+excel|(?:可見|實際)(?:開啟|操作)|開啟(?:結果|檔案|excel|雲端資料夾)/iu;
 
 export interface WorkflowIntent {
   readonly needsDesktop: boolean;
