@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 50 — Visible Computer Use (in progress; visible Drive/report continuation built, packaged acceptance pending)
+Phase 50 — Visible Computer Use (in progress; Drive selection, long-run lease, and authorization guidance hardened; real-app acceptance pending)
 
 ## Repository baseline
 
@@ -3915,3 +3915,47 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
   GAS deployment, or packaged-Agent acceptance was performed in this slice.
   Phase 50 remains in progress until the documented macOS and Windows real-app
   acceptance gates pass.
+
+### Drive execution hardening and authorization guidance
+
+- Corrected the Desktop Agent lease-renewal boundary to validate the server's
+  wrapped `{ job }` response. Long-running download, consolidation, and cloud
+  continuation work no longer aborts solely because the renewed lease was
+  parsed as a bare Job.
+- Hardened the fixed macOS Drive selection flow. The Agent now focuses a visible
+  Drive item through a verified screen coordinate, issues the allowlisted Select
+  All key code only after the item is focused, and checks that the selection is
+  not a single unexpanded item before requesting a download.
+- The download action now resolves exactly one visible and unobscured localized
+  Download control, clicks it through System Events, and fails closed when the
+  control is missing or ambiguous. It detects and closes a Share dialog rather
+  than treating that unrelated external action as a requested download.
+- The AI Workspace now presents the Drive → Downloads → Excel → summary →
+  report → Slides → approved GAS request as its bilingual Plan example. Missing
+  Google Workspace or Desktop/Downloads prerequisites receive specific guidance
+  and direct links to Connections or Devices instead of a generic provider
+  failure.
+
+### Validation after Drive execution hardening
+
+- `pnpm format:check`: passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed across all 14 applicable workspace projects.
+- `pnpm test`: passed — 354 tests across 72 files; the separately gated real
+  Excel operating-system acceptance test remains skipped by the deterministic
+  suite.
+- `pnpm build:web`: passed — all 47 application pages compiled successfully.
+  The sandboxed Turbopack attempt could not bind its worker port; the identical
+  permitted retry passed.
+- `pnpm build:desktop`: passed — main, preload, and renderer bundles compiled.
+- `pnpm security:scan-client`: passed — 35 generated browser files scanned.
+- `pnpm --filter @ai-workflow-studio/desktop package:test`: passed after the
+  permitted network retry and produced the ad-hoc-signed macOS arm64 test
+  application.
+- The fixed Chrome AppleScript passed a non-executing compile outside the
+  process sandbox. Local browser QA confirmed the bilingual Drive-to-Excel
+  heading and Plan example with no browser warnings or errors.
+- No Production deployment, push, Google write, real Drive selection/download,
+  workbook upload, Slides creation, or GAS deployment was performed. Phase 50
+  remains in progress until the documented macOS and Windows real-app acceptance
+  gates pass.

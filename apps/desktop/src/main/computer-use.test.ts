@@ -1,6 +1,6 @@
 import { writeSpreadsheetAtomic } from '@ai-workflow-studio/local-executor';
 import { execFile } from 'node:child_process';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -292,12 +292,36 @@ it.runIf(process.platform === 'darwin')(
 it.runIf(process.platform === 'darwin')(
   'compiles the fixed macOS Drive automation script without executing it',
   async () => {
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("return x+','+y");
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT.indexOf('click at {clickX, clickY}')).toBeLessThan(
+      MACOS_VISIBLE_DRIVE_SCRIPT.indexOf('key code 0 using {command down}'),
+    );
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('keystroke "a"');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("count>1?'selected':'single'");
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("querySelectorAll('button,[role=button]')");
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('if(e.length!==1)return');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('elementFromPoint');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('downloadPoint is "missing"');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain(
+      'if (count of pointParts) is not 2 then error "The trusted Drive Download coordinate is invalid."',
+    );
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('perform action "AXPress"');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('dialogState is "share"');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("t.indexOf('共用')===0");
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("t.toLowerCase().indexOf('share')===0");
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('key code 53');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain(
+      "querySelectorAll('[aria-label=下載],[aria-label=Download]",
+    );
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('e[0].click()');
     const directory = await mkdtemp(join(tmpdir(), 'aiws-drive-script-'));
+    const sourcePath = join(directory, 'visible-drive.applescript');
     const compiledPath = join(directory, 'visible-drive.scpt');
+    await writeFile(sourcePath, MACOS_VISIBLE_DRIVE_SCRIPT, 'utf8');
     await new Promise<void>((resolve, reject) => {
       execFile(
         '/usr/bin/osacompile',
-        ['-o', compiledPath, '-e', MACOS_VISIBLE_DRIVE_SCRIPT],
+        ['-o', compiledPath, sourcePath],
         { maxBuffer: 8_192, timeout: 10_000 },
         (error) => {
           if (error === null) resolve();

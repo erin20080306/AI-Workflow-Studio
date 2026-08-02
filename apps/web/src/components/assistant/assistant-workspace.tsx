@@ -7,6 +7,7 @@ import {
 } from '@ai-workflow-studio/tool-registry';
 import type { WorkflowRunView } from '@ai-workflow-studio/run-orchestrator';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { z } from 'zod';
 
@@ -37,6 +38,10 @@ import {
 } from '@/lib/assistant-execution-schema';
 import { AssistantImageGenerationResponseSchema } from '@/lib/assistant-image-schema';
 import type { AssistantExecutionTarget } from '@/lib/assistant-execution-targets';
+import {
+  assistantPromptErrorForCode,
+  type AssistantPromptError,
+} from '@/lib/assistant-prompt-error';
 import {
   buildAssistantExactModelOptions,
   resolveAssistantProvider,
@@ -84,8 +89,6 @@ const AssistantErrorResponseSchema = z
   })
   .passthrough();
 
-type PromptError = 'authentication' | 'model' | 'rate' | 'short' | 'temporary' | 'unavailable';
-
 class AssistantRequestError extends Error {
   readonly code: string;
 
@@ -94,14 +97,6 @@ class AssistantRequestError extends Error {
     this.name = 'AssistantRequestError';
     this.code = code;
   }
-}
-
-function promptErrorForCode(code: string): Exclude<PromptError, 'short'> {
-  if (code === 'AI_PROVIDER_AUTHENTICATION_FAILED') return 'authentication';
-  if (code === 'AI_PROVIDER_QUOTA_EXCEEDED' || code === 'AI_PROVIDER_RATE_LIMITED') return 'rate';
-  if (code === 'AI_PROVIDER_NOT_CONFIGURED') return 'model';
-  if (code === 'AI_PROVIDER_REQUEST_FAILED' || code === 'AI_PROVIDER_TIMEOUT') return 'temporary';
-  return 'unavailable';
 }
 
 async function readAssistantRequestError(response: Response): Promise<AssistantRequestError> {
@@ -150,6 +145,10 @@ const copy = {
     error: 'The assistant response could not be completed. Nothing was executed.',
     errorAuthentication:
       'The selected AI provider could not be verified. Choose Auto or contact the administrator.',
+    errorDesktop:
+      'Pair an online Desktop Agent and approve Downloads with read and write access before running this request.',
+    errorGoogle:
+      'Connect an approved Google Workspace account before creating Drive, Slides, or Apps Script work.',
     errorModel:
       'This model is not available to the provider account. Choose Auto or another model.',
     errorRate: 'The provider quota is currently limited. Choose Auto or try again later.',
@@ -183,7 +182,7 @@ const copy = {
       'Ask how to design a safe workflow, compare approaches, or clarify requirements…',
     placeholderImage: 'Describe the image, composition, style, lighting, and intended use…',
     placeholderPlan:
-      'Example: Every weekday, consolidate Excel orders, remove duplicates, and prepare a report for review.',
+      'Example: Open this Drive folder, download and consolidate Excel in Downloads, then create a summary, report, 8-slide deck, and approved GAS.',
     promptHelpAsk: 'Ask mode can read selected sources but never runs workflow actions.',
     promptHelpImage: 'Use at least 10 characters. Image requests use your workspace AI allowance.',
     promptHelpPlan:
@@ -204,7 +203,9 @@ const copy = {
     sendImage: 'Generate image',
     sendPlan: 'Create plan',
     sources: 'Sources',
-    stage: 'Phase 47 · Intelligent Work automation',
+    setupDesktop: 'Open Devices',
+    setupGoogle: 'Connect Google Workspace',
+    stage: 'Intelligent Work · Drive to Excel',
     steps: 'steps',
     stop: 'Stop generating',
     streaming: 'Generating…',
@@ -241,6 +242,9 @@ const copy = {
     emptyTitle: '今天想一起處理什麼？',
     error: '助理回應未能完成；沒有執行任何動作。',
     errorAuthentication: '所選 AI Provider 無法通過驗證，請改用「自動」或聯絡管理者。',
+    errorDesktop:
+      '請先配對在線的 Desktop Agent，並授權 Downloads／下載項目資料夾的讀取與寫入權限。',
+    errorGoogle: '請先連接已核准的 Google Workspace，才能操作 Drive、Slides 與 Apps Script。',
     errorModel: 'Provider 帳戶目前沒有此模型，請改用「自動」或其他模型。',
     errorRate: 'Provider 配額目前受限，請改用「自動」或稍後重試。',
     errorTemporary: 'Provider 目前無法連線，請改用「自動」或稍後重試。',
@@ -270,7 +274,8 @@ const copy = {
     planHeading: '計畫檢視',
     placeholderAsk: '詢問如何設計安全工作流、比較做法，或協助釐清需求⋯',
     placeholderImage: '描述圖片內容、構圖、風格、光線與使用情境⋯',
-    placeholderPlan: '例如：每個工作日整合 Excel 訂單、移除重複資料，再產生一份供我檢查的報表。',
+    placeholderPlan:
+      '例如：開啟這個 Drive 資料夾，把 Excel 下載到下載項目並整合，再產生摘要、報告、8 頁簡報與核准型 GAS。',
     promptHelpAsk: '詢問模式可讀取已選來源，但絕不執行工作流動作。',
     promptHelpImage: '請至少輸入 10 個字；圖片生成會計入工作區 AI 額度。',
     promptHelpPlan: '輸入短句即可；AI 會補上安全預設，產生的計畫仍是未啟用草稿。',
@@ -290,7 +295,9 @@ const copy = {
     sendImage: '產生圖片',
     sendPlan: '建立計畫',
     sources: '參考來源',
-    stage: '第 47 階段 · 智慧 Work 自動化',
+    setupDesktop: '開啟裝置設定',
+    setupGoogle: '連接 Google Workspace',
+    stage: '智慧 Work · Drive 到 Excel',
     steps: '個步驟',
     stop: '停止產生',
     streaming: '產生中⋯',
@@ -347,7 +354,7 @@ export function AssistantWorkspace({
   );
   const [mode, setMode] = useState<AssistantConversationMode>('ask');
   const [prompt, setPrompt] = useState('');
-  const [promptError, setPromptError] = useState<PromptError>();
+  const [promptError, setPromptError] = useState<AssistantPromptError>();
   const [pending, setPending] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [streamingBody, setStreamingBody] = useState('');
@@ -800,7 +807,7 @@ export function AssistantWorkspace({
           if (partialMessage !== undefined) {
             setMessages((current) => [...current, partialMessage]);
           }
-          setPromptError(promptErrorForCode(event.data.code));
+          setPromptError(assistantPromptErrorForCode(event.data.code));
         }
       }
       if (chunk.done) {
@@ -939,7 +946,7 @@ export function AssistantWorkspace({
           ]);
         }
       } else if (error instanceof AssistantRequestError) {
-        setPromptError(promptErrorForCode(error.code));
+        setPromptError(assistantPromptErrorForCode(error.code));
       } else {
         setPromptError('unavailable');
       }
@@ -1349,20 +1356,39 @@ export function AssistantWorkspace({
                         : text.promptShortPlan
                     : promptError === 'unavailable'
                       ? text.error
-                      : promptError === 'authentication'
-                        ? text.errorAuthentication
-                        : promptError === 'rate'
-                          ? text.errorRate
-                          : promptError === 'model'
-                            ? text.errorModel
-                            : promptError === 'temporary'
-                              ? text.errorTemporary
-                              : mode === 'ask'
-                                ? text.promptHelpAsk
-                                : mode === 'image'
-                                  ? text.promptHelpImage
-                                  : text.promptHelpPlan}
+                      : promptError === 'google'
+                        ? text.errorGoogle
+                        : promptError === 'desktop'
+                          ? text.errorDesktop
+                          : promptError === 'authentication'
+                            ? text.errorAuthentication
+                            : promptError === 'rate'
+                              ? text.errorRate
+                              : promptError === 'model'
+                                ? text.errorModel
+                                : promptError === 'temporary'
+                                  ? text.errorTemporary
+                                  : mode === 'ask'
+                                    ? text.promptHelpAsk
+                                    : mode === 'image'
+                                      ? text.promptHelpImage
+                                      : text.promptHelpPlan}
               </p>
+              {promptError === 'google' ? (
+                <Link
+                  className="text-[10px] font-semibold text-indigo-700 underline decoration-indigo-300 underline-offset-2"
+                  href="/dashboard/settings/connections"
+                >
+                  {text.setupGoogle}
+                </Link>
+              ) : promptError === 'desktop' ? (
+                <Link
+                  className="text-[10px] font-semibold text-indigo-700 underline decoration-indigo-300 underline-offset-2"
+                  href="/dashboard/devices"
+                >
+                  {text.setupDesktop}
+                </Link>
+              ) : null}
               {resourceStatus !== undefined && (
                 <p className="text-[10px] font-semibold text-indigo-700" role="status">
                   {resourceStatus}

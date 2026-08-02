@@ -39,6 +39,11 @@ const ClaimResponseSchema = z
     job: AgentJobSchema,
   })
   .strict();
+const LeaseResponseSchema = z
+  .object({
+    job: AgentJobSchema,
+  })
+  .strict();
 const JobMutationResponseSchema = z
   .object({
     duplicate: z.boolean(),
@@ -510,7 +515,7 @@ export class AgentClient {
             method: 'POST',
             signal: controller.signal,
           },
-          AgentJobSchema,
+          LeaseResponseSchema,
         );
       } catch (error) {
         leaseFailure = error;

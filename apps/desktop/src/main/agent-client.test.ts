@@ -253,6 +253,71 @@ describe('AgentClient', () => {
     );
   });
 
+  it('accepts the wrapped lease response while a long-running job renews', async () => {
+    vi.useFakeTimers();
+    let completed = false;
+    let finishJob: (() => void) | undefined;
+    let leaseRequestCount = 0;
+    const pendingJob = jobPayload().jobs[0];
+    const jobBarrier = new Promise<void>((resolve) => {
+      finishJob = resolve;
+    });
+    const fetchTransport: AgentFetch = async (input) => {
+      const url = String(input);
+      if (url.endsWith('/heartbeat')) {
+        return jsonResponse({ acceptedAt: new Date().toISOString(), deviceStatus: 'online' });
+      }
+      if (url.endsWith('/jobs')) return jsonResponse(completed ? { jobs: [] } : jobPayload());
+      if (url.endsWith('/claim')) {
+        return jsonResponse({
+          claimToken: `clm_${'C'.repeat(43)}`,
+          job: { ...pendingJob, attempt: 1, status: 'claimed' },
+        });
+      }
+      if (url.endsWith('/lease')) {
+        leaseRequestCount += 1;
+        return jsonResponse({
+          job: { ...pendingJob, attempt: 1, status: 'running' },
+        });
+      }
+      if (url.endsWith('/complete')) {
+        completed = true;
+        return jsonResponse({
+          duplicate: false,
+          job: { ...pendingJob, attempt: 1, status: 'succeeded' },
+        });
+      }
+      return jsonResponse({ error: 'unexpected route' }, 404);
+    };
+    const client = new AgentClient({
+      agentVersion: '0.1.0-test',
+      executeJob: async () => {
+        await jobBarrier;
+        return { processedRows: 3 };
+      },
+      fetchTransport,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      onStatus: vi.fn(),
+      vault: {
+        async clear() {},
+        async load() {
+          return pairingSession();
+        },
+        async save() {},
+      },
+    });
+    await client.initialize();
+
+    const processing = client.processOnce();
+    await vi.advanceTimersByTimeAsync(45_000);
+
+    expect(leaseRequestCount).toBe(1);
+    finishJob?.();
+    await processing;
+    expect(completed).toBe(true);
+    vi.useRealTimers();
+  });
+
   it('uses the active claim for bounded Drive manifests and binary workbook transfers', async () => {
     let completed = false;
     const requestHeaders: { readonly headers: Headers; readonly url: string }[] = [];

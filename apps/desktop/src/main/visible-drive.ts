@@ -109,28 +109,60 @@ export const MACOS_VISIBLE_DRIVE_SCRIPT = `on run argv
   end tell
   if semanticAction is "select_items" then
     tell application "Google Chrome"
-      set focusState to execute active tab of front window javascript "(function(){var c=document.querySelector('[role=gridcell][aria-label]');if(!c)return 'no_items';c.focus();return 'focused';})()"
-      if focusState is not "focused" then error "No downloadable Drive items are visible."
+      set itemPoint to execute active tab of front window javascript "(function(){var c=Array.from(document.querySelectorAll('[role=gridcell][aria-label]')).find(function(v){var r=v.getBoundingClientRect();return v.offsetParent!==null&&r.width>8&&r.height>8&&r.bottom>0&&r.right>0&&r.top<window.innerHeight&&r.left<window.innerWidth;});if(!c)return 'no_items';var r=c.getBoundingClientRect();var x=Math.round(window.screenX+r.left+r.width/2);var y=Math.round(window.screenY+(window.outerHeight-window.innerHeight)+r.top+r.height/2);return x+','+y;})()"
+      if itemPoint is "no_items" then error "No downloadable Drive items are visible."
     end tell
+    set AppleScript's text item delimiters to ","
+    set pointParts to text items of itemPoint
+    if (count of pointParts) is not 2 then error "The visible Drive item coordinate is invalid."
+    set clickX to item 1 of pointParts as integer
+    set clickY to item 2 of pointParts as integer
+    set AppleScript's text item delimiters to ""
     tell application "System Events"
       tell process "Google Chrome"
         set frontmost to true
-        keystroke "a" using {command down}
+        click at {clickX, clickY}
+        delay 1
+        key code 0 using {command down}
       end tell
     end tell
-    delay 1
+    delay 3
     tell application "Google Chrome"
-      set selectionState to execute active tab of front window javascript "(function(){var e=Array.from(document.querySelectorAll('[aria-label=下載],[aria-label=Download],[data-tooltip=下載],[data-tooltip=Download]')).find(function(v){return v.offsetParent!==null});return e?'selected':'missing';})()"
-      if selectionState is not "selected" then error "Drive selection did not expose the Download action."
+      set selectionState to execute active tab of front window javascript "(function(){var cells=Array.from(document.querySelectorAll('[role=gridcell][aria-label]')).filter(function(v){var r=v.getBoundingClientRect();return v.offsetParent!==null&&r.width>8&&r.height>8;});var text=(document.body&&document.body.innerText)||'';var match=text.match(/已選取\\\\s*([\\\\d,]+)\\\\s*個項目/)|text.match(/([\\\\d,]+)\\\\s+items?\\\\s+selected/i);var count=match?Number(match[1].replace(/,/g,'')):cells.filter(function(v){return v.getAttribute('aria-selected')==='true'||v.querySelector('[aria-selected=true]');}).length;return cells.length<=1||count>1?'selected':'single';})()"
+      if selectionState is not "selected" then error "Drive did not select every visible item."
       return selectionState
     end tell
   end if
   if semanticAction is "download_items" then
     tell application "Google Chrome"
-      set downloadState to execute active tab of front window javascript "(function(){var e=Array.from(document.querySelectorAll('[aria-label=下載],[aria-label=Download],[data-tooltip=下載],[data-tooltip=Download]')).find(function(v){return v.offsetParent!==null});if(!e)return 'missing';e.click();return 'requested';})()"
-      if downloadState is not "requested" then error "The trusted Drive Download action is unavailable."
-      return downloadState
+      set downloadPoint to execute active tab of front window javascript "(function(){var e=Array.from(document.querySelectorAll('button,[role=button]')).filter(function(v){var l=(v.getAttribute('aria-label')||v.getAttribute('data-tooltip')||v.getAttribute('title')||'').trim();var r=v.getBoundingClientRect();if((l!=='下載'&&l!=='Download')||v.offsetParent===null||r.width<=8||r.height<=8||r.bottom<=0||r.right<=0||r.top>=window.innerHeight||r.left>=window.innerWidth)return false;var h=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return h!==null&&h.closest('button,[role=button]')===v;});if(e.length!==1)return e.length===0?'missing':'ambiguous';var r=e[0].getBoundingClientRect();var x=Math.round(window.screenX+r.left+r.width/2);var y=Math.round(window.screenY+(window.outerHeight-window.innerHeight)+r.top+r.height/2);return x+','+y;})()"
     end tell
+    if downloadPoint is "missing" or downloadPoint is "ambiguous" then error "The trusted Drive Download action is unavailable."
+    set AppleScript's text item delimiters to ","
+    set pointParts to text items of downloadPoint
+    if (count of pointParts) is not 2 then error "The trusted Drive Download coordinate is invalid."
+    set clickX to item 1 of pointParts as integer
+    set clickY to item 2 of pointParts as integer
+    set AppleScript's text item delimiters to ""
+    tell application "System Events"
+      tell process "Google Chrome"
+        set frontmost to true
+        click at {clickX, clickY}
+      end tell
+    end tell
+    delay 1
+    tell application "Google Chrome"
+      set dialogState to execute active tab of front window javascript "(function(){var d=Array.from(document.querySelectorAll('[role=dialog]')).find(function(v){return v.offsetParent!==null;});if(!d)return 'clear';var t=(d.innerText||'').trim();return (t.indexOf('共用')===0||t.toLowerCase().indexOf('share')===0)?'share':'clear';})()"
+    end tell
+    if dialogState is "share" then
+      tell application "System Events"
+        tell process "Google Chrome"
+          key code 53
+        end tell
+      end tell
+      error "The Drive Share dialog opened instead of Download."
+    end if
+    return "requested"
   end if
   error "Unsupported visible Drive action."
 end run`;
