@@ -123,6 +123,25 @@ select public.finish_connection_operation(
   null
 );
 
+do $$
+begin
+  begin
+    perform public.finish_connection_operation(
+      '82000000-0000-4000-8000-000000000001',
+      '83000000-0000-4000-8000-000000000001',
+      'run:google:append:1',
+      decode(repeat('11', 32), 'hex'),
+      'succeeded',
+      '{"updatedRows": 2}'::jsonb,
+      null
+    );
+    raise exception 'completed connection operation unexpectedly finished twice';
+  exception
+    when sqlstate 'PT409' then null;
+  end;
+end;
+$$;
+
 select tests.assert_true(
   (
     select

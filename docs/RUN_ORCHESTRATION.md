@@ -145,7 +145,10 @@ Migration `202607260004_run_orchestration.sql` adds attempts, timeouts,
 cancellation timestamps, durable notifications, Agent event UUID uniqueness,
 and the service-role-only `transition_workflow_run` function. The function uses
 an expected-status compare-and-set, updates terminal timestamps, cancels active
-Jobs, and appends audit/notification rows in one database transaction.
+Jobs, and appends audit/notification rows in one database transaction. Stale
+compare-and-set attempts return the non-retryable PostgREST `PT409` conflict
+code so a business-state conflict cannot be mistaken for a serialization
+failure and retried indefinitely.
 
 Authenticated browser roles can select their tenant-visible Runs and
 notifications but cannot directly insert, update, delete, or execute the

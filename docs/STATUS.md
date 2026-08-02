@@ -3959,3 +3959,47 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
   workbook upload, Slides creation, or GAS deployment was performed. Phase 50
   remains in progress until the documented macOS and Windows real-app acceptance
   gates pass.
+
+### Supabase Disk I/O retry-storm remediation
+
+- Traced the production Disk I/O warning to a logical workflow-run
+  compare-and-set conflict that raised PostgreSQL serialization SQLSTATE
+  `40001`. PostgREST retried that business-state conflict continuously, creating
+  millions of rollback log entries despite the database containing only a small
+  amount of application data.
+- Added immutable migration
+  `202608030001_nonretryable_state_conflicts.sql`. Workflow-run and Google
+  connection-operation state conflicts now return PostgREST `PT409`, preserving
+  HTTP conflict semantics without triggering serialization retries.
+- Added regression coverage for stale workflow-run transitions and repeated
+  completion of the same idempotent Google connection operation. Both paths must
+  raise `PT409`; authenticated clients still cannot execute either service-only
+  database function.
+- Updated the orchestration runbook to distinguish non-retryable business-state
+  conflicts from retryable transaction failures.
+
+### Validation after the Supabase retry-storm remediation
+
+- `pnpm db:test`: passed — a fresh local Supabase database applied every
+  migration and passed all tenant-isolation, idempotency, and SQL regression
+  tests, including the two new `PT409` assertions.
+- `pnpm format:check`: passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed across all 14 applicable workspace projects.
+- `pnpm test`: passed outside the process sandbox — 354 tests across 72 files,
+  with one separately gated real operating-system acceptance test skipped. The
+  initial sandboxed run had one macOS AppleScript compiler service connection
+  failure; the identical permitted run passed without a code change.
+- `pnpm build:web`: passed — all 47 application pages compiled successfully.
+  The initial sandboxed Turbopack run could not bind its worker port; the
+  identical permitted retry passed.
+- The linked-production migration dry-run passed and listed only
+  `202608030001_nonretryable_state_conflicts.sql`.
+- After explicit user approval, the production migration was applied to the
+  linked Supabase project. Read-only verification confirmed both live functions
+  contain `PT409` and no longer contain `40001`.
+- The production `xact_rollback` counter had zero growth between two post-fix
+  samples. Supabase Logs Explorer reported the latest `Run status conflict` 314
+  seconds before the verification query, confirming that the retry/log storm
+  stopped; the historical monitoring warning may remain visible until its
+  rolling budget window refreshes.

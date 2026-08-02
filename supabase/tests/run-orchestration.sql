@@ -140,6 +140,19 @@ begin
     perform public.transition_workflow_run(
       '92000000-0000-4000-8000-000000000001',
       '95000000-0000-4000-8000-000000000001',
+      'running',
+      'succeeded',
+      null,
+      null
+    );
+    raise exception 'stale run transition unexpectedly succeeded';
+  exception
+    when sqlstate 'PT409' then null;
+  end;
+  begin
+    perform public.transition_workflow_run(
+      '92000000-0000-4000-8000-000000000001',
+      '95000000-0000-4000-8000-000000000001',
       'succeeded',
       'running',
       null,
