@@ -255,23 +255,32 @@ export function DesktopAgentApp() {
   const computerUseStatus = {
     failed: t('Last visible action failed', '上次可見操作失敗'),
     idle: t('Ready for an approved action', '等待已核准動作'),
+    opening_browser: t('Opening Google Drive in Chrome…', '正在 Chrome 開啟 Google Drive…'),
     opening_excel: t('Opening Microsoft Excel…', '正在開啟 Microsoft Excel…'),
     permission_denied: t('Accessibility permission required', '需要輔助使用權限'),
-    running: t('Operating visibly in Excel…', '正在 Excel 畫面中操作…'),
+    running: t('Performing the approved visible action…', '正在執行已核准的可見操作…'),
     unsupported: t('This platform is not supported', '此平台目前不支援'),
     user_takeover: t('Stopped for local user takeover', '已由本機使用者接管停止'),
-    verifying: t('Verifying the active workbook…', '正在驗證目前活頁簿…'),
+    verifying: t('Verifying the visible result…', '正在驗證可見操作結果…'),
   }[snapshot.computerUse.status];
   const computerUseAction =
-    snapshot.computerUse.currentAction === 'excel.open_workbook'
-      ? t('Open approved workbook', '開啟已核准活頁簿')
-      : snapshot.computerUse.currentAction === 'excel.autofit_used_range'
-        ? t('AutoFit used rows and columns', '自動調整使用中欄列')
-        : snapshot.computerUse.currentAction === 'excel.save_workbook'
-          ? t('Save approved workbook', '儲存已核准活頁簿')
-          : snapshot.computerUse.currentAction === 'excel.verify_active_workbook'
-            ? t('Verify active workbook', '驗證目前活頁簿')
-            : undefined;
+    snapshot.computerUse.currentAction === 'drive.open_folder'
+      ? t('Open approved Drive folder', '開啟已核准 Drive 資料夾')
+      : snapshot.computerUse.currentAction === 'drive.select_items'
+        ? t('Select visible Drive items', '選取畫面中的 Drive 項目')
+        : snapshot.computerUse.currentAction === 'drive.download_items'
+          ? t('Request the Drive download', '執行 Drive 下載')
+          : snapshot.computerUse.currentAction === 'drive.verify_download'
+            ? t('Verify downloaded workbooks', '驗證下載的活頁簿')
+            : snapshot.computerUse.currentAction === 'excel.open_workbook'
+              ? t('Open approved workbook', '開啟已核准活頁簿')
+              : snapshot.computerUse.currentAction === 'excel.autofit_used_range'
+                ? t('AutoFit used rows and columns', '自動調整使用中欄列')
+                : snapshot.computerUse.currentAction === 'excel.save_workbook'
+                  ? t('Save approved workbook', '儲存已核准活頁簿')
+                  : snapshot.computerUse.currentAction === 'excel.verify_active_workbook'
+                    ? t('Verify active workbook', '驗證目前活頁簿')
+                    : undefined;
 
   async function perform<T>(key: string, action: () => Promise<T>): Promise<T | undefined> {
     setBusy(key);

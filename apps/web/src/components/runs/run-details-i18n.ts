@@ -52,6 +52,10 @@ const nodeTypes: Readonly<Record<string, LocalizedValue>> = {
     en: 'Download Drive workbooks to Desktop',
     'zh-Hant': '下載 Drive 活頁簿到本機',
   },
+  'google_drive.visible_download_folder': {
+    en: 'Visibly download Drive folder in Chrome',
+    'zh-Hant': '在 Chrome 畫面中下載 Drive 資料夾',
+  },
   'google_drive.create_excel_report': {
     en: 'Create Drive Excel report',
     'zh-Hant': '建立 Drive Excel 報告',

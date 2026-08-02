@@ -4,6 +4,12 @@ import { basename, extname, isAbsolute } from 'node:path';
 import { z } from 'zod';
 
 import type { ComputerUseSnapshot } from '../shared/contracts';
+import {
+  VisibleDriveError,
+  type VisibleDriveDownloadInput,
+  type VisibleDriveDownloadResult,
+  type VisibleDriveDriver,
+} from './visible-drive';
 
 const VisibleExcelActionSchema = z.enum([
   'autofit_used_range',
@@ -63,6 +69,7 @@ export interface VisibleExcelDriver {
 interface DesktopComputerUseControllerOptions {
   readonly audit: (event: ComputerUseAuditEvent) => void;
   readonly driver: VisibleExcelDriver;
+  readonly driveDriver?: VisibleDriveDriver;
   readonly onSnapshot: () => void;
   readonly openPath: (absolutePath: string) => Promise<string>;
   readonly permission: ComputerUsePermissionProvider;
@@ -219,6 +226,90 @@ export class DesktopComputerUseController {
       });
       this.options.onSnapshot();
       throw error;
+    } finally {
+      this.activeAbortController = undefined;
+      this.options.onSnapshot();
+    }
+  }
+
+  async downloadGoogleDriveFolder(
+    input: VisibleDriveDownloadInput,
+    parentSignal: AbortSignal,
+    onAction: (
+      action: NonNullable<ComputerUseSnapshot['currentAction']>,
+    ) => Promise<void> = async () => undefined,
+  ): Promise<VisibleDriveDownloadResult> {
+    if (!this.enabled) throw new ComputerUseError('COMPUTER_USE_DISABLED');
+    if (this.options.driveDriver === undefined) {
+      throw new ComputerUseError('VISIBLE_DRIVE_PLATFORM_UNSUPPORTED');
+    }
+    const permission = this.options.permission.check(false);
+    if (permission !== 'granted') {
+      this.status = permission === 'unsupported' ? 'unsupported' : 'permission_denied';
+      this.options.onSnapshot();
+      throw new ComputerUseError(
+        permission === 'unsupported'
+          ? 'COMPUTER_USE_PLATFORM_UNSUPPORTED'
+          : 'COMPUTER_USE_PERMISSION_REQUIRED',
+      );
+    }
+    const localAbortController = new AbortController();
+    this.activeAbortController = localAbortController;
+    const signal = AbortSignal.any([parentSignal, localAbortController.signal]);
+    const folderIdHash = createHash('sha256').update(input.folderId).digest('hex');
+
+    try {
+      const result = await this.options.driveDriver.download(input, signal, async (action) => {
+        await this.updateStatus(
+          action === 'drive.open_folder'
+            ? 'opening_browser'
+            : action === 'drive.verify_download'
+              ? 'verifying'
+              : 'running',
+          action,
+          onAction,
+        );
+      });
+      this.lastCompletedAction = 'drive.verify_download';
+      this.currentAction = undefined;
+      this.status = 'idle';
+      this.options.audit({
+        code: 'VISIBLE_DRIVE_DOWNLOAD_COMPLETED',
+        level: 'info',
+        metadata: {
+          fileCount: result.paths.length,
+          folderIdHash,
+          platform: platformLabel(this.options.platform),
+        },
+      });
+      this.options.onSnapshot();
+      return result;
+    } catch (error) {
+      if (signal.aborted) {
+        this.status = localAbortController.signal.aborted ? 'user_takeover' : 'failed';
+        this.currentAction = undefined;
+        throw new ComputerUseError('COMPUTER_USE_INTERRUPTED');
+      }
+      const failureCode =
+        error instanceof VisibleDriveError
+          ? error.code
+          : error instanceof ComputerUseError
+            ? error.code
+            : 'DRIVER_FAILURE';
+      this.status =
+        failureCode === 'COMPUTER_USE_PERMISSION_REQUIRED' ? 'permission_denied' : 'failed';
+      this.currentAction = undefined;
+      this.options.audit({
+        code: 'VISIBLE_DRIVE_DOWNLOAD_FAILED',
+        level: 'error',
+        metadata: {
+          failureCode,
+          folderIdHash,
+          platform: platformLabel(this.options.platform),
+        },
+      });
+      this.options.onSnapshot();
+      throw new ComputerUseError(failureCode);
     } finally {
       this.activeAbortController = undefined;
       this.options.onSnapshot();

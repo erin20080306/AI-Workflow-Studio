@@ -16,7 +16,11 @@ import {
 import { z } from 'zod';
 
 import type { AgentJobReporter } from './agent-client';
-import { DesktopComputerUseController, type VisibleExcelAction } from './computer-use';
+import {
+  ComputerUseError,
+  DesktopComputerUseController,
+  type VisibleExcelAction,
+} from './computer-use';
 import { FolderAuthorizationError } from './folder-grants';
 import { DesktopSpreadsheetExecutor } from './local-executor';
 
@@ -69,6 +73,7 @@ type DesktopEnvelope = z.infer<typeof EnvelopeSchema>;
 const SUPPORTED_NODE_TYPES = [
   'folder.list_files',
   'google_drive.download_excel_folder',
+  'google_drive.visible_download_folder',
   'excel.read',
   'excel.merge',
   'excel.write',
@@ -159,6 +164,44 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
               folderAliasId: staged.folderAliasId,
               inputHashes: [...staged.inputHashes],
               paths: [...staged.paths],
+              tables: [],
+            }),
+          };
+        }
+        case 'google_drive.visible_download_folder': {
+          if (this.computerUse === undefined) {
+            throw new Error('Visible Computer Use is unavailable.');
+          }
+          const workspace = await this.spreadsheet.prepareVisibleDriveDownload(
+            this.deviceId,
+            context.runId,
+            parsed.config.folderAliasId,
+          );
+          const downloaded = await this.computerUse.downloadGoogleDriveFolder(
+            {
+              ...workspace,
+              downloadTimeoutSeconds: parsed.config.downloadTimeoutSeconds,
+              folderId: parsed.config.folderId,
+              maxFileSizeBytes: parsed.config.maxFileSizeBytes,
+              maxFiles: parsed.config.maxFiles,
+            },
+            this.reporter.signal,
+            async (action) => {
+              await this.reporter.reportStep({
+                nodeId: context.nodeId,
+                output: { computerUseAction: action },
+                processedFileCount: 0,
+                processedRowCount: 0,
+                status: 'running',
+              });
+            },
+          );
+          return {
+            metrics: { processedFileCount: downloaded.paths.length },
+            output: jsonEnvelope({
+              folderAliasId: parsed.config.folderAliasId,
+              inputHashes: [...downloaded.inputHashes],
+              paths: [...downloaded.paths],
               tables: [],
             }),
           };
@@ -506,7 +549,9 @@ async function mapWithConcurrency<T, R>(
 function safeDesktopExecutionError(error: unknown, nodeId: string): WorkflowEngineError {
   if (error instanceof WorkflowEngineError) return error;
   const safeCode =
-    error instanceof LocalExecutorError || error instanceof FolderAuthorizationError
+    error instanceof LocalExecutorError ||
+    error instanceof FolderAuthorizationError ||
+    error instanceof ComputerUseError
       ? error.code
       : error instanceof z.ZodError
         ? 'DESKTOP_DATA_VALIDATION_FAILED'

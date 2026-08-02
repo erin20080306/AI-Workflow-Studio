@@ -46,6 +46,103 @@ afterEach(async () => {
 });
 
 describe('DesktopWorkflowJobExecutor', () => {
+  it('dispatches an approved visible Drive download through the Computer Use driver', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'aiws-visible-drive-job-'));
+    temporaryDirectories.push(directory);
+    const grants = new FolderGrantStore(join(directory, '.agent', 'folder-grants.json'));
+    const grant = await grants.authorize(directory, DEVICE_ID, {
+      read: true,
+      watch: false,
+      write: true,
+    });
+    const spreadsheet = new DesktopSpreadsheetExecutor(
+      grants,
+      new ProcessingLedger(join(directory, '.agent', 'processing-ledger.json')),
+    );
+    const computerUse = new DesktopComputerUseController({
+      audit: () => undefined,
+      driveDriver: {
+        async download(input, _signal, onAction) {
+          await onAction('drive.open_folder');
+          await onAction('drive.select_items');
+          await onAction('drive.download_items');
+          const outputName = 'visible-source.xlsx';
+          const outputPath = join(input.workDirectory, outputName);
+          await writeSpreadsheetAtomic(
+            [{ columns: ['Item'], name: 'Visible', rows: [{ Item: 'Downloaded' }] }],
+            { outputPath, overwrite: false },
+          );
+          await onAction('drive.verify_download');
+          return {
+            inputHashes: [await hashFile(outputPath)],
+            paths: [`${input.workRelativePath}/${outputName}`],
+          };
+        },
+      },
+      driver: {
+        async perform(input) {
+          return { activeWorkbookName: input.workbookPath.split('/').at(-1) ?? '' };
+        },
+      },
+      onSnapshot: () => undefined,
+      openPath: async () => '',
+      permission: { check: () => 'granted' },
+      platform: 'darwin',
+    });
+    computerUse.setEnabled(true);
+    const executor = new DesktopWorkflowJobExecutor(spreadsheet, computerUse);
+    const steps: StepResult[] = [];
+    const job: AgentJob = {
+      attempt: 1,
+      availableAt: '2026-08-02T03:00:00.000Z',
+      deviceId: DEVICE_ID,
+      id: '10000000-0000-4000-8000-000000005041',
+      idempotencyKey: 'visible-drive-operation-1',
+      maxAttempts: 3,
+      status: 'claimed',
+      tenantId: TENANT_ID,
+      workflow: {
+        description: 'Visibly download the approved Drive folder.',
+        edges: [],
+        executionTarget: { deviceId: DEVICE_ID, type: 'desktop' },
+        name: 'Visible Drive download',
+        nodes: [
+          {
+            config: {
+              browser: 'chrome',
+              downloadTimeoutSeconds: 300,
+              folderAliasId: grant.folderAliasId,
+              folderId: '1DriveFolderVisibleDownload123',
+              maxFileSizeBytes: 50_000_000,
+              maxFiles: 500,
+            },
+            id: 'visible_download',
+            type: 'google_drive.visible_download_folder',
+            version: 1,
+          },
+        ],
+        schemaVersion: 1,
+        trigger: { config: {}, type: 'manual.trigger' },
+      },
+      workflowRunId: '10000000-0000-4000-8000-000000005042',
+    };
+
+    await expect(executor.execute(job, createReporter(steps))).resolves.toMatchObject({
+      status: 'succeeded',
+      stepCount: 1,
+    });
+    expect(steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: 'visible_download',
+          output: { computerUseAction: 'drive.download_items' },
+          status: 'running',
+        }),
+        expect.objectContaining({ nodeId: 'visible_download', status: 'succeeded' }),
+      ]),
+    );
+  });
+
   it('downloads Drive workbooks into an approved folder, consolidates them, and opens the result', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'aiws-drive-desktop-job-'));
     temporaryDirectories.push(directory);

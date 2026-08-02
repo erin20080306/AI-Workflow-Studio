@@ -118,7 +118,8 @@ export function validateWorkflowIntentCoverage(
   const actual = new Set(output.workflow.nodes.map((node) => node.type));
   const isDesktopDriveOperation =
     output.workflow.executionTarget.type === 'desktop' &&
-    actual.has('google_drive.download_excel_folder');
+    (actual.has('google_drive.visible_download_folder') ||
+      actual.has('google_drive.download_excel_folder'));
   const issues = intent.requiredNodeTypes
     .filter((type) => {
       if (actual.has(type)) return false;

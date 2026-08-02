@@ -132,6 +132,10 @@ export const NODE_PRESENTATION: Readonly<
     category: { en: 'Google Drive', zhHant: 'Google 雲端硬碟' },
     label: { en: 'Download workbooks to Desktop', zhHant: '下載活頁簿到本機' },
   },
+  'google_drive.visible_download_folder': {
+    category: { en: 'Google Drive', zhHant: 'Google 雲端硬碟' },
+    label: { en: 'Visible Chrome download', zhHant: '用 Chrome 可見下載' },
+  },
   'google_drive.read_excel_folder': {
     category: { en: 'Google Drive', zhHant: 'Google 雲端硬碟' },
     label: { en: 'Read Drive Excel folder', zhHant: '讀取 Drive Excel 資料夾' },

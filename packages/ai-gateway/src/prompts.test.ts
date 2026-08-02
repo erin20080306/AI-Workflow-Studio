@@ -188,7 +188,7 @@ describe('planner prompts', () => {
       type: 'desktop',
     });
     expect(example.workflow.nodes.map((node) => node.type)).toEqual([
-      'google_drive.download_excel_folder',
+      'google_drive.visible_download_folder',
       'excel.read',
       'excel.merge',
       'excel.create_report',
@@ -202,13 +202,13 @@ describe('planner prompts', () => {
     ]);
     expect(example.workflow.nodes[0]).toMatchObject({
       config: {
-        connectionId: '10000000-0000-4000-8000-000000000911',
+        browser: 'chrome',
+        downloadTimeoutSeconds: 300,
         folderAliasId: '10000000-0000-4000-8000-000000000912',
         folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
-        includeSubfolders: true,
-        maxFileSizeBytes: 20_000_000,
+        maxFileSizeBytes: 50_000_000,
       },
-      type: 'google_drive.download_excel_folder',
+      type: 'google_drive.visible_download_folder',
     });
     expect(example.workflow.nodes.at(-1)).toMatchObject({
       config: {

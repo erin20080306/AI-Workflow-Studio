@@ -470,6 +470,19 @@ export const GoogleDriveDownloadExcelFolderNodeSchema = node(
     })
     .strict(),
 );
+export const GoogleDriveVisibleDownloadFolderNodeSchema = node(
+  'google_drive.visible_download_folder',
+  z
+    .object({
+      browser: z.literal('chrome').default('chrome'),
+      downloadTimeoutSeconds: z.number().int().min(30).max(600).default(300),
+      folderAliasId: UuidSchema,
+      folderId: GoogleResourceIdSchema,
+      maxFileSizeBytes: z.number().int().min(1).max(200_000_000).default(50_000_000),
+      maxFiles: z.number().int().min(1).max(500).default(500),
+    })
+    .strict(),
+);
 export const GoogleDriveCreateExcelReportNodeSchema = node(
   'google_drive.create_excel_report',
   z
@@ -621,6 +634,7 @@ export const WorkflowNodeSchema = z.discriminatedUnion('type', [
   GoogleSheetsSyncNodeSchema,
   GoogleDriveReadExcelFolderNodeSchema,
   GoogleDriveDownloadExcelFolderNodeSchema,
+  GoogleDriveVisibleDownloadFolderNodeSchema,
   GoogleDriveCreateExcelReportNodeSchema,
   GmailReadNodeSchema,
   GoogleFormsReadResponsesNodeSchema,

@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 50 — Visible Computer Use (in progress; macOS accessibility acceptance blocked)
+Phase 50 — Visible Computer Use (in progress; visible Drive slice built, packaged acceptance pending)
 
 ## Repository baseline
 
@@ -3812,3 +3812,56 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
 - File-manager, Gmail, Google Sheets, and LINE visible operations remain outside
   this slice. They must reuse the accepted permission, action, takeover, state
   verification, approval, and redacted-audit runtime before they can be enabled.
+
+### Visible Google Drive download slice
+
+- Added the approval-gated Desktop-only
+  `google_drive.visible_download_folder` node. The grounded planner now emits a
+  visible Drive download before local Excel read, merge, report, and visible
+  review when the user explicitly requests Chrome/Desktop-style operation.
+- The model can provide only a validated Google Drive folder identifier, an
+  approved local folder alias, and bounded file/count/time limits. It cannot
+  provide JavaScript, AppleScript, shell commands, selectors, coordinates, or
+  keystrokes.
+- The macOS driver opens the exact allowlisted Drive folder in Chrome, verifies
+  its origin and folder path, focuses a visible Drive item, asks the packaged
+  Agent to issue the fixed Select All keyboard action, verifies the localized
+  Download control, and clicks only that fixed control. Chrome's Apple Events
+  JavaScript permission remains an explicit browser setting controlled by the
+  local user.
+- The Agent snapshots only the locally approved destination, waits for a new
+  completed workbook or Drive ZIP, rejects partial or ambiguous downloads, and
+  safely extracts only bounded `.xls` and `.xlsx` entries into a per-run work
+  directory. ZIP traversal, symlinks, unsupported types, oversized entries,
+  excess files, duplicate collisions, timeouts, and folder mismatches fail
+  closed.
+- Run progress and the local Agent show bilingual semantic actions for opening
+  the approved folder, selecting items, requesting the download, and verifying
+  the local result. Audit records contain only action codes, platform values,
+  folder-ID/path hashes, counts, and content hashes; raw paths, Drive contents,
+  credentials, and screen contents are not logged.
+
+### Validation after the visible Drive slice
+
+- `pnpm format:check`: passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed across all 14 applicable workspace projects.
+- `pnpm test`: passed — 338 tests across 70 files, with one separately gated
+  real operating-system acceptance test skipped by the deterministic suite.
+- `pnpm build:web`: passed — all 47 application pages compiled successfully.
+  The sandboxed Turbopack attempt could not create its worker process; the
+  identical permitted retry passed.
+- `pnpm build:desktop`: passed — main, preload, and renderer bundles compiled.
+- `pnpm --filter @ai-workflow-studio/desktop package:test`: passed and produced
+  an unsigned macOS arm64 test application. It was installed locally with the
+  prior bundle preserved at `/private/tmp/AI Workflow Studio Agent.previous.app`.
+- The fixed Chrome AppleScript passed compile-only validation outside the Codex
+  process sandbox; the sandbox cannot load Chrome's scripting dictionary but
+  the identical non-executing macOS compile succeeded.
+- The newly installed test bundle advertises the visible Drive capability and
+  retained its encrypted pairing record, Computer Use opt-in, and existing
+  folder alias. Replacing an unsigned test bundle invalidated the prior macOS
+  Accessibility decision, so real Drive selection/download acceptance remains
+  pending a renewed local Accessibility grant and explicit authorization of the
+  browser download folder. No Drive item was selected, downloaded, or changed
+  during this validation.

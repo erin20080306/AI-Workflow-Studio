@@ -13,10 +13,16 @@ import {
   type ComputerUseAuditEvent,
   type VisibleExcelDriver,
 } from './computer-use';
+import {
+  MACOS_VISIBLE_DRIVE_SCRIPT,
+  VisibleDriveError,
+  type VisibleDriveDriver,
+} from './visible-drive';
 
 const WORKBOOK_PATH = '/approved/jobs/report.xlsx';
 
 function setup(options?: {
+  readonly driveDriver?: VisibleDriveDriver;
   readonly driver?: VisibleExcelDriver;
   readonly permission?: 'denied' | 'granted' | 'unsupported';
 }) {
@@ -32,6 +38,7 @@ function setup(options?: {
     } satisfies VisibleExcelDriver);
   const controller = new DesktopComputerUseController({
     audit: (event) => audits.push(event),
+    ...(options?.driveDriver === undefined ? {} : { driveDriver: options.driveDriver }),
     driver,
     onSnapshot: snapshots,
     async openPath(path) {
@@ -180,6 +187,87 @@ describe('DesktopComputerUseController', () => {
     });
     expect(audits.some((event) => event.code === 'COMPUTER_USE_USER_TAKEOVER')).toBe(true);
   });
+
+  it('runs only the fixed Drive actions and does not log the Drive folder ID or local path', async () => {
+    const folderId = '1DriveFolderVisibleDownload123';
+    const downloadDirectory = '/approved/downloads';
+    const actions: string[] = [];
+    const driveDriver: VisibleDriveDriver = {
+      async download(input, _signal, onAction) {
+        expect(input.folderId).toBe(folderId);
+        for (const action of [
+          'drive.open_folder',
+          'drive.select_items',
+          'drive.download_items',
+          'drive.verify_download',
+        ] as const) {
+          actions.push(action);
+          await onAction(action);
+        }
+        return {
+          inputHashes: ['a'.repeat(64)],
+          paths: ['.ai-workflow-studio/jobs/run/report.xlsx'],
+        };
+      },
+    };
+    const { audits, controller } = setup({ driveDriver });
+    controller.setEnabled(true);
+
+    await expect(
+      controller.downloadGoogleDriveFolder(
+        {
+          downloadDirectory,
+          downloadTimeoutSeconds: 300,
+          folderId,
+          maxFileSizeBytes: 50_000_000,
+          maxFiles: 500,
+          workDirectory: '/approved/downloads/.ai-workflow-studio/jobs/run',
+          workRelativePath: '.ai-workflow-studio/jobs/run',
+        },
+        new AbortController().signal,
+      ),
+    ).resolves.toMatchObject({ paths: ['.ai-workflow-studio/jobs/run/report.xlsx'] });
+
+    expect(actions).toEqual([
+      'drive.open_folder',
+      'drive.select_items',
+      'drive.download_items',
+      'drive.verify_download',
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      lastCompletedAction: 'drive.verify_download',
+      status: 'idle',
+    });
+    expect(audits.some((event) => event.code === 'VISIBLE_DRIVE_DOWNLOAD_COMPLETED')).toBe(true);
+    expect(JSON.stringify(audits)).not.toContain(folderId);
+    expect(JSON.stringify(audits)).not.toContain(downloadDirectory);
+  });
+
+  it('maps visible Drive driver failures to stable Computer Use error codes', async () => {
+    const driveDriver: VisibleDriveDriver = {
+      async download() {
+        throw new VisibleDriveError('DRIVE_DOWNLOAD_FOLDER_MISMATCH_OR_TIMEOUT');
+      },
+    };
+    const { controller } = setup({ driveDriver });
+    controller.setEnabled(true);
+
+    await expect(
+      controller.downloadGoogleDriveFolder(
+        {
+          downloadDirectory: '/approved/downloads',
+          downloadTimeoutSeconds: 30,
+          folderId: '1DriveFolderVisibleDownload123',
+          maxFileSizeBytes: 50_000_000,
+          maxFiles: 10,
+          workDirectory: '/approved/downloads/.ai-workflow-studio/jobs/run',
+          workRelativePath: '.ai-workflow-studio/jobs/run',
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ code: 'DRIVE_DOWNLOAD_FOLDER_MISMATCH_OR_TIMEOUT' });
+    expect(controller.getSnapshot().status).toBe('failed');
+  });
 });
 
 it.runIf(process.platform === 'darwin')(
@@ -191,6 +279,25 @@ it.runIf(process.platform === 'darwin')(
       execFile(
         '/usr/bin/osacompile',
         ['-o', compiledPath, '-e', MACOS_EXCEL_SCRIPT],
+        { maxBuffer: 8_192, timeout: 10_000 },
+        (error) => {
+          if (error === null) resolve();
+          else reject(error);
+        },
+      );
+    });
+  },
+);
+
+it.runIf(process.platform === 'darwin')(
+  'compiles the fixed macOS Drive automation script without executing it',
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'aiws-drive-script-'));
+    const compiledPath = join(directory, 'visible-drive.scpt');
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        '/usr/bin/osacompile',
+        ['-o', compiledPath, '-e', MACOS_VISIBLE_DRIVE_SCRIPT],
         { maxBuffer: 8_192, timeout: 10_000 },
         (error) => {
           if (error === null) resolve();

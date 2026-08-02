@@ -101,6 +101,13 @@ export const NODE_CATALOG = [
     'Download bounded Drive workbooks into an approved Desktop folder.',
   ),
   entry(
+    'google_drive.visible_download_folder',
+    'external',
+    'always',
+    'desktop',
+    'Use an approved local Chrome session to visibly download a Drive folder into an approved local folder.',
+  ),
+  entry(
     'google_drive.create_excel_report',
     'external',
     'always',

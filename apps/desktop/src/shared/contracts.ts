@@ -19,17 +19,22 @@ export const IPC_CHANNELS = {
 
 export interface ComputerUseSnapshot {
   readonly currentAction?:
+    | 'drive.download_items'
+    | 'drive.open_folder'
+    | 'drive.select_items'
+    | 'drive.verify_download'
     | 'excel.autofit_used_range'
     | 'excel.open_workbook'
     | 'excel.save_workbook'
     | 'excel.verify_active_workbook';
   readonly enabled: boolean;
-  readonly lastCompletedAction?: 'excel.verify_active_workbook';
+  readonly lastCompletedAction?: 'drive.verify_download' | 'excel.verify_active_workbook';
   readonly permission: 'denied' | 'granted' | 'unsupported';
   readonly platform: 'macos' | 'unsupported' | 'windows';
   readonly status:
     | 'failed'
     | 'idle'
+    | 'opening_browser'
     | 'opening_excel'
     | 'permission_denied'
     | 'running'

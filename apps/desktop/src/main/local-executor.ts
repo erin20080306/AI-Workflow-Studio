@@ -54,6 +54,12 @@ export interface DriveExcelStagingResult {
   readonly paths: readonly string[];
 }
 
+export interface VisibleDriveDownloadWorkspace {
+  readonly downloadDirectory: string;
+  readonly workDirectory: string;
+  readonly workRelativePath: string;
+}
+
 export class DesktopSpreadsheetExecutor {
   constructor(
     private readonly folderGrants: FolderGrantStore,
@@ -71,6 +77,7 @@ export class DesktopSpreadsheetExecutor {
       'excel.open_file',
       'excel.visible_review',
       'google_drive.download_excel_folder',
+      'google_drive.visible_download_folder',
       'data.filter',
       'data.sort',
       'data.group',
@@ -206,6 +213,28 @@ export class DesktopSpreadsheetExecutor {
       folderAliasId,
       inputHashes: staged.map((file) => file.inputHash),
       paths: staged.map((file) => file.relativePath),
+    };
+  }
+
+  async prepareVisibleDriveDownload(
+    deviceId: string,
+    jobId: string,
+    folderAliasId: string,
+  ): Promise<VisibleDriveDownloadWorkspace> {
+    const downloadDirectory = await this.folderGrants.resolveAuthorizedRoot(
+      folderAliasId,
+      deviceId,
+      'write',
+    );
+    const work = await this.folderGrants.resolveAuthorizedWorkDirectory(
+      folderAliasId,
+      deviceId,
+      jobId,
+    );
+    return {
+      downloadDirectory,
+      workDirectory: work.absolutePath,
+      workRelativePath: work.relativePath,
     };
   }
 

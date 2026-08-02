@@ -27,6 +27,7 @@ import {
 import { ProcessingLedger } from '@ai-workflow-studio/local-executor';
 import { AgentClient, type AgentClientStatus } from './agent-client';
 import { createPlatformExcelDriver, DesktopComputerUseController } from './computer-use';
+import { createPlatformVisibleDriveDriver } from './visible-drive';
 import { FolderGrantStore } from './folder-grants';
 import { DesktopSpreadsheetExecutor } from './local-executor';
 import { DesktopWorkflowJobExecutor } from './workflow-job-executor';
@@ -414,14 +415,17 @@ async function initialize(): Promise<void> {
       const message =
         event.code === 'VISIBLE_EXCEL_OPERATION_COMPLETED'
           ? 'A visible Excel operation completed and its active workbook was verified.'
-          : event.code === 'COMPUTER_USE_ACTION_STARTED'
-            ? 'A visible Computer Use action started.'
-            : event.code === 'COMPUTER_USE_USER_TAKEOVER'
-              ? 'The local user took control and interrupted Computer Use.'
-              : 'A visible Excel operation did not complete.';
+          : event.code === 'VISIBLE_DRIVE_DOWNLOAD_COMPLETED'
+            ? 'A visible Google Drive download completed inside an approved local folder.'
+            : event.code === 'COMPUTER_USE_ACTION_STARTED'
+              ? 'A visible Computer Use action started.'
+              : event.code === 'COMPUTER_USE_USER_TAKEOVER'
+                ? 'The local user took control and interrupted Computer Use.'
+                : 'A visible Computer Use operation did not complete.';
       logger[event.level](event.code, message, event.metadata);
     },
     driver: createPlatformExcelDriver(process.platform),
+    driveDriver: createPlatformVisibleDriveDriver(process.platform),
     onSnapshot: () => broadcastSnapshot(),
     openPath: async (absolutePath) => await shell.openPath(absolutePath),
     permission: {
