@@ -58,6 +58,29 @@ describe('workflow intent coverage', () => {
     });
   });
 
+  it('requires Desktop when a Drive Excel request explicitly asks for visible local Excel work', () => {
+    expect(
+      detectWorkflowIntent(
+        '從 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 下載 Excel 到已核准資料夾，在本機匯總成一份 Excel，完成後在 Microsoft Excel 可見開啟。',
+      ),
+    ).toEqual({
+      needsDesktop: true,
+      needsGoogleConnection: true,
+      requiredNodeTypes: ['google_drive.read_excel_folder', 'google_drive.create_excel_report'],
+    });
+  });
+
+  it('does not invent Slides or Apps Script when both outputs are explicitly negated', () => {
+    const intent = detectWorkflowIntent(
+      '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel 並匯總，不要建立簡報，也不要部署 GAS。',
+    );
+
+    expect(intent.requiredNodeTypes).not.toContain('google_slides.create');
+    expect(intent.requiredNodeTypes).not.toContain('apps_script.deploy_template');
+    expect(intent.requiredNodeTypes).toContain('google_drive.read_excel_folder');
+    expect(intent.requiredNodeTypes).toContain('google_drive.create_excel_report');
+  });
+
   it('does not invent Gmail as a source when the request explicitly forbids email delivery', () => {
     const intent = detectWorkflowIntent(
       '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel，匯總成報表與 GAS，不要寄送郵件。',

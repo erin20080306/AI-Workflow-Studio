@@ -17,6 +17,10 @@ const SUMMARY_INTENT =
   /summar(?:y|ize)|摘要|彙整報告|整理成報告|報告草稿|(?:產生|建立).{0,16}報告/iu;
 const SLIDES_INTENT = /google\s*slides?|presentation|簡報|投影片|gas\s*簡報/iu;
 const APPS_SCRIPT_INTENT = /apps?\s*script|google\s*apps?\s*script|\bgas\b/iu;
+const SLIDES_NEGATION =
+  /(?:不要|不需(?:要)?|無需|勿)(?:建立|產生|製作)?[^，。,.]{0,12}(?:簡報|投影片|google\s*slides?)|do\s+not\s+(?:create|generate|make)[^,.]{0,12}(?:slides?|presentation)/iu;
+const APPS_SCRIPT_NEGATION =
+  /(?:不要|不需(?:要)?|無需|勿)(?:建立|產生|部署)?[^，。,.]{0,12}(?:apps?\s*script|gas)|do\s+not\s+(?:create|generate|deploy)[^,.]{0,12}(?:apps?\s*script|gas)/iu;
 const EMAIL_DELIVERY_INTENT =
   /(?:寄|發送|寄送|send|email).{0,24}(?:email|mail|郵件|電子郵件|信箱|@)/iu;
 const EMAIL_NEGATION = /不要寄|不寄|勿寄|do\s+not\s+send|don't\s+send/iu;
@@ -25,6 +29,8 @@ const DRIVE_FOLDER_INTENT =
   /drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/[A-Za-z0-9_-]{10,240}|google\s*(?:drive|雲端硬碟).{0,32}(?:folder|資料夾)/iu;
 const EXCEL_CONSOLIDATION_INTENT =
   /(?:合併|匯總|彙整|整合|整理).{0,36}(?:excel|\.xlsx?|活頁簿)|(?:excel|\.xlsx?|活頁簿).{0,36}(?:合併|匯總|彙整|整合|整理)|merge|consolidat/iu;
+const DESKTOP_OPERATION_INTENT =
+  /本機|桌面|desktop|local\s+(?:computer|machine|excel)|microsoft\s+excel|(?:可見|實際)(?:開啟|操作)|開啟(?:結果|檔案|excel)/iu;
 
 export interface WorkflowIntent {
   readonly needsDesktop: boolean;
@@ -50,8 +56,12 @@ export function detectWorkflowIntent(prompt: string): WorkflowIntent {
     required.add('ai.summarize');
     required.add('report.compose');
   }
-  if (SLIDES_INTENT.test(prompt)) required.add('google_slides.create');
-  if (APPS_SCRIPT_INTENT.test(prompt)) required.add('apps_script.deploy_template');
+  if (SLIDES_INTENT.test(prompt) && !SLIDES_NEGATION.test(prompt)) {
+    required.add('google_slides.create');
+  }
+  if (APPS_SCRIPT_INTENT.test(prompt) && !APPS_SCRIPT_NEGATION.test(prompt)) {
+    required.add('apps_script.deploy_template');
+  }
   if (EMAIL_DELIVERY_INTENT.test(prompt) && !EMAIL_NEGATION.test(prompt))
     required.add('gmail.send');
   if (needsDriveExcel) {
@@ -63,7 +73,7 @@ export function detectWorkflowIntent(prompt: string): WorkflowIntent {
     required.add('excel.read');
   }
   return {
-    needsDesktop: needsExcel && !needsDriveExcel,
+    needsDesktop: needsExcel && (!needsDriveExcel || DESKTOP_OPERATION_INTENT.test(prompt)),
     needsGoogleConnection: GOOGLE_INTENT.test(prompt),
     requiredNodeTypes: [...required],
   };
