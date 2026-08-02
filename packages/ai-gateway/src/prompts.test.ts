@@ -192,7 +192,7 @@ describe('planner prompts', () => {
       'excel.read',
       'excel.merge',
       'excel.create_report',
-      'excel.open_file',
+      'excel.visible_review',
     ]);
     expect(example.workflow.edges).toEqual([
       { from: 'download_drive_workbooks', to: 'read_local_workbooks' },
@@ -211,8 +211,11 @@ describe('planner prompts', () => {
       type: 'google_drive.download_excel_folder',
     });
     expect(example.workflow.nodes.at(-1)).toMatchObject({
-      config: { application: 'excel' },
-      type: 'excel.open_file',
+      config: {
+        actions: ['autofit_used_range', 'save_workbook', 'verify_active_workbook'],
+        application: 'excel',
+      },
+      type: 'excel.visible_review',
     });
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });

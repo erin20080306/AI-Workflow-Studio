@@ -13,6 +13,8 @@ files:
 mac:
   artifactName: AI-Workflow-Studio-Agent-${version}-mac-${arch}.${ext}
   category: public.app-category.productivity
+  extendInfo:
+    NSAppleEventsUsageDescription: AI Workflow Studio uses approved Apple Events only to visibly operate Microsoft Excel after local opt-in.
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   hardenedRuntime: true

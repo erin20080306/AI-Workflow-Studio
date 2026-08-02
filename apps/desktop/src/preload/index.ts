@@ -40,12 +40,16 @@ const bridge: DesktopAgentBridge = {
     >,
   setAutoStart: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.setAutoStart, enabled) as Promise<AgentSnapshot>,
+  setComputerUseEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.setComputerUseEnabled, enabled) as Promise<AgentSnapshot>,
   setExecutorRunning: (running: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.setExecutorRunning, running) as Promise<AgentSnapshot>,
   setPrivacyMode: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.setPrivacyMode, enabled) as Promise<AgentSnapshot>,
   startUpdateCheck: () =>
     ipcRenderer.invoke(IPC_CHANNELS.startUpdateCheck) as Promise<AgentSnapshot>,
+  takeOverComputerUse: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.takeOverComputerUse) as Promise<AgentSnapshot>,
 };
 
 contextBridge.exposeInMainWorld('desktopAgent', bridge);

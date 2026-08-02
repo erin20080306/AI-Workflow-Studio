@@ -81,6 +81,7 @@ const StepRowSchema = z.object({
   error_message: z.string().max(500).nullable(),
   node_id: z.string().min(1).max(120),
   node_type: z.string().min(1).max(120),
+  output_summary: z.record(z.string(), z.unknown()),
   processed_file_count: z.number().int().min(0),
   processed_row_count: z.number().int().min(0),
   started_at: TimestampSchema.nullable(),
@@ -94,6 +95,16 @@ const StepRowSchema = z.object({
     'timed_out',
   ]),
 });
+const ComputerUseProgressSchema = z
+  .object({
+    computerUseAction: z.enum([
+      'excel.autofit_used_range',
+      'excel.open_workbook',
+      'excel.save_workbook',
+      'excel.verify_active_workbook',
+    ]),
+  })
+  .strict();
 const DriveStepRowSchema = z
   .object({
     input_summary: z.record(z.string(), z.unknown()),
@@ -541,6 +552,11 @@ async function runView(tenantId: string, runId: string): Promise<WorkflowRunView
           }),
       nodeId: step.node_id,
       nodeType: step.node_type,
+      ...(ComputerUseProgressSchema.safeParse(step.output_summary).success
+        ? {
+            currentAction: ComputerUseProgressSchema.parse(step.output_summary).computerUseAction,
+          }
+        : {}),
       processedFileCount: step.processed_file_count,
       processedRowCount: step.processed_row_count,
       ...(step.started_at === null ? {} : { startedAt: step.started_at }),
@@ -1334,12 +1350,17 @@ export async function syncProductionAgentProgress(input: AgentProgressInput): Pr
     });
   }
   const safeStep = StepResultSchema.parse(parsed.step);
+  const computerUseProgress = ComputerUseProgressSchema.safeParse(safeStep.output);
   const update = await admin
     .from('workflow_run_steps')
     .update({
       completed_at: safeStep.completedAt ?? null,
       error_code: safeStep.error?.code ?? null,
       error_message: safeStep.error?.message ?? null,
+      output_summary:
+        safeStep.status === 'running' && computerUseProgress.success
+          ? computerUseProgress.data
+          : {},
       processed_file_count: safeStep.processedFileCount,
       processed_row_count: safeStep.processedRowCount,
       started_at: safeStep.startedAt ?? null,

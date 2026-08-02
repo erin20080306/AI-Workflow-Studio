@@ -276,6 +276,28 @@ export const ExcelOpenFileNodeSchema = node(
     })
     .strict(),
 );
+export const ExcelVisibleReviewNodeSchema = node(
+  'excel.visible_review',
+  z
+    .object({
+      actions: z
+        .array(z.enum(['autofit_used_range', 'save_workbook', 'verify_active_workbook']))
+        .min(1)
+        .max(3)
+        .default(['autofit_used_range', 'save_workbook', 'verify_active_workbook'])
+        .refine(
+          (actions) => new Set(actions).size === actions.length,
+          'Visible Excel actions must be unique',
+        )
+        .refine(
+          (actions) => actions.at(-1) === 'verify_active_workbook',
+          'Visible Excel operation must end by verifying the active workbook',
+        ),
+      application: z.literal('excel').default('excel'),
+      folderAliasId: UuidSchema,
+    })
+    .strict(),
+);
 export const ExcelSplitByFieldNodeSchema = node(
   'excel.split_by_field',
   z
@@ -583,6 +605,7 @@ export const WorkflowNodeSchema = z.discriminatedUnion('type', [
   ExcelWriteNodeSchema,
   ExcelCreateReportNodeSchema,
   ExcelOpenFileNodeSchema,
+  ExcelVisibleReviewNodeSchema,
   ExcelSplitByFieldNodeSchema,
   DataMapColumnsNodeSchema,
   DataFilterNodeSchema,

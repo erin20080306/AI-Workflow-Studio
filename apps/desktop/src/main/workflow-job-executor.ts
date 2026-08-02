@@ -16,6 +16,7 @@ import {
 import { z } from 'zod';
 
 import type { AgentJobReporter } from './agent-client';
+import { DesktopComputerUseController, type VisibleExcelAction } from './computer-use';
 import { FolderAuthorizationError } from './folder-grants';
 import { DesktopSpreadsheetExecutor } from './local-executor';
 
@@ -73,6 +74,7 @@ const SUPPORTED_NODE_TYPES = [
   'excel.write',
   'excel.create_report',
   'excel.open_file',
+  'excel.visible_review',
   'data.filter',
   'data.map_columns',
   'data.deduplicate',
@@ -91,6 +93,7 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
     private readonly deviceId: string,
     private readonly spreadsheet: DesktopSpreadsheetExecutor,
     private readonly reporter: AgentJobReporter,
+    private readonly computerUse?: DesktopComputerUseController,
   ) {
     const definition = NODE_CATALOG_BY_TYPE.get(type);
     if (definition === undefined) {
@@ -366,6 +369,43 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
             output: jsonEnvelope(envelope),
           };
         }
+        case 'excel.visible_review': {
+          if (this.computerUse === undefined) {
+            throw new Error('Visible Computer Use is unavailable.');
+          }
+          const relativePath = envelope.paths.at(-1);
+          if (
+            relativePath === undefined ||
+            (envelope.folderAliasId !== undefined &&
+              envelope.folderAliasId !== parsed.config.folderAliasId)
+          ) {
+            throw new Error('No approved output workbook is available for visible review.');
+          }
+          const workbookPath = await this.spreadsheet.resolveWorkbookPath(this.deviceId, {
+            folderAliasId: parsed.config.folderAliasId,
+            relativePath,
+          });
+          await this.computerUse.operateExcel(
+            {
+              actions: parsed.config.actions as readonly VisibleExcelAction[],
+              workbookPath,
+            },
+            this.reporter.signal,
+            async (action) => {
+              await this.reporter.reportStep({
+                nodeId: context.nodeId,
+                output: { computerUseAction: action },
+                processedFileCount: 0,
+                processedRowCount: 0,
+                status: 'running',
+              });
+            },
+          );
+          return {
+            metrics: { processedFileCount: 1 },
+            output: jsonEnvelope(envelope),
+          };
+        }
         default:
           throw new Error(`Desktop node ${parsed.type} is not supported.`);
       }
@@ -376,12 +416,17 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
 }
 
 export class DesktopWorkflowJobExecutor {
-  constructor(private readonly spreadsheet: DesktopSpreadsheetExecutor) {}
+  constructor(
+    private readonly spreadsheet: DesktopSpreadsheetExecutor,
+    private readonly computerUse?: DesktopComputerUseController,
+  ) {}
 
   async execute(job: AgentJob, reporter: AgentJobReporter): Promise<JsonValue> {
     const registry = new NodeRegistry();
     for (const type of SUPPORTED_NODE_TYPES) {
-      registry.register(new DesktopNodeExecutor(type, job.deviceId, this.spreadsheet, reporter));
+      registry.register(
+        new DesktopNodeExecutor(type, job.deviceId, this.spreadsheet, reporter, this.computerUse),
+      );
     }
     const engine = new WorkflowEngine(registry);
     const result = await engine.execute(job.workflow, {

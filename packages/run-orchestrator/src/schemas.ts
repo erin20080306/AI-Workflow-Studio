@@ -72,6 +72,14 @@ const RunNotificationSchema = z
 const RunStepViewSchema = StepResultSchema.omit({ output: true })
   .extend({
     attempt: z.number().int().min(1).max(100),
+    currentAction: z
+      .enum([
+        'excel.autofit_used_range',
+        'excel.open_workbook',
+        'excel.save_workbook',
+        'excel.verify_active_workbook',
+      ])
+      .optional(),
     nodeType: z.string().min(1).max(120),
   })
   .strict();

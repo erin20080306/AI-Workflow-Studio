@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { FolderGrantStore } from './folder-grants';
+import { DesktopComputerUseController } from './computer-use';
 import { DesktopSpreadsheetExecutor } from './local-executor';
 import { DesktopWorkflowJobExecutor } from './workflow-job-executor';
 import type { AgentJobReporter } from './agent-client';
@@ -84,12 +85,25 @@ describe('DesktopWorkflowJobExecutor', () => {
     const spreadsheet = new DesktopSpreadsheetExecutor(
       grants,
       new ProcessingLedger(join(directory, '.agent', 'processing-ledger.json')),
-      async (path) => {
+    );
+    const computerUse = new DesktopComputerUseController({
+      audit: () => undefined,
+      driver: {
+        async perform(input) {
+          return { activeWorkbookName: input.workbookPath.split('/').at(-1) ?? '' };
+        },
+      },
+      onSnapshot: () => undefined,
+      async openPath(path) {
         opened.push(path);
         return '';
       },
-    );
-    const executor = new DesktopWorkflowJobExecutor(spreadsheet);
+      permission: { check: () => 'granted' },
+      platform: 'darwin',
+      wait: async () => undefined,
+    });
+    computerUse.setEnabled(true);
+    const executor = new DesktopWorkflowJobExecutor(spreadsheet, computerUse);
     const steps: StepResult[] = [];
     const reporter: AgentJobReporter = {
       async downloadDriveExcelFile(_nodeId, file) {
@@ -189,9 +203,13 @@ describe('DesktopWorkflowJobExecutor', () => {
             version: 1,
           },
           {
-            config: { application: 'excel', folderAliasId: grant.folderAliasId },
+            config: {
+              actions: ['autofit_used_range', 'save_workbook', 'verify_active_workbook'],
+              application: 'excel',
+              folderAliasId: grant.folderAliasId,
+            },
             id: 'open',
-            type: 'excel.open_file',
+            type: 'excel.visible_review',
             version: 1,
           },
         ],

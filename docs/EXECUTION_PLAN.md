@@ -64,8 +64,8 @@ test, and build checks and has been committed.
 | 46    | Full-stack site acceptance     | AI-built public and admin experiences pass role, data, file, and action E2E gates   | pending     |
 | 47    | Intelligent Work automation    | Natural-language Work flows complete approved cloud and Desktop acceptance          | completed   |
 | 48    | Bilingual run operations       | Steps, audit events, actors, and notifications follow the selected UI language      | completed   |
-| 49    | Drive-to-Desktop Excel handoff | Bounded Drive files reach an approved local workspace and open the verified result  | in-progress |
-| 50    | Visible Computer Use           | Paired agents visibly operate allowlisted apps with approval and state verification | pending     |
+| 49    | Drive-to-Desktop Excel handoff | Bounded Drive files reach an approved local workspace and open the verified result  | blocked     |
+| 50    | Visible Computer Use           | Paired agents visibly operate allowlisted apps with approval and state verification | in-progress |
 
 ## Phase 0 — Repository audit
 
@@ -611,7 +611,7 @@ invented translation.
 
 ## Phase 49 — Drive Excel reporting and approved Slides automation
 
-Status: in progress
+Status: blocked on Production paired-Agent acceptance
 
 Extend Intelligent Work with one bounded Google Drive flow for a selected
 folder: recursively discover Excel workbooks and Google Sheets, normalize
@@ -658,6 +658,8 @@ architecture can hand the verified local artifact back to a separate reviewed
 artifact flow.
 
 ## Phase 50 — Visible Computer Use
+
+Status: in progress
 
 Add an opt-in Computer Use runtime to the paired Desktop Agent. It must visibly
 launch and focus an allowlisted application, observe an accessibility or

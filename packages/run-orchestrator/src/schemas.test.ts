@@ -46,4 +46,39 @@ describe('WorkflowRunViewSchema', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('accepts only an allowlisted visible Computer Use action on a running step', () => {
+    const parsed = WorkflowRunViewSchema.parse({
+      ...runView,
+      steps: [
+        {
+          attempt: 1,
+          currentAction: 'excel.verify_active_workbook',
+          nodeId: 'visible_review',
+          nodeType: 'excel.visible_review',
+          processedFileCount: 0,
+          processedRowCount: 0,
+          status: 'running',
+        },
+      ],
+    });
+
+    expect(parsed.steps[0]?.currentAction).toBe('excel.verify_active_workbook');
+    expect(
+      WorkflowRunViewSchema.safeParse({
+        ...runView,
+        steps: [
+          {
+            attempt: 1,
+            currentAction: 'shell.execute_anything',
+            nodeId: 'visible_review',
+            nodeType: 'excel.visible_review',
+            processedFileCount: 0,
+            processedRowCount: 0,
+            status: 'running',
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
 });

@@ -47,6 +47,11 @@ export interface RunNotification {
 
 export interface RunStepView extends StepResult {
   readonly attempt: number;
+  readonly currentAction?:
+    | 'excel.autofit_used_range'
+    | 'excel.open_workbook'
+    | 'excel.save_workbook'
+    | 'excel.verify_active_workbook';
   readonly nodeType: string;
 }
 

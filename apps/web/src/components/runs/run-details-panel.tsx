@@ -9,6 +9,7 @@ import { useLanguage } from '@/components/language-provider';
 import {
   localizeActorType,
   localizeAuditAction,
+  localizeComputerUseAction,
   localizeNotification,
   localizeRunStep,
   localizeWorkflowName,
@@ -276,6 +277,11 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                   <p className="mt-0.5 text-xs text-slate-500">
                     {step.processedFileCount} {text.files} · {step.processedRowCount} {text.rows}
                   </p>
+                  {step.status === 'running' && step.currentAction !== undefined ? (
+                    <p className="mt-1 text-xs font-semibold text-indigo-700" aria-live="polite">
+                      {localizeComputerUseAction(step.currentAction, locale)}
+                    </p>
+                  ) : null}
                 </div>
                 <span className="w-fit rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">
                   {stepStatusLabels[locale][step.status]}

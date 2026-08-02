@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 49 — Drive-to-Desktop Excel handoff (in progress)
+Phase 50 — Visible Computer Use (in progress; macOS accessibility acceptance blocked)
 
 ## Repository baseline
 
@@ -3745,3 +3745,70 @@ Status: implementation complete; Production acceptance pending
 - Production deployment and packaged-Agent acceptance have not been performed
   for this handoff. Visible mouse, keyboard, Excel-menu, browser, Gmail, and LINE
   operation remains unimplemented and must not be presented as completed.
+
+## Phase 50 — Visible Computer Use
+
+Status: first Excel slice implemented; packaged-Agent acceptance pending
+
+### Implemented
+
+- Added the approval-gated `excel.visible_review` node. The grounded
+  Drive-to-Desktop plan now ends with this node instead of presenting a plain
+  operating-system `open` call as visible automation.
+- Added a Desktop-only Computer Use controller that is disabled by default,
+  requires a local opt-in, checks the operating-system accessibility grant, and
+  exposes a bilingual local status plus an immediate user-takeover control.
+- The first allowlist contains only fixed Excel semantic actions: open the
+  approved workbook, select its visible worksheet, auto-fit rows and columns,
+  save, and verify that the frontmost Excel window still belongs to the exact
+  approved workbook. The model cannot provide AppleScript, PowerShell, shell,
+  JavaScript, arbitrary keys, or screen coordinates.
+- macOS uses a fixed System Events keyboard sequence against the frontmost
+  Microsoft Excel process. Windows uses the fixed Excel ribbon key sequence
+  through the visible foreground window. Both implementations fail closed when
+  the expected workbook window cannot be verified.
+- Added the macOS Apple Events usage description and hardened-runtime automation
+  entitlement required by the packaged Agent. Accessibility permission remains
+  a separate explicit user-controlled operating-system grant.
+- Run progress accepts only the allowlisted Computer Use action codes and stores
+  the current safe action in the existing step summary. Traditional Chinese and
+  English Run views display that action without storing local paths, screen
+  contents, workbook data, or credentials.
+- Computer Use audit events contain action codes, platform identifiers, and a
+  SHA-256 path hash. A raw local path is never included. Denied permissions,
+  mismatched workbooks, interruption, and user takeover fail closed.
+
+### Validation
+
+- `pnpm format:check`: passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed across all 14 applicable workspace projects.
+- `pnpm test`: passed — 332 tests across 70 files, with the separately gated
+  real Excel acceptance test skipped by the deterministic suite.
+- `pnpm build:web`: passed — all 47 application pages compiled successfully.
+  The sandboxed Turbopack attempt could not bind its worker port; the identical
+  permitted retry passed.
+- `pnpm build:desktop`: passed — main, preload, and renderer bundles compiled.
+- `pnpm security:scan-client`: passed — 35 generated browser files scanned.
+- The fixed macOS Excel automation script passed a compile-only test without
+  opening or changing a workbook.
+- A real macOS acceptance attempt created and opened only a temporary workbook,
+  then failed before the first keyboard action with operating-system error
+  `-25211`: `osascript` was not allowed accessibility access. No customer file
+  was modified. This test is intentionally recorded as failed, not passed.
+
+### Remaining acceptance work
+
+- Grant Accessibility and Automation permission to the signed, packaged Desktop
+  Agent, then repeat the real temporary-workbook test and verify the visible
+  selection, auto-fit, save, state checks, interruption, and takeover behavior.
+- Repeat packaged acceptance on Windows. The Windows keyboard path is built and
+  unit-tested through the common allowlisted controller but has not been run on
+  a Windows host.
+- This first slice visibly reviews and formats the verified consolidated output;
+  the high-volume merge itself is still performed by the bounded deterministic
+  local executor. It does not yet claim that hundreds of source workbooks are
+  merged through Excel's visible UI.
+- File-manager, Gmail, Google Sheets, and LINE visible operations remain outside
+  this slice. They must reuse the accepted permission, action, takeover, state
+  verification, approval, and redacted-audit runtime before they can be enabled.

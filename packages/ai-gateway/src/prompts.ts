@@ -239,9 +239,13 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
           version: 1,
         },
         {
-          config: { application: 'excel', folderAliasId },
+          config: {
+            actions: ['autofit_used_range', 'save_workbook', 'verify_active_workbook'],
+            application: 'excel',
+            folderAliasId,
+          },
           id: 'open_excel_result',
-          type: 'excel.open_file',
+          type: 'excel.visible_review',
           version: 1,
         },
       ],
@@ -511,7 +515,7 @@ Planning behavior:
 - Cover every explicit source, transformation, output, and delivery step in the requirement. A validation-only draft is not sufficient when the requirement asks for Gmail, Google Sheets, Google Forms, a report, a presentation, or email delivery.
 - Gmail, Google Sheets, Google Forms, Google Slides, and Apps Script nodes must use a connectionId from googleConnectionIds. Never invent one.
 - Google Drive folder Excel requests must use google_drive.read_excel_folder and may create a non-overwriting google_drive.create_excel_report only when consolidation is requested.
-- When the trusted execution target is Desktop and both a Google connection and approved folder alias are available, a Drive Excel operation must use google_drive.download_excel_folder → excel.read → excel.merge → excel.create_report → excel.open_file. This is an operation flow; never add source code nodes.
+- When the trusted execution target is Desktop and both a Google connection and approved folder alias are available, a Drive Excel operation must use google_drive.download_excel_folder → excel.read → excel.merge → excel.create_report → excel.visible_review. The last node remains approval-gated and runs only when the paired Agent has locally enabled Visible Computer Use. This is an operation flow; never add source code nodes.
 - For Gmail summaries use gmail.read → ai.summarize → report.compose. For Google Forms or Sheets summaries, read the selected source before summarizing. Add google_slides.create only when a presentation is requested. Add gmail.send only when an email recipient is explicitly supplied; default its sendMode to draft unless the user explicitly requests sending.
 - Apps Script may use only the registered apps_script.deploy_template templates. Never produce script source code in a workflow plan.
 

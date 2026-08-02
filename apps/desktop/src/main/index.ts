@@ -10,6 +10,7 @@ import {
   safeStorage,
   session,
   shell,
+  systemPreferences,
   Tray,
   type IpcMainInvokeEvent,
 } from 'electron';
@@ -25,6 +26,7 @@ import {
 } from '../shared/contracts';
 import { ProcessingLedger } from '@ai-workflow-studio/local-executor';
 import { AgentClient, type AgentClientStatus } from './agent-client';
+import { createPlatformExcelDriver, DesktopComputerUseController } from './computer-use';
 import { FolderGrantStore } from './folder-grants';
 import { DesktopSpreadsheetExecutor } from './local-executor';
 import { DesktopWorkflowJobExecutor } from './workflow-job-executor';
@@ -66,7 +68,11 @@ const UuidSchema = z.string().uuid();
 let mainWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let isQuitting = false;
-let settings: DesktopSettings = { autoStart: false, privacyMode: true };
+let settings: DesktopSettings = {
+  autoStart: false,
+  computerUseEnabled: false,
+  privacyMode: true,
+};
 let agentStatus: AgentClientStatus = {
   connection: 'unpaired',
   paired: false,
@@ -78,6 +84,7 @@ let folderGrants: FolderGrantStore;
 let spreadsheetExecutor: DesktopSpreadsheetExecutor;
 let settingsStore: SettingsStore;
 let updater: ManualUpdateController;
+let computerUse: DesktopComputerUseController;
 
 function nativeText(en: string, zhHant: string): string {
   return app.getLocale().toLowerCase().startsWith('zh') ? zhHant : en;
@@ -87,6 +94,13 @@ function currentSnapshot(): AgentSnapshot {
   return {
     agentVersion: app.getVersion(),
     autoStart: settings.autoStart,
+    computerUse: computerUse?.getSnapshot() ?? {
+      enabled: false,
+      permission: 'unsupported',
+      platform: 'unsupported',
+      status: 'idle',
+      takeoverAvailable: false,
+    },
     connection: agentStatus.connection,
     ...(agentStatus.deviceName === undefined ? {} : { deviceName: agentStatus.deviceName }),
     executorRunning: agentClient?.isExecutorRunning() ?? false,
@@ -187,6 +201,8 @@ function registerIpc(): void {
   });
   safeIpc(IPC_CHANNELS.clearSession, async () => {
     await agentClient.clearSession();
+    computerUse.setEnabled(false);
+    settings = await settingsStore.save({ ...settings, computerUseEnabled: false });
     broadcastSnapshot();
     return currentSnapshot();
   });
@@ -246,6 +262,29 @@ function registerIpc(): void {
       openAsHidden: autoStart,
     });
     settings = await settingsStore.save({ ...settings, autoStart });
+    broadcastSnapshot();
+    return currentSnapshot();
+  });
+  safeIpc(IPC_CHANNELS.setComputerUseEnabled, async (_event, enabled: boolean) => {
+    const nextEnabled = z.boolean().parse(enabled);
+    if (nextEnabled && computerUse.requestPermission() !== 'granted') {
+      throw new Error('Visible Computer Use permission is required.');
+    }
+    computerUse.setEnabled(nextEnabled);
+    settings = await settingsStore.save({ ...settings, computerUseEnabled: nextEnabled });
+    logger.info(
+      nextEnabled ? 'COMPUTER_USE_ENABLED' : 'COMPUTER_USE_DISABLED',
+      nextEnabled
+        ? 'Visible Computer Use was enabled by the local user.'
+        : 'Visible Computer Use was disabled by the local user.',
+      { platform: process.platform },
+    );
+    broadcastSnapshot();
+    return currentSnapshot();
+  });
+  safeIpc(IPC_CHANNELS.takeOverComputerUse, () => {
+    computerUse.takeOver();
+    agentClient.stop();
     broadcastSnapshot();
     return currentSnapshot();
   });
@@ -370,7 +409,33 @@ async function initialize(): Promise<void> {
     new ProcessingLedger(join(userData, 'processing-ledger.json')),
     async (absolutePath) => await shell.openPath(absolutePath),
   );
-  const workflowJobExecutor = new DesktopWorkflowJobExecutor(spreadsheetExecutor);
+  computerUse = new DesktopComputerUseController({
+    audit: (event) => {
+      const message =
+        event.code === 'VISIBLE_EXCEL_OPERATION_COMPLETED'
+          ? 'A visible Excel operation completed and its active workbook was verified.'
+          : event.code === 'COMPUTER_USE_ACTION_STARTED'
+            ? 'A visible Computer Use action started.'
+            : event.code === 'COMPUTER_USE_USER_TAKEOVER'
+              ? 'The local user took control and interrupted Computer Use.'
+              : 'A visible Excel operation did not complete.';
+      logger[event.level](event.code, message, event.metadata);
+    },
+    driver: createPlatformExcelDriver(process.platform),
+    onSnapshot: () => broadcastSnapshot(),
+    openPath: async (absolutePath) => await shell.openPath(absolutePath),
+    permission: {
+      check(prompt) {
+        if (process.platform === 'darwin') {
+          return systemPreferences.isTrustedAccessibilityClient(prompt) ? 'granted' : 'denied';
+        }
+        return process.platform === 'win32' ? 'granted' : 'unsupported';
+      },
+    },
+    platform: process.platform,
+  });
+  computerUse.setEnabled(settings.computerUseEnabled);
+  const workflowJobExecutor = new DesktopWorkflowJobExecutor(spreadsheetExecutor, computerUse);
   const vault = new TokenVault(join(userData, 'device-session.enc'), secureCipher());
   updater = new ManualUpdateController(app.isPackaged, logger, () => broadcastSnapshot());
   agentClient = new AgentClient({
@@ -400,6 +465,7 @@ async function initialize(): Promise<void> {
   updateTrayMenu();
   logger.info('AGENT_READY', 'Desktop Agent is ready.', {
     capabilities: spreadsheetExecutor.capabilities(),
+    computerUse: computerUse.getSnapshot(),
     packaged: app.isPackaged,
     platform: process.platform,
     version: app.getVersion(),
@@ -437,6 +503,7 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  computerUse?.takeOver();
   agentClient?.stop();
 });
 

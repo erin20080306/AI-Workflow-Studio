@@ -132,8 +132,51 @@ describe('WorkflowSchema', () => {
 
   it('registers exactly the first-version allowlist with no duplicate type/version pairs', () => {
     const keys = NODE_CATALOG.map((node) => `${node.type}@${node.version}`);
-    expect(NODE_CATALOG).toHaveLength(38);
-    expect(new Set(keys).size).toBe(38);
+    expect(NODE_CATALOG).toHaveLength(39);
+    expect(new Set(keys).size).toBe(39);
+  });
+
+  it('requires unique visible Excel actions ending in active-workbook verification', () => {
+    const baseNode = {
+      config: {
+        application: 'excel',
+        folderAliasId: FOLDER_ID,
+      },
+      id: 'visible_review',
+      type: 'excel.visible_review',
+      version: 1,
+    } as const;
+
+    expect(
+      WorkflowSchema.safeParse({
+        ...exampleWorkflow(),
+        edges: [],
+        nodes: [
+          {
+            ...baseNode,
+            config: {
+              ...baseNode.config,
+              actions: ['verify_active_workbook', 'save_workbook'],
+            },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      WorkflowSchema.safeParse({
+        ...exampleWorkflow(),
+        edges: [],
+        nodes: [
+          {
+            ...baseNode,
+            config: {
+              ...baseNode.config,
+              actions: ['save_workbook', 'save_workbook', 'verify_active_workbook'],
+            },
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it('accepts a bounded cloud Drive Excel consolidation with an approval-gated report', () => {

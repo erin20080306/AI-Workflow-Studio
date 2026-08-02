@@ -10,10 +10,34 @@ export const IPC_CHANNELS = {
   pair: 'agent:pair',
   removeFolder: 'folders:remove',
   setAutoStart: 'settings:auto-start',
+  setComputerUseEnabled: 'settings:computer-use-enabled',
   setExecutorRunning: 'agent:executor-running',
   setPrivacyMode: 'settings:privacy-mode',
   startUpdateCheck: 'updates:check',
+  takeOverComputerUse: 'computer-use:take-over',
 } as const;
+
+export interface ComputerUseSnapshot {
+  readonly currentAction?:
+    | 'excel.autofit_used_range'
+    | 'excel.open_workbook'
+    | 'excel.save_workbook'
+    | 'excel.verify_active_workbook';
+  readonly enabled: boolean;
+  readonly lastCompletedAction?: 'excel.verify_active_workbook';
+  readonly permission: 'denied' | 'granted' | 'unsupported';
+  readonly platform: 'macos' | 'unsupported' | 'windows';
+  readonly status:
+    | 'failed'
+    | 'idle'
+    | 'opening_excel'
+    | 'permission_denied'
+    | 'running'
+    | 'unsupported'
+    | 'user_takeover'
+    | 'verifying';
+  readonly takeoverAvailable: boolean;
+}
 
 export interface FolderGrantView {
   readonly createdAt: string;
@@ -37,6 +61,7 @@ export interface LogEntry {
 export interface AgentSnapshot {
   readonly agentVersion: string;
   readonly autoStart: boolean;
+  readonly computerUse: ComputerUseSnapshot;
   readonly connection: 'offline' | 'online' | 'reconnecting' | 'unpaired';
   readonly deviceName?: string;
   readonly executorRunning: boolean;
@@ -75,7 +100,9 @@ export interface DesktopAgentBridge {
   pair(input: PairDeviceInput): Promise<AgentSnapshot>;
   removeFolder(folderAliasId: string): Promise<readonly FolderGrantView[]>;
   setAutoStart(enabled: boolean): Promise<AgentSnapshot>;
+  setComputerUseEnabled(enabled: boolean): Promise<AgentSnapshot>;
   setExecutorRunning(running: boolean): Promise<AgentSnapshot>;
   setPrivacyMode(enabled: boolean): Promise<AgentSnapshot>;
   startUpdateCheck(): Promise<AgentSnapshot>;
+  takeOverComputerUse(): Promise<AgentSnapshot>;
 }

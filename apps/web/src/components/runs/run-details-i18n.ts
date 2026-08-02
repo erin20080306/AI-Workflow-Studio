@@ -33,6 +33,10 @@ const nodeTypes: Readonly<Record<string, LocalizedValue>> = {
   'excel.create_report': { en: 'Create Excel report', 'zh-Hant': '建立 Excel 報告' },
   'excel.merge': { en: 'Merge Excel data', 'zh-Hant': '合併 Excel 資料' },
   'excel.open_file': { en: 'Open result in Excel', 'zh-Hant': '用 Excel 開啟結果' },
+  'excel.visible_review': {
+    en: 'Visibly review result in Excel',
+    'zh-Hant': '在 Excel 畫面中檢視結果',
+  },
   'excel.read': { en: 'Read Excel data', 'zh-Hant': '讀取 Excel 資料' },
   'excel.split_by_field': { en: 'Split Excel output', 'zh-Hant': '拆分 Excel 輸出' },
   'excel.write': { en: 'Write Excel file', 'zh-Hant': '寫入 Excel 檔案' },
@@ -215,6 +219,35 @@ export function localizeNodeType(nodeType: string, locale: AppLocale): string | 
 
 export function localizeRunStep(nodeId: string, nodeType: string, locale: AppLocale): string {
   return localizeNodeType(nodeType, locale) ?? nodeId;
+}
+
+export function localizeComputerUseAction(
+  action:
+    | 'excel.autofit_used_range'
+    | 'excel.open_workbook'
+    | 'excel.save_workbook'
+    | 'excel.verify_active_workbook',
+  locale: AppLocale,
+): string {
+  const actions = {
+    'excel.autofit_used_range': {
+      en: 'Auto-fitting used rows and columns',
+      'zh-Hant': '正在自動調整使用中欄列',
+    },
+    'excel.open_workbook': {
+      en: 'Opening the approved workbook',
+      'zh-Hant': '正在開啟已核准活頁簿',
+    },
+    'excel.save_workbook': {
+      en: 'Saving the approved workbook',
+      'zh-Hant': '正在儲存已核准活頁簿',
+    },
+    'excel.verify_active_workbook': {
+      en: 'Verifying the active workbook',
+      'zh-Hant': '正在驗證目前活頁簿',
+    },
+  } as const;
+  return actions[action][locale];
 }
 
 export function localizeAuditAction(action: string, locale: AppLocale): string {

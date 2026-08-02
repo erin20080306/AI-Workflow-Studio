@@ -15,6 +15,13 @@ const DESKTOP_LOCALE_KEY = 'ai-workflow-studio-desktop-locale';
 const previewSnapshot: AgentSnapshot = {
   agentVersion: '0.1.0-dev',
   autoStart: false,
+  computerUse: {
+    enabled: false,
+    permission: 'granted',
+    platform: 'macos',
+    status: 'idle',
+    takeoverAvailable: false,
+  },
   connection: 'unpaired',
   executorRunning: false,
   paired: false,
@@ -98,6 +105,15 @@ function createPreviewBridge(): DesktopAgentBridge {
       return folders;
     },
     setAutoStart: (enabled) => emit({ ...snapshot, autoStart: enabled }),
+    setComputerUseEnabled: (enabled) =>
+      emit({
+        ...snapshot,
+        computerUse: {
+          ...snapshot.computerUse,
+          enabled,
+          status: 'idle',
+        },
+      }),
     setExecutorRunning: (running) =>
       emit({
         ...snapshot,
@@ -119,6 +135,16 @@ function createPreviewBridge(): DesktopAgentBridge {
           message: '開發預覽已是最新版本。',
           status: 'up-to-date',
         },
+      }),
+    takeOverComputerUse: () =>
+      emit({
+        ...snapshot,
+        computerUse: {
+          ...snapshot.computerUse,
+          status: 'user_takeover',
+          takeoverAvailable: false,
+        },
+        executorRunning: false,
       }),
   };
 }
@@ -226,6 +252,26 @@ export function DesktopAgentApp() {
       : t('An update is available for review.', '有可供檢視的更新。'),
     'up-to-date': t('This is the latest available version.', '目前已是最新版本。'),
   }[snapshot.update.status];
+  const computerUseStatus = {
+    failed: t('Last visible action failed', '上次可見操作失敗'),
+    idle: t('Ready for an approved action', '等待已核准動作'),
+    opening_excel: t('Opening Microsoft Excel…', '正在開啟 Microsoft Excel…'),
+    permission_denied: t('Accessibility permission required', '需要輔助使用權限'),
+    running: t('Operating visibly in Excel…', '正在 Excel 畫面中操作…'),
+    unsupported: t('This platform is not supported', '此平台目前不支援'),
+    user_takeover: t('Stopped for local user takeover', '已由本機使用者接管停止'),
+    verifying: t('Verifying the active workbook…', '正在驗證目前活頁簿…'),
+  }[snapshot.computerUse.status];
+  const computerUseAction =
+    snapshot.computerUse.currentAction === 'excel.open_workbook'
+      ? t('Open approved workbook', '開啟已核准活頁簿')
+      : snapshot.computerUse.currentAction === 'excel.autofit_used_range'
+        ? t('AutoFit used rows and columns', '自動調整使用中欄列')
+        : snapshot.computerUse.currentAction === 'excel.save_workbook'
+          ? t('Save approved workbook', '儲存已核准活頁簿')
+          : snapshot.computerUse.currentAction === 'excel.verify_active_workbook'
+            ? t('Verify active workbook', '驗證目前活頁簿')
+            : undefined;
 
   async function perform<T>(key: string, action: () => Promise<T>): Promise<T | undefined> {
     setBusy(key);
@@ -509,6 +555,36 @@ export function DesktopAgentApp() {
                     </p>
                   </div>
                 </section>
+                <section className="section-card">
+                  <div className="section-heading">
+                    <div>
+                      <span className="section-kicker">
+                        {t('Visible Computer Use', '可見電腦操作')}
+                      </span>
+                      <h2>{computerUseStatus}</h2>
+                      <p>
+                        {computerUseAction ??
+                          t(
+                            'Excel actions run only after local opt-in and workflow approval.',
+                            'Excel 動作只會在本機啟用且工作流已核准後執行。',
+                          )}
+                      </p>
+                    </div>
+                    {snapshot.computerUse.takeoverAvailable && (
+                      <button
+                        className="danger-button"
+                        onClick={() =>
+                          void perform('take-over', async () => {
+                            setSnapshot(await bridge.takeOverComputerUse());
+                          })
+                        }
+                        type="button"
+                      >
+                        {t('Take over and stop', '接管並停止')}
+                      </button>
+                    )}
+                  </div>
+                </section>
               </>
             )}
           </div>
@@ -695,6 +771,27 @@ export function DesktopAgentApp() {
                   onChange={(enabled) =>
                     void perform('autostart', async () => {
                       setSnapshot(await bridge.setAutoStart(enabled));
+                    })
+                  }
+                />
+              </div>
+              <div className="setting-row">
+                <div>
+                  <strong>{t('Visible Excel operation', 'Excel 可見操作')}</strong>
+                  <p>
+                    {t(
+                      'Allow approved workflows to visibly open, format, save, and verify .xlsx workbooks. macOS requires Accessibility permission.',
+                      '允許已核准工作流在畫面中開啟、格式化、儲存並驗證 .xlsx；macOS 需授予輔助使用權限。',
+                    )}
+                  </p>
+                  <small>{computerUseStatus}</small>
+                </div>
+                <Toggle
+                  checked={snapshot.computerUse.enabled}
+                  label={t('Toggle visible Excel operation', '切換 Excel 可見操作')}
+                  onChange={(enabled) =>
+                    void perform('computer-use', async () => {
+                      setSnapshot(await bridge.setComputerUseEnabled(enabled));
                     })
                   }
                 />

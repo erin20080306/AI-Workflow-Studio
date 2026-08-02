@@ -48,6 +48,13 @@ export const NODE_CATALOG = [
     'desktop',
     'Open an approved workbook in Microsoft Excel.',
   ),
+  entry(
+    'excel.visible_review',
+    'external',
+    'always',
+    'desktop',
+    'Visibly format, save, and verify an approved workbook in Microsoft Excel.',
+  ),
   entry('excel.split_by_field', 'write', 'first_run', 'desktop', 'Create split Excel outputs.'),
   entry('data.map_columns', 'read', 'none', 'either', 'Map columns deterministically.'),
   entry('data.filter', 'read', 'none', 'either', 'Filter rows deterministically.'),

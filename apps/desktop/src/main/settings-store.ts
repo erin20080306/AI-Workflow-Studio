@@ -5,6 +5,7 @@ import { readPrivateFile, writePrivateFile } from './private-files';
 const SettingsSchema = z
   .object({
     autoStart: z.boolean().default(false),
+    computerUseEnabled: z.boolean().default(false),
     privacyMode: z.boolean().default(true),
   })
   .strict();

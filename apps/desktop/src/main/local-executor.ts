@@ -69,6 +69,7 @@ export class DesktopSpreadsheetExecutor {
       'excel.write',
       'excel.create_report',
       'excel.open_file',
+      'excel.visible_review',
       'google_drive.download_excel_folder',
       'data.filter',
       'data.sort',
@@ -210,6 +211,12 @@ export class DesktopSpreadsheetExecutor {
 
   async openWorkbook(deviceId: string, input: AuthorizedInput): Promise<void> {
     if (this.openPath === undefined) throw new Error('Workbook opening is unavailable.');
+    const filePath = await this.resolveWorkbookPath(deviceId, input);
+    const result = await this.openPath(filePath);
+    if (result.trim() !== '') throw new Error('Microsoft Excel could not open the workbook.');
+  }
+
+  async resolveWorkbookPath(deviceId: string, input: AuthorizedInput): Promise<string> {
     const filePath = await this.folderGrants.resolveAuthorizedPath(
       input.folderAliasId,
       deviceId,
@@ -217,10 +224,9 @@ export class DesktopSpreadsheetExecutor {
       'read',
     );
     if (extname(filePath).toLowerCase() !== '.xlsx') {
-      throw new Error('Only an approved .xlsx workbook can be opened by this node.');
+      throw new Error('Only an approved .xlsx workbook can be operated by the Agent.');
     }
-    const result = await this.openPath(filePath);
-    if (result.trim() !== '') throw new Error('Microsoft Excel could not open the workbook.');
+    return filePath;
   }
 
   transform(

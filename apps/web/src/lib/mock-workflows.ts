@@ -72,6 +72,10 @@ export const NODE_PRESENTATION: Readonly<
     category: { en: 'Excel', zhHant: 'Excel' },
     label: { en: 'Open result in Excel', zhHant: '用 Excel 開啟結果' },
   },
+  'excel.visible_review': {
+    category: { en: 'Computer Use', zhHant: '電腦操作' },
+    label: { en: 'Visibly review in Excel', zhHant: '在 Excel 畫面中檢視' },
+  },
   'excel.read': {
     category: { en: 'Excel', zhHant: 'Excel' },
     label: { en: 'Read Excel', zhHant: '讀取 Excel' },
