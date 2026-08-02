@@ -12,7 +12,7 @@
     "build:preload": "vite build --config vite.preload.config.ts",
     "build:renderer": "vite build --config vite.config.ts",
     "dev": "pnpm build && electron .",
-    "package:test": "pnpm build && electron-builder --config electron-builder.dev.yml --dir --publish never",
+    "package:test": "pnpm build && electron-builder --config electron-builder.dev.yml --dir --publish never && node ./ad-hoc-sign-test-macos.mjs",
     "package:store:windows": "pnpm build && electron-builder --config electron-builder.store.yml --win appx --x64 --publish never",
     "typecheck": "tsc --noEmit"
   },

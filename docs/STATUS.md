@@ -3853,15 +3853,20 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
   identical permitted retry passed.
 - `pnpm build:desktop`: passed — main, preload, and renderer bundles compiled.
 - `pnpm --filter @ai-workflow-studio/desktop package:test`: passed and produced
-  an unsigned macOS arm64 test application. It was installed locally with the
-  prior bundle preserved at `/private/tmp/AI Workflow Studio Agent.previous.app`.
+  an ad-hoc-signed macOS arm64 test application with the stable
+  `com.aiworkflowstudio.agent` identifier. The earlier generic-`Electron`
+  bundle was preserved at
+  `/private/tmp/AI Workflow Studio Agent.unsigned-identifier.app`.
 - The fixed Chrome AppleScript passed compile-only validation outside the Codex
   process sandbox; the sandbox cannot load Chrome's scripting dictionary but
   the identical non-executing macOS compile succeeded.
-- The newly installed test bundle advertises the visible Drive capability and
-  retained its encrypted pairing record, Computer Use opt-in, and existing
-  folder alias. Replacing an unsigned test bundle invalidated the prior macOS
-  Accessibility decision, so real Drive selection/download acceptance remains
-  pending a renewed local Accessibility grant and explicit authorization of the
-  browser download folder. No Drive item was selected, downloaded, or changed
-  during this validation.
+- The installed test bundle advertises the visible Drive capability. The local
+  Accessibility switch has been enabled, but the first launch under the stable
+  identity still requires the user-controlled macOS Keychain prompt to unlock
+  the encrypted pairing record. Real Drive selection/download acceptance also
+  requires explicit authorization of the browser download folder. No Drive
+  item was selected, downloaded, or changed during this validation.
+- Local macOS test packages are now ad-hoc signed after packaging with the
+  stable `com.aiworkflowstudio.agent` identifier. This keeps Accessibility
+  consent attached to the Agent bundle during local acceptance; it is not an
+  Apple Developer ID signature or notarization.
