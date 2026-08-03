@@ -4,11 +4,13 @@ export {
   AgentJobSchema,
   MappingProposalSchema,
   StepResultSchema,
+  WorkbookBatchProgressSchema,
   WorkflowRunSchema,
   type AgentHeartbeat,
   type AgentJob,
   type AIPlannerOutput,
   type StepResult,
+  type WorkbookBatchProgress,
   type WorkflowRun,
 } from './protocol';
 export {

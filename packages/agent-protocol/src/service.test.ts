@@ -37,12 +37,17 @@ interface Fixture {
   }>;
 }
 
-function createFixture(): Fixture {
+function createFixture(options?: {
+  readonly isAgentVersionSupported?: (agentVersion: string | undefined) => boolean;
+}): Fixture {
   let now = new Date('2026-07-26T06:00:00.000Z');
   const store = new InMemoryAgentStore();
   const service = new AgentService({
     clock: () => new Date(now),
     crypto: new AgentCrypto({ pepper: PEPPER }),
+    ...(options?.isAgentVersionSupported === undefined
+      ? {}
+      : { isAgentVersionSupported: options.isAgentVersionSupported }),
     store,
   });
   const actor: WebActor = {
@@ -169,6 +174,31 @@ describe('AgentService', () => {
     const claim = attempts.find((attempt) => attempt.status === 'fulfilled');
     expect(claim?.value.claimToken).toMatch(/^clm_/);
     expect(JSON.stringify(fixture.store.snapshot())).not.toContain(claim?.value.claimToken);
+  });
+
+  it('hides pending jobs from an unsupported Agent and rejects a stale direct claim', async () => {
+    const fixture = createFixture({
+      isAgentVersionSupported: (agentVersion) => agentVersion === '0.2.0',
+    });
+    const paired = await fixture.pair();
+    const credentials = fixture.credentials(paired.deviceToken);
+    fixture.store.seedJob(job(JOB_A, TENANT_A, paired.device.id, RUN_A));
+
+    await expect(fixture.service.listJobs(credentials)).resolves.toEqual([]);
+    await expect(
+      fixture.service.claimJob(credentials, JOB_A, { leaseSeconds: 60 }),
+    ).rejects.toMatchObject({ code: 'AGENT_FORBIDDEN' });
+    expect(fixture.store.snapshot().jobs[0]?.job.status).toBe('pending');
+
+    await fixture.service.heartbeat(credentials, {
+      agentVersion: '0.2.0',
+      executorRunning: true,
+      metadata: { platform: 'darwin' },
+    });
+    await expect(fixture.service.listJobs(credentials)).resolves.toHaveLength(1);
+    await expect(
+      fixture.service.claimJob(credentials, JOB_A, { leaseSeconds: 60 }),
+    ).resolves.toMatchObject({ job: { status: 'claimed' } });
   });
 
   it('enforces token-derived tenant and device isolation for job claims', async () => {

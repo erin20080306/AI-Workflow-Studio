@@ -122,6 +122,84 @@ describe('planner prompts', () => {
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });
 
+  it('keeps cloud Drive Excel planning at the selected folder by default without changing the node sequence', () => {
+    const googleRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
+      },
+      prompt:
+        '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel，匯總成一份 Excel，產生摘要報告、5 頁 Google Slides 與核准型 GAS。',
+    };
+    const example = buildPlannerShapeExample(googleRequest);
+
+    expect(example.workflow.nodes.map((node) => node.type)).toEqual([
+      'google_drive.read_excel_folder',
+      'google_drive.create_excel_report',
+      'ai.summarize',
+      'report.compose',
+      'google_slides.create',
+      'apps_script.deploy_template',
+    ]);
+    expect(example.workflow.nodes[0]).toMatchObject({
+      config: { includeSubfolders: false },
+      type: 'google_drive.read_excel_folder',
+    });
+    expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+  });
+
+  it('keeps subfolder traversal disabled when the prompt explicitly rejects recursion', () => {
+    const googleRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
+      },
+      prompt:
+        '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel 並匯總，不遞迴讀取子資料夾。',
+    };
+    const example = buildPlannerShapeExample(googleRequest);
+
+    expect(example.workflow.nodes[0]).toMatchObject({
+      config: { includeSubfolders: false },
+      type: 'google_drive.read_excel_folder',
+    });
+  });
+
+  it.each([
+    ['Traditional Chinese', '並連同所有子資料夾'],
+    ['Simplified Chinese', '并包括所有子文件夹'],
+    ['English', 'including all nested folders recursively'],
+  ])(
+    'enables cloud Drive subfolder traversal only when explicitly requested in %s',
+    (_language, traversalRequest) => {
+      const googleRequest: PlannerRequest = {
+        ...request,
+        context: {
+          ...request.context,
+          googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
+        },
+        prompt: `讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel，${traversalRequest}，匯總成一份 Excel，產生摘要報告、5 頁 Google Slides 與核准型 GAS。`,
+      };
+      const example = buildPlannerShapeExample(googleRequest);
+
+      expect(example.workflow.nodes.map((node) => node.type)).toEqual([
+        'google_drive.read_excel_folder',
+        'google_drive.create_excel_report',
+        'ai.summarize',
+        'report.compose',
+        'google_slides.create',
+        'apps_script.deploy_template',
+      ]);
+      expect(example.workflow.nodes[0]).toMatchObject({
+        config: { includeSubfolders: true },
+        type: 'google_drive.read_excel_folder',
+      });
+      expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+    },
+  );
+
   it('grounds an approved local Excel request with deterministic transformations and output', () => {
     const desktopRequest: PlannerRequest = {
       ...request,
@@ -203,7 +281,7 @@ describe('planner prompts', () => {
     expect(example.workflow.nodes[0]).toMatchObject({
       config: {
         browser: 'chrome',
-        downloadTimeoutSeconds: 300,
+        downloadTimeoutSeconds: 600,
         folderAliasId: '10000000-0000-4000-8000-000000000912',
         folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
         maxFileSizeBytes: 50_000_000,
@@ -263,6 +341,180 @@ describe('planner prompts', () => {
     });
     expect(example.workflow.nodes.at(-1)).toMatchObject({
       config: { template: 'slides-executive-report' },
+      type: 'apps_script.deploy_template',
+    });
+    expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+  });
+
+  it('grounds the visible Codex Chrome request through local Excel before the path-free cloud continuation', () => {
+    const downloadsAliasId = '10000000-0000-4000-8000-000000000912';
+    const connectionId = '10000000-0000-4000-8000-000000000911';
+    const visibleCodexRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        allowedFolderAliasIds: [downloadsAliasId],
+        executionTarget: {
+          deviceId: '10000000-0000-4000-8000-000000000913',
+          type: 'desktop',
+        },
+        googleConnectionIds: [connectionId],
+      },
+      prompt:
+        '使用可見 Codex 模式開啟 Chrome，從 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 下載 Excel，在我的電腦安全整合，再將不含原始資料的統計摘要交回雲端產生報告、Slides 與 GAS 簡報。',
+    };
+    const example = buildPlannerShapeExample(visibleCodexRequest);
+
+    expect(example.workflow.executionTarget).toEqual({
+      deviceId: '10000000-0000-4000-8000-000000000913',
+      type: 'desktop',
+    });
+    const nodeTypes = example.workflow.nodes.map((node) => node.type);
+    expect(nodeTypes).toEqual([
+      'google_drive.visible_download_folder',
+      'excel.read',
+      'excel.merge',
+      'excel.create_report',
+      'excel.visible_review',
+      'ai.summarize',
+      'report.compose',
+      'google_slides.create',
+      'apps_script.deploy_template',
+    ]);
+    expect(nodeTypes).not.toContain('google_drive.read_excel_folder');
+    expect(nodeTypes).not.toContain('google_drive.create_excel_report');
+    expect(example.workflow.edges).toEqual([
+      { from: 'download_drive_workbooks', to: 'read_local_workbooks' },
+      { from: 'read_local_workbooks', to: 'merge_local_workbooks' },
+      { from: 'merge_local_workbooks', to: 'create_local_report' },
+      { from: 'create_local_report', to: 'open_excel_result' },
+      { from: 'open_excel_result', to: 'summarize_local_result' },
+      { from: 'summarize_local_result', to: 'compose_local_result_report' },
+      { from: 'compose_local_result_report', to: 'create_result_slides' },
+      { from: 'create_result_slides', to: 'deploy_result_apps_script' },
+    ]);
+    expect(example.workflow.nodes[0]).toMatchObject({
+      config: {
+        browser: 'chrome',
+        downloadTimeoutSeconds: 600,
+        folderAliasId: downloadsAliasId,
+        folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
+        maxFileSizeBytes: 50_000_000,
+        maxFiles: 500,
+      },
+      type: 'google_drive.visible_download_folder',
+    });
+    expect(example.workflow.nodes[1]).toMatchObject({
+      config: {
+        maxFileSizeBytes: 20_000_000,
+        maxRows: 100_000,
+        maxSheets: 200,
+      },
+      type: 'excel.read',
+    });
+    expect(example.workflow.nodes[2]).toMatchObject({
+      config: { columnMode: 'union', includeSourceFile: true },
+      type: 'excel.merge',
+    });
+    expect(example.workflow.nodes[3]).toMatchObject({
+      config: { folderAliasId: downloadsAliasId, overwrite: false },
+      type: 'excel.create_report',
+    });
+    expect(example.workflow.nodes[4]).toMatchObject({
+      config: {
+        actions: ['autofit_used_range', 'save_workbook', 'verify_active_workbook'],
+        application: 'excel',
+        folderAliasId: downloadsAliasId,
+      },
+      type: 'excel.visible_review',
+    });
+    expect(example.workflow.nodes[5]).toMatchObject({
+      config: { maxCharacters: 6_000, provider: 'auto', tier: 'auto' },
+      type: 'ai.summarize',
+    });
+    expect(example.workflow.nodes[7]).toMatchObject({
+      config: {
+        connectionId,
+        folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
+        maxSlides: 10,
+      },
+      type: 'google_slides.create',
+    });
+    expect(example.workflow.nodes[8]).toMatchObject({
+      config: {
+        connectionId,
+        deployment: 'api_executable',
+        template: 'slides-executive-report',
+      },
+      type: 'apps_script.deploy_template',
+    });
+    expect(example.assumptions).toContain(
+      'Only a bounded path-free statistical profile of the consolidated workbook is relayed to approved cloud report steps; the local workbook and absolute paths remain on the Desktop Agent.',
+    );
+    expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+  });
+
+  it('adds the required summary and report predecessors for a visible Slides-only request', () => {
+    const visibleSlidesRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        allowedFolderAliasIds: ['10000000-0000-4000-8000-000000000912'],
+        executionTarget: {
+          deviceId: '10000000-0000-4000-8000-000000000913',
+          type: 'desktop',
+        },
+        googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
+      },
+      prompt:
+        '使用可見 Codex 模式開啟 Chrome，從 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 下載並整合 Excel，然後建立 Google Slides。',
+    };
+
+    const example = buildPlannerShapeExample(visibleSlidesRequest);
+
+    expect(example.workflow.nodes.map((node) => node.type)).toEqual([
+      'google_drive.visible_download_folder',
+      'excel.read',
+      'excel.merge',
+      'excel.create_report',
+      'excel.visible_review',
+      'ai.summarize',
+      'report.compose',
+      'google_slides.create',
+    ]);
+    expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+  });
+
+  it('closes a visible GAS-only request over summary and report without inventing Slides', () => {
+    const visibleGasRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        allowedFolderAliasIds: ['10000000-0000-4000-8000-000000000912'],
+        executionTarget: {
+          deviceId: '10000000-0000-4000-8000-000000000913',
+          type: 'desktop',
+        },
+        googleConnectionIds: ['10000000-0000-4000-8000-000000000911'],
+      },
+      prompt:
+        '使用可見 Codex 模式開啟 Chrome，從 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 下載並整合 Excel，並部署核准型 GAS。',
+    };
+
+    const example = buildPlannerShapeExample(visibleGasRequest);
+
+    expect(example.workflow.nodes.map((node) => node.type)).toEqual([
+      'google_drive.visible_download_folder',
+      'excel.read',
+      'excel.merge',
+      'excel.create_report',
+      'excel.visible_review',
+      'ai.summarize',
+      'report.compose',
+      'apps_script.deploy_template',
+    ]);
+    expect(example.workflow.nodes.at(-1)).toMatchObject({
+      config: { template: 'sheet-cost-summary' },
       type: 'apps_script.deploy_template',
     });
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);

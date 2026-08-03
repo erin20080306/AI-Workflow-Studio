@@ -131,6 +131,17 @@ const RunStepViewSchema = StepResultSchema.omit({ output: true })
         'excel.verify_active_workbook',
       ])
       .optional(),
+    driveWorkbookProgress: z
+      .discriminatedUnion('phase', [
+        z.object({ phase: z.literal('scanning') }).strict(),
+        z
+          .object({
+            phase: z.literal('batching'),
+            totalWorkbookCount: z.number().int().min(1).max(1_000),
+          })
+          .strict(),
+      ])
+      .optional(),
     nodeType: z.string().min(1).max(120),
     result: RunStepResultSchema.optional(),
   })

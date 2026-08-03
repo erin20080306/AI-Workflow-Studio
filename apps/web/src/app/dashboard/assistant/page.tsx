@@ -9,7 +9,7 @@ import { requireWorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 
 export const metadata: Metadata = {
-  title: 'AI 工作台',
+  title: 'Work｜工作',
 };
 
 export default async function AssistantPage() {

@@ -84,6 +84,9 @@ export interface RunStepView extends StepResult {
     | 'excel.open_workbook'
     | 'excel.save_workbook'
     | 'excel.verify_active_workbook';
+  readonly driveWorkbookProgress?:
+    | { readonly phase: 'scanning' }
+    | { readonly phase: 'batching'; readonly totalWorkbookCount: number };
   readonly nodeType: string;
   readonly result?: RunStepResult;
 }

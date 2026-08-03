@@ -125,7 +125,7 @@ describe('local spreadsheet executor', () => {
     const outputPath = join(directory, 'report.xlsx');
     await createFixtureWorkbook(fixturePath);
 
-    await expect(readSpreadsheet(join(directory, 'orders.xls'))).rejects.toMatchObject({
+    await expect(readSpreadsheet(join(directory, 'orders.xlsm'))).rejects.toMatchObject({
       code: 'FILE_FORMAT_UNSUPPORTED',
     });
     await expect(readSpreadsheet(fixturePath, { maxRows: 2 })).rejects.toMatchObject({
@@ -180,6 +180,24 @@ describe('local spreadsheet executor', () => {
       { outputPath },
     );
     expect(await readFile(outputPath, 'utf8')).toContain(`'=SUM(1,2)`);
+  });
+
+  it('does not mistake values containing header substrings for a later header row', async () => {
+    const directory = await temporaryDirectory();
+    const sourcePath = join(directory, 'status.csv');
+    await writeFile(
+      sourcePath,
+      'Status,Amount,Private\nPaid,120,customer-1\nPending,80,customer-2\nPaid,200,customer-3\n',
+      'utf8',
+    );
+
+    const document = await readSpreadsheet(sourcePath, { headerMode: 'auto' });
+
+    expect(document.sheets[0]).toMatchObject({
+      columns: ['Status', 'Amount', 'Private'],
+      headerRow: 1,
+    });
+    expect(document.sheets[0]?.rows).toHaveLength(3);
   });
 
   it('sorts, aggregates, validates, and writes a styled report deterministically', async () => {

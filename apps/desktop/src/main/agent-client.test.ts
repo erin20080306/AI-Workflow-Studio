@@ -253,10 +253,11 @@ describe('AgentClient', () => {
     );
   });
 
-  it('accepts the wrapped lease response while a long-running job renews', async () => {
+  it('keeps independent heartbeats and wrapped lease renewal active during a long-running job', async () => {
     vi.useFakeTimers();
     let completed = false;
     let finishJob: (() => void) | undefined;
+    let heartbeatRequestCount = 0;
     let leaseRequestCount = 0;
     const pendingJob = jobPayload().jobs[0];
     const jobBarrier = new Promise<void>((resolve) => {
@@ -265,6 +266,7 @@ describe('AgentClient', () => {
     const fetchTransport: AgentFetch = async (input) => {
       const url = String(input);
       if (url.endsWith('/heartbeat')) {
+        heartbeatRequestCount += 1;
         return jsonResponse({ acceptedAt: new Date().toISOString(), deviceStatus: 'online' });
       }
       if (url.endsWith('/jobs')) return jsonResponse(completed ? { jobs: [] } : jobPayload());
@@ -309,9 +311,81 @@ describe('AgentClient', () => {
     await client.initialize();
 
     const processing = client.processOnce();
-    await vi.advanceTimersByTimeAsync(45_000);
+    await vi.advanceTimersByTimeAsync(90_000);
 
-    expect(leaseRequestCount).toBe(1);
+    expect(heartbeatRequestCount).toBe(7);
+    expect(leaseRequestCount).toBe(2);
+    finishJob?.();
+    await processing;
+    expect(completed).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('does not abort a leased job when its independent heartbeat temporarily fails', async () => {
+    vi.useFakeTimers();
+    let completed = false;
+    let finishJob: (() => void) | undefined;
+    let heartbeatRequestCount = 0;
+    let jobSignal: AbortSignal | undefined;
+    const pendingJob = jobPayload().jobs[0];
+    const jobBarrier = new Promise<void>((resolve) => {
+      finishJob = resolve;
+    });
+    const fetchTransport: AgentFetch = async (input) => {
+      const url = String(input);
+      if (url.endsWith('/heartbeat')) {
+        heartbeatRequestCount += 1;
+        return heartbeatRequestCount === 1
+          ? jsonResponse({ acceptedAt: new Date().toISOString(), deviceStatus: 'online' })
+          : jsonResponse({ error: 'temporary heartbeat failure' }, 503);
+      }
+      if (url.endsWith('/jobs')) return jsonResponse(completed ? { jobs: [] } : jobPayload());
+      if (url.endsWith('/claim')) {
+        return jsonResponse({
+          claimToken: `clm_${'C'.repeat(43)}`,
+          job: { ...pendingJob, attempt: 1, status: 'claimed' },
+        });
+      }
+      if (url.endsWith('/complete')) {
+        completed = true;
+        return jsonResponse({
+          duplicate: false,
+          job: { ...pendingJob, attempt: 1, status: 'succeeded' },
+        });
+      }
+      return jsonResponse({ error: 'unexpected route' }, 404);
+    };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    const client = new AgentClient({
+      agentVersion: '0.1.0-test',
+      executeJob: async (_job, reporter) => {
+        jobSignal = reporter.signal;
+        await jobBarrier;
+        return { processedRows: 3 };
+      },
+      fetchTransport,
+      logger,
+      onStatus: vi.fn(),
+      vault: {
+        async clear() {},
+        async load() {
+          return pairingSession();
+        },
+        async save() {},
+      },
+    });
+    await client.initialize();
+
+    const processing = client.processOnce();
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(heartbeatRequestCount).toBe(2);
+    expect(jobSignal?.aborted).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'AGENT_JOB_HEARTBEAT_FAILED',
+      expect.any(String),
+      expect.objectContaining({ jobId: JOB_ID, type: 'AgentHttpError' }),
+    );
     finishJob?.();
     await processing;
     expect(completed).toBe(true);

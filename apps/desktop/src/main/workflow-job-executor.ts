@@ -1,5 +1,10 @@
 import type { AgentJob, JsonValue, StepResult } from '@ai-workflow-studio/agent-protocol';
-import { LocalExecutorError, type SpreadsheetTable } from '@ai-workflow-studio/local-executor';
+import {
+  LocalExecutorError,
+  type SpreadsheetDocument,
+  type SpreadsheetTable,
+} from '@ai-workflow-studio/local-executor';
+import { RunStepResultSchema } from '@ai-workflow-studio/run-orchestrator';
 import {
   NodeRegistry,
   WorkflowEngine,
@@ -100,9 +105,49 @@ const AGENT_CLOUD_NODE_TYPES = new Set<string>([
   'apps_script.deploy_template',
 ]);
 const CLOUD_PROFILE_MAX_COLUMNS = 40;
-const CLOUD_PROFILE_MAX_SHEET_NAMES = 30;
-const CLOUD_PROFILE_MAX_TOP_VALUES = 8;
+const CLOUD_PROFILE_MAX_TOP_FREQUENCIES = 8;
+const CLOUD_PROFILE_MAX_DISTINCT_VALUES = 40;
 const CLOUD_PROFILE_MAX_VALUE_CHARACTERS = 80;
+const CLOUD_PROFILE_NUMERIC_MIN_COHORT_SIZE = 5;
+// Bound multi-file sheets to the maximum number of tables accepted by the envelope.
+const EXCEL_READ_AGGREGATE_MAX_SHEETS = 2_000;
+const EXCEL_READ_PROGRESS_BATCH_SIZE = 20;
+const EXCEL_READ_INITIAL_PROGRESS_DELAY_MS = 2_000;
+
+const CLOUD_PROFILE_SEMANTIC_HINTS = new Map<string, string>([
+  ['amount', 'amount'],
+  ['cost', 'cost'],
+  ['customer', 'customer'],
+  ['date', 'date'],
+  ['id', 'id'],
+  ['item', 'item'],
+  ['name', 'name'],
+  ['order', 'order'],
+  ['price', 'price'],
+  ['product', 'item'],
+  ['qty', 'quantity'],
+  ['quantity', 'quantity'],
+  ['status', 'status'],
+  ['total', 'total'],
+  ['品名', 'item'],
+  ['單價', 'price'],
+  ['单价', 'price'],
+  ['客戶', 'customer'],
+  ['客户', 'customer'],
+  ['成本', 'cost'],
+  ['日期', 'date'],
+  ['狀態', 'status'],
+  ['状态', 'status'],
+  ['編號', 'id'],
+  ['编号', 'id'],
+  ['數量', 'quantity'],
+  ['数量', 'quantity'],
+  ['訂單', 'order'],
+  ['订单', 'order'],
+  ['金額', 'amount'],
+  ['金额', 'amount'],
+]);
+const CLOUD_PROFILE_METRIC_HINTS = new Set(['amount', 'cost', 'price', 'quantity', 'total']);
 
 function isAgentCloudNodeType(type: string): boolean {
   return AGENT_CLOUD_NODE_TYPES.has(type);
@@ -250,8 +295,23 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
             throw new Error('No authorized spreadsheet files were selected.');
           }
           const folderAliasId = envelope.folderAliasId;
-          const documents = await mapWithConcurrency(envelope.paths, 8, async (relativePath) => {
-            return await this.spreadsheet.read(
+          const progress = createExcelReadProgressReporter(
+            this.reporter,
+            context.nodeId,
+            envelope.paths.length,
+          );
+          const documents: SpreadsheetDocument[] = [];
+          let aggregateRowCount = 0;
+          let aggregateSheetCount = 0;
+          for (const relativePath of envelope.paths) {
+            const remainingRows = parsed.config.maxRows - aggregateRowCount;
+            const remainingSheets = EXCEL_READ_AGGREGATE_MAX_SHEETS - aggregateSheetCount;
+            if (remainingRows <= 0 || remainingSheets <= 0) {
+              throw excelReadAggregateLimitError();
+            }
+            const perFileMaxRows = Math.min(parsed.config.maxRows, remainingRows);
+            const perFileMaxSheets = Math.min(parsed.config.maxSheets, remainingSheets);
+            const document = await this.spreadsheet.read(
               this.deviceId,
               {
                 folderAliasId,
@@ -262,15 +322,28 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
                 headerRow: parsed.config.headerRow,
                 headerScanRows: parsed.config.headerScanRows,
                 maxFileSizeBytes: parsed.config.maxFileSizeBytes,
-                maxRows: parsed.config.maxRows,
-                maxSheets: parsed.config.maxSheets,
+                maxRows: perFileMaxRows,
+                maxSheets: perFileMaxSheets,
                 sheetMode: parsed.config.sheetMode,
                 ...(parsed.config.sheetNames === undefined
                   ? {}
                   : { sheetNames: parsed.config.sheetNames }),
               },
+              { signal: this.reporter.signal },
             );
-          });
+            const documentRowCount = countRows(document.sheets);
+            const documentSheetCount = document.sheets.length;
+            if (
+              aggregateRowCount + documentRowCount > parsed.config.maxRows ||
+              aggregateSheetCount + documentSheetCount > EXCEL_READ_AGGREGATE_MAX_SHEETS
+            ) {
+              throw excelReadAggregateLimitError();
+            }
+            aggregateRowCount += documentRowCount;
+            aggregateSheetCount += documentSheetCount;
+            documents.push(document);
+            await progress.recordCompletedFile(documentRowCount);
+          }
           const tables = documents.flatMap((document) => document.sheets);
           return {
             metrics: {
@@ -474,7 +547,7 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
         case 'report.compose':
         case 'google_slides.create':
         case 'apps_script.deploy_template': {
-          const cloudInput = cloudContinuationInput(input);
+          const cloudInput = cloudContinuationInput(parsed.type, input);
           const result = await this.reporter.executeCloudStep(context.nodeId, cloudInput);
           return {
             metrics: {
@@ -507,12 +580,20 @@ export class DesktopWorkflowJobExecutor {
       );
     }
     const engine = new WorkflowEngine(registry);
+    const nodeTypes = new Map(job.workflow.nodes.map((node) => [node.id, node.type]));
+    const safeProfilePredecessors = new Set(
+      job.workflow.edges
+        .filter((edge) => nodeTypes.get(edge.to) === 'ai.summarize')
+        .map((edge) => edge.from),
+    );
     const result = await engine.execute(job.workflow, {
       approvedNodeIds: job.workflow.nodes.map((node) => node.id),
       idempotencyKey: job.idempotencyKey,
       maxAttempts: 1,
       mode: 'live',
       onProgress: async (progress) => {
+        const nodeType = nodeTypes.get(progress.nodeId);
+        if (nodeType === undefined || isAgentCloudNodeType(nodeType)) return;
         if (progress.status === 'running') {
           await reporter.reportStep({
             nodeId: progress.nodeId,
@@ -520,16 +601,22 @@ export class DesktopWorkflowJobExecutor {
             processedRowCount: 0,
             status: 'running',
           });
+          return;
+        }
+        if (progress.step !== undefined) {
+          const safeOutput =
+            progress.step.status === 'succeeded' &&
+            progress.step.output !== undefined &&
+            safeProfilePredecessors.has(progress.nodeId)
+              ? cloudContinuationInput('ai.summarize', progress.step.output)
+              : undefined;
+          await reporter.reportStep(stepResult(progress.step, safeOutput));
         }
       },
       runId: job.workflowRunId,
       signal: reporter.signal,
       stepTimeoutMs: 600_000,
     });
-
-    for (const step of result.steps) {
-      await reporter.reportStep(stepResult(step));
-    }
     if (result.status !== 'succeeded') {
       const lastError = result.steps.at(-1)?.error;
       throw new DesktopWorkflowJobError(
@@ -560,25 +647,53 @@ function isSafeRelativeEnvelopePath(value: string): boolean {
   return !segments.some((segment) => segment === '' || segment === '.' || segment === '..');
 }
 
-async function mapWithConcurrency<T, R>(
-  values: readonly T[],
-  concurrency: number,
-  mapper: (value: T) => Promise<R>,
-): Promise<readonly R[]> {
-  const results: R[] = [];
-  let nextIndex = 0;
-  async function worker(): Promise<void> {
-    while (nextIndex < values.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      const value = values[index];
-      if (value !== undefined) results[index] = await mapper(value);
-    }
-  }
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, values.length) }, async () => await worker()),
+function excelReadAggregateLimitError(): LocalExecutorError {
+  return new LocalExecutorError(
+    'FILE_LIMIT_EXCEEDED',
+    'The selected spreadsheet batch exceeds the aggregate processing limit.',
   );
-  return results;
+}
+
+function createExcelReadProgressReporter(
+  reporter: AgentJobReporter,
+  nodeId: string,
+  totalFileCount: number,
+): { readonly recordCompletedFile: (rowCount: number) => Promise<void> } {
+  const startedAt = Date.now();
+  let processedFileCount = 0;
+  let processedRowCount = 0;
+  let lastReportedFileCount = 0;
+  let hasReportedNonzeroProgress = false;
+  let reportQueue: Promise<void> = Promise.resolve();
+
+  return {
+    async recordCompletedFile(rowCount) {
+      processedFileCount += 1;
+      processedRowCount += rowCount;
+      const completed = processedFileCount === totalFileCount;
+      const reachedBatch =
+        processedFileCount - lastReportedFileCount >= EXCEL_READ_PROGRESS_BATCH_SIZE;
+      const initialReadIsSlow =
+        !hasReportedNonzeroProgress &&
+        Date.now() - startedAt >= EXCEL_READ_INITIAL_PROGRESS_DELAY_MS;
+      if (!completed && !reachedBatch && !initialReadIsSlow) return;
+
+      const snapshot = {
+        nodeId,
+        progress: { kind: 'workbook_batch' as const, totalWorkbookCount: totalFileCount },
+        processedFileCount,
+        processedRowCount,
+        status: 'running' as const,
+      };
+      hasReportedNonzeroProgress = true;
+      lastReportedFileCount = processedFileCount;
+      const queued = reportQueue.then(async () => {
+        await reporter.reportStep(snapshot);
+      });
+      reportQueue = queued.catch(() => undefined);
+      await queued;
+    },
+  };
 }
 
 function safeDesktopExecutionError(error: unknown, nodeId: string): WorkflowEngineError {
@@ -649,6 +764,12 @@ function countRows(tables: readonly SpreadsheetTable[]): number {
   return tables.reduce((sum, table) => sum + table.rows.length, 0);
 }
 
+function profileSemanticHint(column: string): string | undefined {
+  return CLOUD_PROFILE_SEMANTIC_HINTS.get(
+    column.normalize('NFKC').trim().toLocaleLowerCase().replace(/\s+/gu, ' '),
+  );
+}
+
 function transformed(
   envelope: DesktopEnvelope,
   table: SpreadsheetTable,
@@ -673,23 +794,26 @@ function transformed(
   };
 }
 
-function stepResult(step: {
-  readonly completedAt: string;
-  readonly error?: {
-    readonly code: string;
-    readonly message: string;
-    readonly retryable: boolean;
-  };
-  readonly metrics: {
-    readonly processedFileCount?: number;
-    readonly processedRowCount?: number;
-  };
-  readonly nodeId: string;
-  readonly nodeType: string;
-  readonly output?: JsonValue;
-  readonly startedAt: string;
-  readonly status: 'cancelled' | 'failed' | 'planned' | 'succeeded' | 'timed_out';
-}): StepResult {
+function stepResult(
+  step: {
+    readonly completedAt: string;
+    readonly error?: {
+      readonly code: string;
+      readonly message: string;
+      readonly retryable: boolean;
+    };
+    readonly metrics: {
+      readonly processedFileCount?: number;
+      readonly processedRowCount?: number;
+    };
+    readonly nodeId: string;
+    readonly nodeType: string;
+    readonly output?: JsonValue;
+    readonly startedAt: string;
+    readonly status: 'cancelled' | 'failed' | 'planned' | 'succeeded' | 'timed_out';
+  },
+  safeOutput?: JsonValue,
+): StepResult {
   const status =
     step.status === 'planned' ? 'skipped' : step.status === 'timed_out' ? 'failed' : step.status;
   return {
@@ -704,9 +828,7 @@ function stepResult(step: {
           },
         }),
     nodeId: step.nodeId,
-    ...(step.output === undefined || !isAgentCloudNodeType(step.nodeType)
-      ? {}
-      : { output: JsonValueSchema.parse(step.output) }),
+    ...(safeOutput === undefined ? {} : { output: JsonValueSchema.parse(safeOutput) }),
     processedFileCount: step.metrics.processedFileCount ?? 0,
     processedRowCount: step.metrics.processedRowCount ?? 0,
     startedAt: step.startedAt,
@@ -714,10 +836,22 @@ function stepResult(step: {
   };
 }
 
-function cloudContinuationInput(input: JsonValue): JsonValue {
-  const envelope = EnvelopeSchema.safeParse(input);
-  if (!envelope.success) return JsonValueSchema.parse(input);
-  const allColumns = new Set(envelope.data.tables.flatMap((table) => table.columns));
+function cloudContinuationInput(nodeType: string, input: JsonValue): JsonValue {
+  if (nodeType !== 'ai.summarize') {
+    const result = RunStepResultSchema.parse(input);
+    const accepted =
+      (nodeType === 'report.compose' && result.kind === 'ai_summary') ||
+      (nodeType === 'google_slides.create' && result.kind === 'business_report') ||
+      (nodeType === 'apps_script.deploy_template' &&
+        (result.kind === 'business_report' || result.kind === 'google_slides_presentation'));
+    if (!accepted) {
+      throw new Error('The local cloud continuation predecessor is invalid.');
+    }
+    return JsonValueSchema.parse(result);
+  }
+  const envelopeInput = Array.isArray(input) ? (input.length === 1 ? input[0] : undefined) : input;
+  const envelope = EnvelopeSchema.parse(envelopeInput);
+  const allColumns = new Set(envelope.tables.flatMap((table) => table.columns));
   const columnOrder = [...allColumns].slice(0, CLOUD_PROFILE_MAX_COLUMNS);
   const statistics = new Map<
     string,
@@ -730,22 +864,27 @@ function cloudContinuationInput(input: JsonValue): JsonValue {
       numericSumOverflowed: boolean;
       numericSum: number;
       otherValueCount: number;
+      semanticHint?: string;
     }
   >(
-    columnOrder.map((column) => [
-      column,
-      {
-        categorical: new Map<string, number>(),
-        nonEmptyCount: 0,
-        numericCount: 0,
-        numericSumOverflowed: false,
-        numericSum: 0,
-        otherValueCount: 0,
-      },
-    ]),
+    columnOrder.map((column) => {
+      const semanticHint = profileSemanticHint(column);
+      return [
+        column,
+        {
+          ...(semanticHint === undefined ? {} : { semanticHint }),
+          categorical: new Map<string, number>(),
+          nonEmptyCount: 0,
+          numericCount: 0,
+          numericSumOverflowed: false,
+          numericSum: 0,
+          otherValueCount: 0,
+        },
+      ] as const;
+    }),
   );
   let rowCount = 0;
-  for (const table of envelope.data.tables) {
+  for (const table of envelope.tables) {
     rowCount += table.rows.length;
     for (const row of table.rows) {
       for (const column of columnOrder) {
@@ -756,19 +895,27 @@ function cloudContinuationInput(input: JsonValue): JsonValue {
         summary.nonEmptyCount += 1;
         if (typeof value === 'number' && Number.isFinite(value)) {
           summary.numericCount += 1;
-          const nextSum = summary.numericSum + value;
-          if (Number.isFinite(nextSum)) {
-            summary.numericSum = nextSum;
-          } else {
-            summary.numericSum = nextSum < 0 ? -Number.MAX_VALUE : Number.MAX_VALUE;
-            summary.numericSumOverflowed = true;
+          if (
+            summary.semanticHint !== undefined &&
+            CLOUD_PROFILE_METRIC_HINTS.has(summary.semanticHint)
+          ) {
+            const nextSum = summary.numericSum + value;
+            if (Number.isFinite(nextSum)) {
+              summary.numericSum = nextSum;
+            } else {
+              summary.numericSum = nextSum < 0 ? -Number.MAX_VALUE : Number.MAX_VALUE;
+              summary.numericSumOverflowed = true;
+            }
+            summary.numericMinimum = Math.min(summary.numericMinimum ?? value, value);
+            summary.numericMaximum = Math.max(summary.numericMaximum ?? value, value);
           }
-          summary.numericMinimum = Math.min(summary.numericMinimum ?? value, value);
-          summary.numericMaximum = Math.max(summary.numericMaximum ?? value, value);
           continue;
         }
         const label = String(value).slice(0, CLOUD_PROFILE_MAX_VALUE_CHARACTERS);
-        if (summary.categorical.has(label) || summary.categorical.size < 40) {
+        if (
+          summary.categorical.has(label) ||
+          summary.categorical.size < CLOUD_PROFILE_MAX_DISTINCT_VALUES
+        ) {
           summary.categorical.set(label, (summary.categorical.get(label) ?? 0) + 1);
         } else {
           summary.otherValueCount += 1;
@@ -777,34 +924,47 @@ function cloudContinuationInput(input: JsonValue): JsonValue {
     }
   }
   return JsonValueSchema.parse({
-    columns: columnOrder.map((column) => {
+    columns: columnOrder.map((column, index) => {
       const summary = statistics.get(column);
-      if (summary === undefined) return { name: column };
+      if (summary === undefined) throw new Error('Spreadsheet profile column state is missing.');
+      const includeMetricStatistics =
+        summary.semanticHint !== undefined &&
+        CLOUD_PROFILE_METRIC_HINTS.has(summary.semanticHint) &&
+        summary.numericCount >= CLOUD_PROFILE_NUMERIC_MIN_COHORT_SIZE;
       return {
-        name: column,
+        id: `column_${index + 1}`,
+        ...(summary.semanticHint === undefined ? {} : { semanticHint: summary.semanticHint }),
         nonEmptyCount: summary.nonEmptyCount,
         numeric: {
           count: summary.numericCount,
-          ...(summary.numericMaximum === undefined ? {} : { maximum: summary.numericMaximum }),
-          ...(summary.numericMinimum === undefined ? {} : { minimum: summary.numericMinimum }),
-          sum: summary.numericSum,
-          sumOverflowed: summary.numericSumOverflowed,
+          ...(includeMetricStatistics
+            ? {
+                statistics: {
+                  ...(summary.numericMaximum === undefined
+                    ? {}
+                    : { maximum: summary.numericMaximum }),
+                  ...(summary.numericMinimum === undefined
+                    ? {}
+                    : { minimum: summary.numericMinimum }),
+                  sum: summary.numericSum,
+                  sumOverflowed: summary.numericSumOverflowed,
+                },
+              }
+            : {}),
         },
-        otherValueCount: summary.otherValueCount,
-        topValues: [...summary.categorical.entries()]
-          .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-          .slice(0, CLOUD_PROFILE_MAX_TOP_VALUES)
-          .map(([value, count]) => ({ count, value })),
+        categorical: {
+          sampledDistinctCount: summary.categorical.size,
+          topFrequencies: [...summary.categorical.values()]
+            .sort((left, right) => right - left)
+            .slice(0, CLOUD_PROFILE_MAX_TOP_FREQUENCIES),
+          unprofiledValueCount: summary.otherValueCount,
+        },
       };
     }),
-    fileCount: envelope.data.paths.length,
+    fileCount: envelope.inputHashes.length,
     kind: 'desktop_excel_profile',
     rowCount,
-    sheetCount: envelope.data.tables.length,
-    sheetNames: envelope.data.tables
-      .slice(0, CLOUD_PROFILE_MAX_SHEET_NAMES)
-      .map((table) => table.name),
+    sheetCount: envelope.tables.length,
     truncatedColumns: Math.max(0, allColumns.size - CLOUD_PROFILE_MAX_COLUMNS),
-    truncatedSheetNames: Math.max(0, envelope.data.tables.length - CLOUD_PROFILE_MAX_SHEET_NAMES),
   });
 }

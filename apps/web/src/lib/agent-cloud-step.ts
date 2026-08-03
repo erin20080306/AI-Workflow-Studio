@@ -8,16 +8,10 @@ import {
 
 import { claimedJobCredentials } from './agent-api';
 import { type AgentCloudNode, validateAgentCloudStepInput } from './agent-cloud-step-schema';
+import { isAgentCloudNodeType } from './agent-progress-schema';
 import { getAgentServerState } from './agent-server';
 
 export type { AgentCloudNode } from './agent-cloud-step-schema';
-
-const AGENT_CLOUD_NODE_TYPES = new Set([
-  'ai.summarize',
-  'report.compose',
-  'google_slides.create',
-  'apps_script.deploy_template',
-]);
 
 export async function authorizeAgentCloudStep(
   request: Request,
@@ -43,7 +37,7 @@ export async function authorizeAgentCloudStep(
   );
   const node = job.workflow.nodes.find(
     (candidate): candidate is AgentCloudNode =>
-      candidate.id === nodeId && AGENT_CLOUD_NODE_TYPES.has(candidate.type),
+      candidate.id === nodeId && isAgentCloudNodeType(candidate.type),
   );
   if (node === undefined) {
     throw new AgentProtocolError(

@@ -33,6 +33,7 @@ export interface ClaimedJobCredentials extends DeviceRequestCredentials {
 }
 
 interface AuthenticatedDevice {
+  readonly agentVersion?: string;
   readonly deviceId: string;
   readonly tenantId: string;
 }
@@ -40,6 +41,7 @@ interface AuthenticatedDevice {
 export interface AgentServiceOptions {
   readonly clock?: () => Date;
   readonly crypto: AgentCrypto;
+  readonly isAgentVersionSupported?: (agentVersion: string | undefined) => boolean;
   readonly store: AgentStore;
 }
 
@@ -66,11 +68,14 @@ function parseJobId(jobId: string): string {
 export class AgentService {
   private readonly clock: () => Date;
   private readonly crypto: AgentCrypto;
+  private readonly isAgentVersionSupported:
+    ((agentVersion: string | undefined) => boolean) | undefined;
   private readonly store: AgentStore;
 
   constructor(options: AgentServiceOptions) {
     this.clock = options.clock ?? (() => new Date());
     this.crypto = options.crypto;
+    this.isAgentVersionSupported = options.isAgentVersionSupported;
     this.store = options.store;
   }
 
@@ -183,11 +188,18 @@ export class AgentService {
 
   async listJobs(credentials: DeviceRequestCredentials): Promise<readonly AgentJob[]> {
     const authenticated = await this.authenticate(credentials);
+    if (this.isAgentVersionSupported?.(authenticated.agentVersion) === false) return [];
     return this.store.listJobs(authenticated.tenantId, authenticated.deviceId, this.clock());
   }
 
   async claimJob(credentials: DeviceRequestCredentials, jobIdInput: string, input: unknown) {
     const authenticated = await this.authenticate(credentials);
+    if (this.isAgentVersionSupported?.(authenticated.agentVersion) === false) {
+      throw new AgentProtocolError(
+        'AGENT_FORBIDDEN',
+        'Update the Desktop Agent before claiming workflow jobs.',
+      );
+    }
     const request = parseInput(ClaimJobRequestSchema, input);
     const jobId = parseJobId(jobIdInput);
     const now = this.clock();
@@ -346,6 +358,9 @@ export class AgentService {
     }
     await this.store.touchDeviceToken(authenticated.token.id, now);
     return {
+      ...(authenticated.device.agentVersion === undefined
+        ? {}
+        : { agentVersion: authenticated.device.agentVersion }),
       deviceId: authenticated.device.id,
       tenantId: authenticated.device.tenantId,
     };

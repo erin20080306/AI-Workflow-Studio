@@ -1,6 +1,6 @@
 {
   "name": "@ai-workflow-studio/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "author": "AI Workflow Studio",
   "description": "AI Workflow Studio local Desktop Agent",
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@ai-workflow-studio/agent-protocol": "workspace:*",
     "@ai-workflow-studio/local-executor": "workspace:*",
+    "@ai-workflow-studio/run-orchestrator": "workspace:*",
     "@ai-workflow-studio/shared": "workspace:*",
     "@ai-workflow-studio/workflow-engine": "workspace:*",
     "@ai-workflow-studio/workflow-schema": "workspace:*",

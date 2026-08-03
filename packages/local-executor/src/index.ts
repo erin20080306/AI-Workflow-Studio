@@ -22,6 +22,7 @@ export type {
   SpreadsheetCell,
   SpreadsheetDocument,
   SpreadsheetReadOptions,
+  SpreadsheetReadControl,
   SpreadsheetRow,
   SpreadsheetSourceMetadata,
   SpreadsheetTable,

@@ -6,6 +6,13 @@ import { WorkflowSchema } from './workflow';
 const UuidSchema = z.string().uuid();
 const TimestampSchema = z.string().datetime({ offset: true });
 
+export const WorkbookBatchProgressSchema = z
+  .object({
+    kind: z.literal('workbook_batch'),
+    totalWorkbookCount: z.number().int().min(1).max(1_000),
+  })
+  .strict();
+
 export const StepResultSchema = z
   .object({
     completedAt: TimestampSchema.optional(),
@@ -19,6 +26,7 @@ export const StepResultSchema = z
       .optional(),
     nodeId: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
     output: JsonValueSchema.optional(),
+    progress: WorkbookBatchProgressSchema.optional(),
     processedFileCount: z.number().int().min(0).default(0),
     processedRowCount: z.number().int().min(0).default(0),
     startedAt: TimestampSchema.optional(),
@@ -107,4 +115,5 @@ export type AgentHeartbeat = z.infer<typeof AgentHeartbeatSchema>;
 export type AgentJob = z.infer<typeof AgentJobSchema>;
 export type AIPlannerOutput = z.infer<typeof AIPlannerOutputSchema>;
 export type StepResult = z.infer<typeof StepResultSchema>;
+export type WorkbookBatchProgress = z.infer<typeof WorkbookBatchProgressSchema>;
 export type WorkflowRun = z.infer<typeof WorkflowRunSchema>;

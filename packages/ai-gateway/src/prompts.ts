@@ -17,9 +17,20 @@ const SHEET_ID_PATTERN = /spreadsheets\/d\/([A-Za-z0-9_-]{10,200})/iu;
 const DRIVE_FOLDER_ID_PATTERN =
   /drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/([A-Za-z0-9_-]{10,240})/iu;
 const SHEET_RANGE_PATTERN = /\b([A-Z]{1,3}\d{1,7}:[A-Z]{1,3}\d{1,7})\b/u;
+const DRIVE_SUBFOLDER_TRAVERSAL_INTENT =
+  /\brecursive(?:ly)?\b|\b(?:include|including|scan|search|read|process|traverse)(?:\s+(?:through|all|the))*\s+(?:subfolders?|subdirectories|nested\s+folders?|child\s+folders?)\b|(?:遞迴|递归)(?:搜尋|搜索|掃描|扫描|讀取|读取|處理|处理|遍歷|遍历)?|(?:包含|包括|含|連同|连同|一併|一并|遍歷|遍历|掃描|扫描|搜尋|搜索|讀取|读取|處理|处理)(?:所有|全部)?(?:的)?(?:子資料夾|子文件夾|子文件夹|子目錄|子目录|下層資料夾|下层文件夹)|(?:所有|全部)(?:的)?(?:子資料夾|子文件夾|子文件夹|子目錄|子目录|下層資料夾|下层文件夹)/iu;
+const DRIVE_SUBFOLDER_TRAVERSAL_NEGATION =
+  /(?:不要|不需(?:要)?|無需|无需|勿|排除|略過|跳過|跳过|不包含|不包括|不含)[^，。,.]{0,16}(?:遞迴|递归|子資料夾|子文件夾|子文件夹|子目錄|子目录|下層資料夾|下层文件夹)|(?:不|非)(?:做)?(?:遞迴|递归)|不(?:讀取|读取|掃描|扫描|搜尋|搜索|處理|处理|遍歷|遍历)(?:所有|全部)?(?:的)?(?:子資料夾|子文件夾|子文件夹|子目錄|子目录)|(?:只|僅|仅)(?:處理|处理|讀取|读取|掃描|扫描|搜尋|搜索)?[^，。,.]{0,12}(?:目前|當前|当前|根|頂層|顶层)(?:資料夾|文件夾|文件夹|目錄|目录)|\b(?:do\s+not|don't|without|exclude|skip|no)\b[^,.]{0,24}\b(?:recursive(?:ly)?|subfolders?|subdirectories|nested\s+folders?)\b|\b(?:non[- ]recursive|top[- ]level\s+only|current\s+folder\s+only|root\s+folder\s+only)\b/iu;
 
 function firstMatch(prompt: string, pattern: RegExp): string | undefined {
   return pattern.exec(prompt)?.[1];
+}
+
+function requestedDriveSubfolderTraversal(prompt: string): boolean {
+  return (
+    !DRIVE_SUBFOLDER_TRAVERSAL_NEGATION.test(prompt) &&
+    DRIVE_SUBFOLDER_TRAVERSAL_INTENT.test(prompt)
+  );
 }
 
 function requestedSlideCount(prompt: string): number {
@@ -165,14 +176,11 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
     'google_slides.create',
     'apps_script.deploy_template',
   ]);
-  const needsCloudContinuation = [...requested].some((type) =>
-    [
-      'ai.summarize',
-      'report.compose',
-      'google_slides.create',
-      'apps_script.deploy_template',
-    ].includes(type),
-  );
+  const needsAppsScript = requested.has('apps_script.deploy_template');
+  const needsSlides = requested.has('google_slides.create');
+  const needsReport = requested.has('report.compose') || needsSlides || needsAppsScript;
+  const needsSummary = requested.has('ai.summarize') || needsReport;
+  const needsCloudContinuation = needsSummary;
   if (
     request.context.executionTarget.type !== 'desktop' ||
     folderAliasId === undefined ||
@@ -188,7 +196,7 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
     {
       config: {
         browser: 'chrome',
-        downloadTimeoutSeconds: 300,
+        downloadTimeoutSeconds: 600,
         folderAliasId,
         folderId,
         maxFileSizeBytes: 50_000_000,
@@ -250,7 +258,7 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
     { from: 'create_local_report', to: 'open_excel_result' },
   ];
   let previousNodeId = 'open_excel_result';
-  if (requested.has('ai.summarize')) {
+  if (needsSummary) {
     nodes.push({
       config: {
         includeCaseStudy: false,
@@ -268,7 +276,7 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
     edges.push({ from: previousNodeId, to: 'summarize_local_result' });
     previousNodeId = 'summarize_local_result';
   }
-  if (requested.has('report.compose')) {
+  if (needsReport) {
     nodes.push({
       config: {
         format: 'markdown',
@@ -283,7 +291,7 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
     previousNodeId = 'compose_local_result_report';
   }
   let presentationNodeId: string | undefined;
-  if (requested.has('google_slides.create') && connectionId !== undefined) {
+  if (needsSlides && connectionId !== undefined) {
     nodes.push({
       config: {
         connectionId,
@@ -301,7 +309,7 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
     previousNodeId = 'create_result_slides';
     presentationNodeId = previousNodeId;
   }
-  if (requested.has('apps_script.deploy_template') && connectionId !== undefined) {
+  if (needsAppsScript && connectionId !== undefined) {
     nodes.push({
       config: {
         connectionId,
@@ -384,7 +392,7 @@ function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput |
         connectionId,
         folderId,
         headerScanRows: 30,
-        includeSubfolders: true,
+        includeSubfolders: requestedDriveSubfolderTraversal(request.prompt),
         maxFileSizeBytes: 20_000_000,
         maxFiles: 500,
         maxRows: 100_000,
@@ -606,7 +614,7 @@ Planning behavior:
 - Never ask the user to assemble nodes manually.
 - Cover every explicit source, transformation, output, and delivery step in the requirement. A validation-only draft is not sufficient when the requirement asks for Gmail, Google Sheets, Google Forms, a report, a presentation, or email delivery.
 - Gmail, Google Sheets, Google Forms, Google Slides, and Apps Script nodes must use a connectionId from googleConnectionIds. Never invent one.
-- Google Drive folder Excel requests must use google_drive.read_excel_folder and may create a non-overwriting google_drive.create_excel_report only when consolidation is requested.
+- Google Drive folder Excel requests must use google_drive.read_excel_folder and may create a non-overwriting google_drive.create_excel_report only when consolidation is requested. Set includeSubfolders to false unless the user explicitly requests subfolders, nested folders, or recursive traversal in Traditional Chinese, Simplified Chinese, or English.
 - When the trusted execution target is Desktop and an approved folder alias is available, a Drive Excel operation must use google_drive.visible_download_folder → excel.read → excel.merge → excel.create_report → excel.visible_review. The first and last nodes remain approval-gated and run only when the paired Agent has locally enabled Visible Computer Use. If the user also requests a summary, report, Slides, or GAS, continue only with ai.summarize → report.compose → google_slides.create → apps_script.deploy_template as requested; the Agent relays a bounded path-free workbook profile and the server executes only those reviewed cloud nodes. The visible download uses the user's already signed-in local Chrome session and never needs a Google API key. This is an operation flow; never add source code nodes.
 - For Gmail summaries use gmail.read → ai.summarize → report.compose. For Google Forms or Sheets summaries, read the selected source before summarizing. Add google_slides.create only when a presentation is requested. Add gmail.send only when an email recipient is explicitly supplied; default its sendMode to draft unless the user explicitly requests sending.
 - Apps Script may use only the registered apps_script.deploy_template templates. Never produce script source code in a workflow plan.

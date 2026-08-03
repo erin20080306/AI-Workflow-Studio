@@ -6,6 +6,7 @@ import {
   localizeComputerUseAction,
   localizeNotification,
   localizeRunStep,
+  localizeRunStepProgress,
   localizeWorkflowName,
 } from './run-details-i18n';
 
@@ -29,11 +30,57 @@ describe('run details localization', () => {
     expect(localizeAuditAction('agent_cloud_step.succeeded', 'zh-Hant')).toBe(
       '已完成核准的雲端續接步驟',
     );
+    expect(localizeAuditAction('agent_cloud_step.failed', 'en')).toBe(
+      'Approved cloud continuation failed',
+    );
     expect(localizeComputerUseAction('drive.verify_download', 'zh-Hant')).toBe(
       '正在驗證完成的本機下載',
     );
     expect(localizeActorType('user', 'zh-Hant')).toBe('使用者');
     expect(localizeActorType('system', 'en')).toBe('System');
+  });
+
+  it('represents Drive discovery and bounded batch progress without a misleading zero count', () => {
+    expect(
+      localizeRunStepProgress(
+        {
+          driveWorkbookProgress: { phase: 'scanning' },
+          processedFileCount: 0,
+          processedRowCount: 0,
+        },
+        'zh-Hant',
+      ),
+    ).toBe('正在掃描核准的 Drive 資料夾以尋找 Excel 活頁簿…');
+    expect(
+      localizeRunStepProgress(
+        {
+          driveWorkbookProgress: { phase: 'batching', totalWorkbookCount: 120 },
+          processedFileCount: 40,
+          processedRowCount: 2_400,
+        },
+        'en',
+      ),
+    ).toBe('Processing workbook batch · 40 / 120 workbooks · 2,400 rows');
+    expect(
+      localizeRunStepProgress(
+        {
+          driveWorkbookProgress: { phase: 'batching', totalWorkbookCount: 120 },
+          processedFileCount: 120,
+          processedRowCount: 9_600,
+        },
+        'zh-Hant',
+      ),
+    ).toBe('活頁簿批次已完成 · 120 / 120 個活頁簿 · 9,600 列');
+    expect(
+      localizeRunStepProgress(
+        {
+          processedFileCount: 40,
+          processedRowCount: 2_400,
+          progress: { kind: 'workbook_batch', totalWorkbookCount: 481 },
+        },
+        'zh-Hant',
+      ),
+    ).toBe('正在分批處理活頁簿 · 40 / 481 個活頁簿 · 2,400 列');
   });
 
   it('localizes existing English production notifications without mutating stored records', () => {

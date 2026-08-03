@@ -3,6 +3,11 @@ import 'server-only';
 import { z } from 'zod';
 
 import type { WorkspaceContext } from '@/lib/auth/context';
+import {
+  effectiveAssistantDeviceStatus,
+  isAssistantAgentVersionCompatible,
+  MINIMUM_ASSISTANT_AGENT_VERSION,
+} from '@/lib/assistant-device-status';
 import { getEnvironment } from '@/lib/env';
 import { MOCK_DEVICE_ID, MOCK_FOLDER_ALIAS_ID } from '@/lib/mock-workflows';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
@@ -22,6 +27,8 @@ export const AssistantFolderAliasSchema = z
   .strict();
 export const AssistantExecutionTargetSchema = z
   .object({
+    agentCompatible: z.boolean(),
+    agentVersion: z.string().min(1).max(80).optional(),
     deviceId: z.string().uuid(),
     deviceName: z.string().min(1).max(120),
     folderAliases: z.array(AssistantFolderAliasSchema).max(200),
@@ -31,7 +38,9 @@ export const AssistantExecutionTargetSchema = z
 export type AssistantExecutionTarget = z.infer<typeof AssistantExecutionTargetSchema>;
 
 const DeviceRowSchema = z.object({
+  agent_version: z.string().min(1).max(80).nullable(),
   id: z.string().uuid(),
+  last_seen_at: z.string().datetime({ offset: true }).nullable(),
   name: z.string().min(1).max(120),
   status: z.enum(['offline', 'online']),
 });
@@ -55,6 +64,8 @@ export async function listAssistantExecutionTargets(
   if (getEnvironment().mockMode) {
     return [
       AssistantExecutionTargetSchema.parse({
+        agentCompatible: true,
+        agentVersion: MINIMUM_ASSISTANT_AGENT_VERSION,
         deviceId: MOCK_DEVICE_ID,
         deviceName: 'Mock Desktop Agent',
         folderAliases: [
@@ -72,7 +83,7 @@ export async function listAssistantExecutionTargets(
   const [deviceResult, folderResult] = await Promise.all([
     admin
       .from('devices')
-      .select('id, name, status')
+      .select('id, name, status, last_seen_at, agent_version')
       .eq('tenant_id', context.actor.tenantId)
       .in('status', ['online', 'offline'])
       .order('name'),
@@ -91,6 +102,8 @@ export async function listAssistantExecutionTargets(
     .parse(deviceResult.data)
     .map((device) =>
       AssistantExecutionTargetSchema.parse({
+        agentCompatible: isAssistantAgentVersionCompatible(device.agent_version),
+        ...(device.agent_version === null ? {} : { agentVersion: device.agent_version }),
         deviceId: device.id,
         deviceName: device.name,
         folderAliases: folders
@@ -100,7 +113,7 @@ export async function listAssistantExecutionTargets(
             id: folder.id,
             permissions: PermissionSchema.parse(folder.permission_summary),
           })),
-        status: device.status,
+        status: effectiveAssistantDeviceStatus(device.status, device.last_seen_at),
       }),
     );
 }

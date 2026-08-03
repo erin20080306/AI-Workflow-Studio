@@ -192,6 +192,7 @@ export async function syncAgentProgress(job: AgentJob, input: unknown): Promise<
       jobId: job.id,
       step: parsed.step,
       tenantId: job.tenantId,
+      workflow: job.workflow,
     });
     return;
   }

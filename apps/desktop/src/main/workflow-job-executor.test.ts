@@ -8,7 +8,7 @@ import {
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FolderGrantStore } from './folder-grants';
 import { DesktopComputerUseController } from './computer-use';
@@ -41,6 +41,7 @@ function createReporter(steps: StepResult[]): AgentJobReporter {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     temporaryDirectories
       .splice(0)
@@ -205,14 +206,26 @@ describe('DesktopWorkflowJobExecutor', () => {
     computerUse.setEnabled(true);
     const executor = new DesktopWorkflowJobExecutor(spreadsheet, computerUse);
     const steps: StepResult[] = [];
+    const cloudInputs: JsonValue[] = [];
     const reporter: AgentJobReporter = {
       async downloadDriveExcelFile(_nodeId, file) {
         const bytes = sourceBytes.get(file.fileId);
         if (bytes === undefined) throw new Error('Unexpected Drive workbook request.');
         return bytes;
       },
-      async executeCloudStep() {
-        throw new Error('This test does not continue into a cloud step.');
+      async executeCloudStep(_nodeId, input) {
+        cloudInputs.push(structuredClone(input));
+        return {
+          duplicate: false,
+          output: {
+            kind: 'ai_summary',
+            model: 'test-model',
+            provider: 'mock',
+            text: 'Two local source workbooks were combined.',
+          },
+          processedFileCount: 0,
+          processedRowCount: 0,
+        };
       },
       async listDriveExcelFiles() {
         return {
@@ -257,6 +270,7 @@ describe('DesktopWorkflowJobExecutor', () => {
           { from: 'read', to: 'merge' },
           { from: 'merge', to: 'write' },
           { from: 'write', to: 'open' },
+          { from: 'open', to: 'summarize' },
         ],
         executionTarget: { deviceId: DEVICE_ID, type: 'desktop' },
         name: 'Drive Desktop Excel operation',
@@ -315,6 +329,20 @@ describe('DesktopWorkflowJobExecutor', () => {
             type: 'excel.visible_review',
             version: 1,
           },
+          {
+            config: {
+              includeCaseStudy: false,
+              includeRecommendations: true,
+              language: 'zh-Hant',
+              maxCharacters: 6_000,
+              provider: 'mock',
+              style: 'professional',
+              tier: 'auto',
+            },
+            id: 'summarize',
+            type: 'ai.summarize',
+            version: 1,
+          },
         ],
         schemaVersion: 1,
         trigger: { config: {}, type: 'manual.trigger' },
@@ -324,7 +352,7 @@ describe('DesktopWorkflowJobExecutor', () => {
 
     await expect(executor.execute(job, reporter)).resolves.toMatchObject({
       status: 'succeeded',
-      stepCount: 5,
+      stepCount: 6,
     });
     const resultPath = join(directory, 'AI-Excel-本機匯總.xlsx');
     const result = await readSpreadsheet(resultPath, { maxRows: 10, maxSheets: 2 });
@@ -334,10 +362,27 @@ describe('DesktopWorkflowJobExecutor', () => {
       { Amount: 300, Item: 'B' },
     ]);
     expect(opened).toEqual([await realpath(resultPath)]);
+    expect(cloudInputs).toMatchObject([
+      {
+        fileCount: 2,
+        kind: 'desktop_excel_profile',
+        rowCount: 2,
+        sheetCount: 1,
+      },
+    ]);
+    expect(JSON.stringify(cloudInputs)).not.toContain('120');
+    expect(JSON.stringify(cloudInputs)).not.toContain('300');
+    expect(
+      steps.find((step) => step.nodeId === 'open' && step.status === 'succeeded')?.output,
+    ).toEqual(cloudInputs[0]);
     expect(steps).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ nodeId: 'download', status: 'succeeded' }),
-        expect.objectContaining({ nodeId: 'open', status: 'succeeded' }),
+        expect.objectContaining({
+          nodeId: 'open',
+          output: expect.objectContaining({ fileCount: 2, kind: 'desktop_excel_profile' }),
+          status: 'succeeded',
+        }),
       ]),
     );
   });
@@ -345,11 +390,18 @@ describe('DesktopWorkflowJobExecutor', () => {
   it('relays only a bounded spreadsheet profile into approved cloud report steps', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'aiws-hybrid-report-job-'));
     temporaryDirectories.push(directory);
-    await writeFile(
-      join(directory, 'orders.csv'),
-      'Status,Amount\nPaid,120\nPending,80\nPaid,200\n',
-      'utf8',
-    );
+    await Promise.all([
+      writeFile(
+        join(directory, 'orders-private-a.csv'),
+        'ID,Status,Amount,PrivateCode,alice@example.com\n987654321,Paid,120,246813579,customer-1\n987654322,Pending,80,,customer-2\n987654323,Paid,200,,customer-3\n',
+        'utf8',
+      ),
+      writeFile(
+        join(directory, 'orders-private-b.csv'),
+        'ID,Status,Amount,PrivateCode,alice@example.com\n987654324,Paid,100,,customer-4\n987654325,Pending,50,,customer-5\n',
+        'utf8',
+      ),
+    ]);
     const grants = new FolderGrantStore(join(directory, '.agent', 'folder-grants.json'));
     const grant = await grants.authorize(directory, DEVICE_ID, {
       read: true,
@@ -452,7 +504,7 @@ describe('DesktopWorkflowJobExecutor', () => {
         name: 'Hybrid Excel report',
         nodes: [
           {
-            config: { folderAliasId: grant.folderAliasId, pattern: 'orders.csv' },
+            config: { folderAliasId: grant.folderAliasId, pattern: 'orders-private-*.csv' },
             id: 'list',
             type: 'folder.list_files',
             version: 1,
@@ -538,34 +590,350 @@ describe('DesktopWorkflowJobExecutor', () => {
     });
     expect(cloudInputs[0]).toMatchObject({
       input: {
-        fileCount: 1,
+        fileCount: 2,
         kind: 'desktop_excel_profile',
-        rowCount: 3,
-        sheetCount: 1,
+        rowCount: 5,
+        sheetCount: 2,
       },
       nodeId: 'summarize',
     });
     expect(JSON.stringify(cloudInputs[0])).not.toContain(directory);
+    expect(JSON.stringify(cloudInputs[0])).not.toContain('orders-private-a.csv');
+    expect(JSON.stringify(cloudInputs[0])).not.toContain('orders-private-b.csv');
+    expect(JSON.stringify(cloudInputs[0])).not.toContain('orders');
+    expect(JSON.stringify(cloudInputs[0])).not.toContain('Paid');
+    expect(JSON.stringify(cloudInputs[0])).not.toContain('Pending');
+    expect(JSON.stringify(cloudInputs[0])).not.toContain('alice@example.com');
+    expect(JSON.stringify(cloudInputs[0])).not.toContain('customer-');
+    expect(JSON.stringify(cloudInputs[0])).not.toContain('987654321');
+    expect(JSON.stringify(cloudInputs[0])).not.toContain('246813579');
     expect(cloudInputs[0]?.input).toMatchObject({
       columns: expect.arrayContaining([
-        expect.objectContaining({ name: 'Amount', numeric: expect.objectContaining({ sum: 400 }) }),
-        expect.objectContaining({ name: 'Status' }),
+        expect.objectContaining({
+          id: 'column_3',
+          numeric: expect.objectContaining({
+            count: 5,
+            statistics: expect.objectContaining({ sum: 550 }),
+          }),
+          semanticHint: 'amount',
+        }),
+        expect.objectContaining({
+          categorical: {
+            sampledDistinctCount: 2,
+            topFrequencies: [3, 2],
+            unprofiledValueCount: 0,
+          },
+          id: 'column_2',
+          semanticHint: 'status',
+        }),
+        expect.objectContaining({
+          id: 'column_1',
+          numeric: { count: 5 },
+          semanticHint: 'id',
+        }),
+        expect.objectContaining({
+          id: 'column_4',
+          numeric: { count: 1 },
+        }),
       ]),
     });
     expect(steps).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          nodeId: 'summarize',
-          output: expect.objectContaining({ kind: 'ai_summary' }),
-          status: 'succeeded',
-        }),
-        expect.objectContaining({
-          nodeId: 'slides',
-          output: expect.objectContaining({ kind: 'google_slides_presentation' }),
+          nodeId: 'write',
+          output: expect.objectContaining({
+            fileCount: 2,
+            kind: 'desktop_excel_profile',
+            rowCount: 5,
+          }),
           status: 'succeeded',
         }),
       ]),
     );
+    expect(
+      steps.some((step) => ['summarize', 'compose', 'slides', 'gas'].includes(step.nodeId)),
+    ).toBe(false);
+  });
+
+  it('does not call the cloud when an AI summary has multiple raw local predecessors', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'aiws-cloud-preflight-'));
+    temporaryDirectories.push(directory);
+    await writeFile(join(directory, 'private.csv'), 'Private\nsecret-value\n', 'utf8');
+    const grants = new FolderGrantStore(join(directory, '.agent', 'folder-grants.json'));
+    const grant = await grants.authorize(directory, DEVICE_ID, {
+      read: true,
+      watch: false,
+      write: false,
+    });
+    const spreadsheet = new DesktopSpreadsheetExecutor(
+      grants,
+      new ProcessingLedger(join(directory, '.agent', 'processing-ledger.json')),
+    );
+    const executor = new DesktopWorkflowJobExecutor(spreadsheet);
+    const steps: StepResult[] = [];
+    const executeCloudStep = vi.fn(async () => {
+      throw new Error('Cloud execution must not be reached.');
+    });
+    const reporter: AgentJobReporter = { ...createReporter(steps), executeCloudStep };
+
+    await expect(
+      executor.execute(
+        {
+          attempt: 1,
+          availableAt: '2026-08-03T01:00:00.000Z',
+          deviceId: DEVICE_ID,
+          id: '10000000-0000-4000-8000-000000005065',
+          idempotencyKey: 'desktop-cloud-preflight-1',
+          maxAttempts: 3,
+          status: 'claimed',
+          tenantId: TENANT_ID,
+          workflow: {
+            description: 'Reject ambiguous local predecessors before cloud transfer.',
+            edges: [
+              { from: 'list_one', to: 'summarize' },
+              { from: 'list_two', to: 'summarize' },
+            ],
+            executionTarget: { deviceId: DEVICE_ID, type: 'desktop' },
+            name: 'Local cloud preflight',
+            nodes: [
+              {
+                config: { folderAliasId: grant.folderAliasId, pattern: 'private.csv' },
+                id: 'list_one',
+                type: 'folder.list_files',
+                version: 1,
+              },
+              {
+                config: { folderAliasId: grant.folderAliasId, pattern: 'private.csv' },
+                id: 'list_two',
+                type: 'folder.list_files',
+                version: 1,
+              },
+              {
+                config: {
+                  includeCaseStudy: false,
+                  includeRecommendations: true,
+                  language: 'zh-Hant',
+                  maxCharacters: 6_000,
+                  provider: 'mock',
+                  style: 'professional',
+                  tier: 'auto',
+                },
+                id: 'summarize',
+                type: 'ai.summarize',
+                version: 1,
+              },
+            ],
+            schemaVersion: 1,
+            trigger: { config: {}, type: 'manual.trigger' },
+          },
+          workflowRunId: '10000000-0000-4000-8000-000000005066',
+        },
+        reporter,
+      ),
+    ).rejects.toMatchObject({ code: 'DESKTOP_DATA_VALIDATION_FAILED', retryable: false });
+
+    expect(executeCloudStep).not.toHaveBeenCalled();
+    expect(JSON.stringify(steps)).not.toContain('private.csv');
+    expect(JSON.stringify(steps)).not.toContain('secret-value');
+  });
+
+  it('reports bounded path-free progress while reading a local workbook batch', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'aiws-read-progress-'));
+    temporaryDirectories.push(directory);
+    await Promise.all(
+      Array.from({ length: 21 }, async (_, index) => {
+        await writeFile(
+          join(directory, `batch-${String(index + 1).padStart(2, '0')}.csv`),
+          `ID,Private\n${index + 1},customer-${index + 1}\n`,
+          'utf8',
+        );
+      }),
+    );
+    const grants = new FolderGrantStore(join(directory, '.agent', 'folder-grants.json'));
+    const grant = await grants.authorize(directory, DEVICE_ID, {
+      read: true,
+      watch: false,
+      write: false,
+    });
+    const spreadsheet = new DesktopSpreadsheetExecutor(
+      grants,
+      new ProcessingLedger(join(directory, '.agent', 'processing-ledger.json')),
+    );
+    const executor = new DesktopWorkflowJobExecutor(spreadsheet);
+    const steps: StepResult[] = [];
+    vi.spyOn(Date, 'now').mockReturnValue(0);
+
+    await expect(
+      executor.execute(
+        {
+          attempt: 1,
+          availableAt: '2026-08-03T01:00:00.000Z',
+          deviceId: DEVICE_ID,
+          id: '10000000-0000-4000-8000-000000005061',
+          idempotencyKey: 'desktop-read-progress-1',
+          maxAttempts: 3,
+          status: 'claimed',
+          tenantId: TENANT_ID,
+          workflow: {
+            description: 'Read an approved local workbook batch.',
+            edges: [{ from: 'list_files', to: 'read_files' }],
+            executionTarget: { deviceId: DEVICE_ID, type: 'desktop' },
+            name: 'Local workbook progress',
+            nodes: [
+              {
+                config: { folderAliasId: grant.folderAliasId, pattern: '*.csv' },
+                id: 'list_files',
+                type: 'folder.list_files',
+                version: 1,
+              },
+              {
+                config: {
+                  headerMode: 'auto',
+                  headerRow: 1,
+                  headerScanRows: 30,
+                  maxFileSizeBytes: 1_000_000,
+                  maxRows: 1_000,
+                  maxSheets: 30,
+                  sheetMode: 'all',
+                },
+                id: 'read_files',
+                type: 'excel.read',
+                version: 1,
+              },
+            ],
+            schemaVersion: 1,
+            trigger: { config: {}, type: 'manual.trigger' },
+          },
+          workflowRunId: '10000000-0000-4000-8000-000000005062',
+        },
+        createReporter(steps),
+      ),
+    ).resolves.toMatchObject({ processedFileCount: 42, processedRowCount: 21 });
+
+    const runningReadProgress = steps.filter(
+      (step) => step.nodeId === 'read_files' && step.status === 'running',
+    );
+    expect(runningReadProgress).toEqual([
+      {
+        nodeId: 'read_files',
+        processedFileCount: 0,
+        processedRowCount: 0,
+        status: 'running',
+      },
+      {
+        nodeId: 'read_files',
+        progress: { kind: 'workbook_batch', totalWorkbookCount: 21 },
+        processedFileCount: 20,
+        processedRowCount: 20,
+        status: 'running',
+      },
+      {
+        nodeId: 'read_files',
+        progress: { kind: 'workbook_batch', totalWorkbookCount: 21 },
+        processedFileCount: 21,
+        processedRowCount: 21,
+        status: 'running',
+      },
+    ]);
+    expect(JSON.stringify(runningReadProgress)).not.toContain(directory);
+    expect(JSON.stringify(runningReadProgress)).not.toContain('batch-');
+    expect(JSON.stringify(runningReadProgress)).not.toContain('customer-');
+    expect(runningReadProgress.every((step) => step.output === undefined)).toBe(true);
+  });
+
+  it('fails closed before retaining documents beyond the aggregate row limit', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'aiws-read-aggregate-limit-'));
+    temporaryDirectories.push(directory);
+    await Promise.all(
+      ['first.csv', 'second.csv'].map(async (fileName) => {
+        await writeFile(join(directory, fileName), 'Value\n1\n', 'utf8');
+      }),
+    );
+    const grants = new FolderGrantStore(join(directory, '.agent', 'folder-grants.json'));
+    const grant = await grants.authorize(directory, DEVICE_ID, {
+      read: true,
+      watch: false,
+      write: false,
+    });
+    const spreadsheet = new DesktopSpreadsheetExecutor(
+      grants,
+      new ProcessingLedger(join(directory, '.agent', 'processing-ledger.json')),
+    );
+    const sharedRow = Object.freeze({ Value: 1 });
+    const rows = new Array<Readonly<Record<string, number>>>(60_000).fill(sharedRow);
+    const readSpy = vi.spyOn(spreadsheet, 'read').mockResolvedValue({
+      sheets: [{ columns: ['Value'], name: 'Data', rows }],
+      source: {
+        fileHash: 'a'.repeat(64),
+        fileSizeBytes: 1,
+        format: 'csv',
+        formulaCellCount: 0,
+      },
+    });
+    const executor = new DesktopWorkflowJobExecutor(spreadsheet);
+    const steps: StepResult[] = [];
+    const reporter = createReporter(steps);
+
+    await expect(
+      executor.execute(
+        {
+          attempt: 1,
+          availableAt: '2026-08-03T01:00:00.000Z',
+          deviceId: DEVICE_ID,
+          id: '10000000-0000-4000-8000-000000005063',
+          idempotencyKey: 'desktop-read-aggregate-limit-1',
+          maxAttempts: 3,
+          status: 'claimed',
+          tenantId: TENANT_ID,
+          workflow: {
+            description: 'Reject an oversized local workbook batch.',
+            edges: [{ from: 'list_files', to: 'read_files' }],
+            executionTarget: { deviceId: DEVICE_ID, type: 'desktop' },
+            name: 'Local workbook aggregate limit',
+            nodes: [
+              {
+                config: { folderAliasId: grant.folderAliasId, pattern: '*.csv' },
+                id: 'list_files',
+                type: 'folder.list_files',
+                version: 1,
+              },
+              {
+                config: {
+                  headerMode: 'auto',
+                  headerRow: 1,
+                  headerScanRows: 30,
+                  maxFileSizeBytes: 1_000_000,
+                  maxRows: 100_000,
+                  maxSheets: 200,
+                  sheetMode: 'all',
+                },
+                id: 'read_files',
+                type: 'excel.read',
+                version: 1,
+              },
+            ],
+            schemaVersion: 1,
+            trigger: { config: {}, type: 'manual.trigger' },
+          },
+          workflowRunId: '10000000-0000-4000-8000-000000005064',
+        },
+        reporter,
+      ),
+    ).rejects.toMatchObject({ code: 'FILE_LIMIT_EXCEEDED', retryable: false });
+
+    expect(readSpy).toHaveBeenCalledTimes(2);
+    expect(readSpy.mock.calls[0]?.[2]).toMatchObject({ maxRows: 100_000, maxSheets: 200 });
+    expect(readSpy.mock.calls[1]?.[2]).toMatchObject({ maxRows: 40_000, maxSheets: 200 });
+    expect(readSpy.mock.calls[0]?.[3]?.signal).toBe(reporter.signal);
+    expect(readSpy.mock.calls[1]?.[3]?.signal).toBe(reporter.signal);
+    const readSteps = steps.filter((step) => step.nodeId === 'read_files');
+    expect(readSteps.at(-1)).toMatchObject({
+      error: { code: 'NODE_EXECUTION_FAILED' },
+      status: 'failed',
+    });
+    expect(JSON.stringify(readSteps)).not.toContain(directory);
+    expect(JSON.stringify(readSteps)).not.toContain('first.csv');
+    expect(JSON.stringify(readSteps)).not.toContain('second.csv');
   });
 
   it('runs a claimed workflow only through a folder grant and suppresses duplicate output', async () => {

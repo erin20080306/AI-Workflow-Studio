@@ -30,7 +30,7 @@ const DRIVE_FOLDER_INTENT =
 const EXCEL_CONSOLIDATION_INTENT =
   /(?:合併|匯總|彙整|整合|整理).{0,36}(?:excel|\.xlsx?|活頁簿)|(?:excel|\.xlsx?|活頁簿).{0,36}(?:合併|匯總|彙整|整合|整理)|merge|consolidat/iu;
 const DESKTOP_OPERATION_INTENT =
-  /本機|桌面|下載區|下載項目|desktop|downloads?|local\s+(?:computer|machine|excel)|microsoft\s+excel|(?:可見|實際)(?:開啟|操作)|開啟(?:結果|檔案|excel|雲端資料夾)/iu;
+  /本機|桌面|下載區|下載項目|可見\s*codex|開啟\s*(?:google\s*)?chrome|(?:電腦|电脑).{0,24}(?:合併|合并|整合|匯總|汇总|彙整)|desktop|downloads?|local\s+(?:computer|machine|excel)|microsoft\s+excel|(?:可見|實際)(?:開啟|操作)|開啟(?:結果|檔案|excel|雲端資料夾)/iu;
 
 export interface WorkflowIntent {
   readonly needsDesktop: boolean;
@@ -45,7 +45,9 @@ export function detectWorkflowIntent(prompt: string): WorkflowIntent {
   const needsSheets = SHEETS_INTENT.test(prompt);
   const needsExcel = EXCEL_INTENT.test(prompt);
   const needsDriveExcel = needsExcel && DRIVE_FOLDER_INTENT.test(prompt);
-  const needsSummary = SUMMARY_INTENT.test(prompt);
+  const needsSlides = SLIDES_INTENT.test(prompt) && !SLIDES_NEGATION.test(prompt);
+  const needsAppsScript = APPS_SCRIPT_INTENT.test(prompt) && !APPS_SCRIPT_NEGATION.test(prompt);
+  const needsSummary = SUMMARY_INTENT.test(prompt) || needsSlides || needsAppsScript;
   if (needsGmail) required.add('gmail.read');
   if (needsForms) required.add('google_forms.read_responses');
   if (needsSheets) required.add('google_sheets.read');
@@ -56,10 +58,10 @@ export function detectWorkflowIntent(prompt: string): WorkflowIntent {
     required.add('ai.summarize');
     required.add('report.compose');
   }
-  if (SLIDES_INTENT.test(prompt) && !SLIDES_NEGATION.test(prompt)) {
+  if (needsSlides) {
     required.add('google_slides.create');
   }
-  if (APPS_SCRIPT_INTENT.test(prompt) && !APPS_SCRIPT_NEGATION.test(prompt)) {
+  if (needsAppsScript) {
     required.add('apps_script.deploy_template');
   }
   if (EMAIL_DELIVERY_INTENT.test(prompt) && !EMAIL_NEGATION.test(prompt))
@@ -74,7 +76,7 @@ export function detectWorkflowIntent(prompt: string): WorkflowIntent {
   }
   return {
     needsDesktop: needsExcel && (!needsDriveExcel || DESKTOP_OPERATION_INTENT.test(prompt)),
-    needsGoogleConnection: GOOGLE_INTENT.test(prompt),
+    needsGoogleConnection: GOOGLE_INTENT.test(prompt) || needsSlides || needsAppsScript,
     requiredNodeTypes: [...required],
   };
 }

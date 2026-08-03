@@ -190,6 +190,74 @@ values
     'agent-job-b'
   );
 
+insert into public.workflow_run_steps (
+  tenant_id,
+  workflow_run_id,
+  node_id,
+  node_type,
+  status,
+  attempt,
+  started_at,
+  completed_at,
+  output_summary
+)
+values
+  (
+    '72000000-0000-4000-8000-000000000001',
+    '77000000-0000-4000-8000-000000000001',
+    'review_profile_ready',
+    'excel.visible_review',
+    'succeeded',
+    1,
+    statement_timestamp(),
+    statement_timestamp(),
+    '{"columns":[],"fileCount":2,"kind":"desktop_excel_profile","rowCount":10,"sheetCount":1,"truncatedColumns":0}'
+  ),
+  (
+    '72000000-0000-4000-8000-000000000001',
+    '77000000-0000-4000-8000-000000000001',
+    'cloud_summary_claim',
+    'ai.summarize',
+    'pending',
+    1,
+    null,
+    null,
+    '{}'
+  ),
+  (
+    '72000000-0000-4000-8000-000000000001',
+    '77000000-0000-4000-8000-000000000001',
+    'cloud_summary_mismatch',
+    'ai.summarize',
+    'pending',
+    1,
+    null,
+    null,
+    '{}'
+  ),
+  (
+    '72000000-0000-4000-8000-000000000001',
+    '77000000-0000-4000-8000-000000000001',
+    'review_profile_running',
+    'excel.visible_review',
+    'running',
+    1,
+    statement_timestamp(),
+    null,
+    '{"columns":[],"fileCount":2,"kind":"desktop_excel_profile","rowCount":10,"sheetCount":1,"truncatedColumns":0}'
+  ),
+  (
+    '72000000-0000-4000-8000-000000000001',
+    '77000000-0000-4000-8000-000000000001',
+    'cloud_summary_unmet',
+    'ai.summarize',
+    'pending',
+    1,
+    null,
+    null,
+    '{}'
+  );
+
 do $$
 declare
   result_count integer;
@@ -244,6 +312,121 @@ begin
     'execute'
   ) then
     raise exception 'authenticated users must not revoke Desktop Agents';
+  end if;
+
+  if has_function_privilege(
+    'authenticated',
+    'public.claim_agent_cloud_step(uuid,uuid,integer,text,text,text,text,jsonb,text,timestamp with time zone)',
+    'execute'
+  ) then
+    raise exception 'authenticated users must not claim Desktop-to-Cloud continuation steps';
+  end if;
+
+  select count(*) into result_count
+  from public.claim_agent_cloud_step(
+    '72000000-0000-4000-8000-000000000001',
+    '77000000-0000-4000-8000-000000000001',
+    1,
+    'cloud_summary_claim',
+    'ai.summarize',
+    'review_profile_ready',
+    'excel.visible_review',
+    '{"columns":[],"fileCount":2,"kind":"desktop_excel_profile","rowCount":10,"sheetCount":1,"truncatedColumns":0}',
+    encode(extensions.digest('approved-profile', 'sha256'), 'hex'),
+    statement_timestamp()
+  );
+  if result_count <> 1 then
+    raise exception 'the first exact predecessor-bound cloud step claim must succeed';
+  end if;
+
+  select count(*) into result_count
+  from public.claim_agent_cloud_step(
+    '72000000-0000-4000-8000-000000000001',
+    '77000000-0000-4000-8000-000000000001',
+    1,
+    'cloud_summary_claim',
+    'ai.summarize',
+    'review_profile_ready',
+    'excel.visible_review',
+    '{"columns":[],"fileCount":2,"kind":"desktop_excel_profile","rowCount":10,"sheetCount":1,"truncatedColumns":0}',
+    encode(extensions.digest('approved-profile', 'sha256'), 'hex'),
+    statement_timestamp()
+  );
+  if result_count <> 0 then
+    raise exception 'an active cloud step claim must not execute twice';
+  end if;
+
+  select count(*) into result_count
+  from public.claim_agent_cloud_step(
+    '72000000-0000-4000-8000-000000000001',
+    '77000000-0000-4000-8000-000000000001',
+    1,
+    'cloud_summary_mismatch',
+    'ai.summarize',
+    'review_profile_ready',
+    'excel.visible_review',
+    '{"columns":[],"fileCount":3,"kind":"desktop_excel_profile","rowCount":10,"sheetCount":1,"truncatedColumns":0}',
+    encode(extensions.digest('changed-profile', 'sha256'), 'hex'),
+    statement_timestamp()
+  );
+  if result_count <> 0 then
+    raise exception 'a cloud step claim must reject changed predecessor input';
+  end if;
+
+  select count(*) into result_count
+  from public.claim_agent_cloud_step(
+    '72000000-0000-4000-8000-000000000001',
+    '77000000-0000-4000-8000-000000000001',
+    1,
+    'cloud_summary_unmet',
+    'ai.summarize',
+    'review_profile_running',
+    'excel.visible_review',
+    '{"columns":[],"fileCount":2,"kind":"desktop_excel_profile","rowCount":10,"sheetCount":1,"truncatedColumns":0}',
+    encode(extensions.digest('unmet-profile', 'sha256'), 'hex'),
+    statement_timestamp()
+  );
+  if result_count <> 0 then
+    raise exception 'a cloud step claim must require a succeeded predecessor';
+  end if;
+
+  select count(*) into result_count
+  from public.claim_agent_cloud_step(
+    '72000000-0000-4000-8000-000000000002',
+    '77000000-0000-4000-8000-000000000001',
+    1,
+    'cloud_summary_mismatch',
+    'ai.summarize',
+    'review_profile_ready',
+    'excel.visible_review',
+    '{"columns":[],"fileCount":2,"kind":"desktop_excel_profile","rowCount":10,"sheetCount":1,"truncatedColumns":0}',
+    encode(extensions.digest('cross-tenant-profile', 'sha256'), 'hex'),
+    statement_timestamp()
+  );
+  if result_count <> 0 then
+    raise exception 'a cloud step claim must not cross Tenant boundaries';
+  end if;
+
+  if (
+    select status
+    from public.workflow_run_steps
+    where workflow_run_id = '77000000-0000-4000-8000-000000000001'
+      and node_id = 'cloud_summary_claim'
+      and attempt = 1
+  ) <> 'running' then
+    raise exception 'the atomic cloud step claim must transition pending to running';
+  end if;
+
+  if (
+    select output_summary <> '{}'::jsonb
+      or input_summary ? 'localPath'
+      or input_summary ? 'rows'
+    from public.workflow_run_steps
+    where workflow_run_id = '77000000-0000-4000-8000-000000000001'
+      and node_id = 'cloud_summary_claim'
+      and attempt = 1
+  ) then
+    raise exception 'the cloud step claim must persist only bounded metadata';
   end if;
 
   update public.tenant_subscriptions

@@ -176,6 +176,35 @@ describe('WorkflowEngine', () => {
     expect(duplicate.steps).toEqual(first.steps);
   });
 
+  it('includes the validated terminal step in progress events', async () => {
+    const events: unknown[] = [];
+    const result = await new WorkflowEngine(createMockNodeRegistry()).execute(
+      singleDataNodeWorkflow(),
+      {
+        ...baseOptions,
+        idempotencyKey: 'workflow-run-terminal-progress',
+        mode: 'live',
+        onProgress(event) {
+          events.push(event);
+        },
+      },
+    );
+
+    expect(events).toEqual([
+      {
+        nodeId: 'filter_rows',
+        runId: baseOptions.runId,
+        status: 'running',
+      },
+      {
+        nodeId: 'filter_rows',
+        runId: baseOptions.runId,
+        status: 'succeeded',
+        step: result.steps[0],
+      },
+    ]);
+  });
+
   it('restores a validated completed-node output without executing that node again', async () => {
     let calls = 0;
     const executor: RegisteredWorkflowNodeExecutor = {

@@ -15,6 +15,7 @@ import {
   type FilterCondition,
   type SafeFileWatchEvent,
   type SortField,
+  type SpreadsheetReadControl,
   type SpreadsheetReadOptions,
   type SpreadsheetTable,
   type SpreadsheetWriteResult,
@@ -122,14 +123,19 @@ export class DesktopSpreadsheetExecutor {
     return paths;
   }
 
-  async read(deviceId: string, input: AuthorizedInput, options: SpreadsheetReadOptions = {}) {
+  async read(
+    deviceId: string,
+    input: AuthorizedInput,
+    options: SpreadsheetReadOptions = {},
+    control: SpreadsheetReadControl = {},
+  ) {
     const filePath = await this.folderGrants.resolveAuthorizedPath(
       input.folderAliasId,
       deviceId,
       input.relativePath,
       'read',
     );
-    return await readSpreadsheet(filePath, options);
+    return await readSpreadsheet(filePath, options, control);
   }
 
   async stageDriveExcelFiles(

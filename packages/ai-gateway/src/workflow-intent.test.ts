@@ -89,6 +89,52 @@ describe('workflow intent coverage', () => {
     });
   });
 
+  it('routes an explicit visible Codex Chrome handoff to the Desktop workflow', () => {
+    expect(
+      detectWorkflowIntent(
+        '使用可見 Codex 模式開啟 Chrome，從 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 下載 Excel，在我的電腦安全整合，再將不含原始資料的統計摘要交回雲端產生報告、Slides 與 GAS 簡報。',
+      ),
+    ).toEqual({
+      needsDesktop: true,
+      needsGoogleConnection: true,
+      requiredNodeTypes: [
+        'ai.summarize',
+        'report.compose',
+        'google_slides.create',
+        'apps_script.deploy_template',
+        'google_drive.read_excel_folder',
+        'google_drive.create_excel_report',
+      ],
+    });
+  });
+
+  it('treats GAS 簡報 wording as both presentation and approved Apps Script output', () => {
+    const intent = detectWorkflowIntent(
+      '使用可見 Codex 模式開啟 Chrome，下載並整合 Drive Excel，再產生摘要與 GAS 簡報。',
+    );
+
+    expect(intent.requiredNodeTypes).toEqual(
+      expect.arrayContaining([
+        'ai.summarize',
+        'report.compose',
+        'google_slides.create',
+        'apps_script.deploy_template',
+      ]),
+    );
+  });
+
+  it('closes a GAS-only request over summary and report without inventing Slides', () => {
+    const intent = detectWorkflowIntent(
+      '使用可見 Codex 模式開啟 Chrome，下載並整合 Drive Excel，並部署核准型 GAS。',
+    );
+
+    expect(intent.requiredNodeTypes).toEqual(
+      expect.arrayContaining(['ai.summarize', 'report.compose', 'apps_script.deploy_template']),
+    );
+    expect(intent.requiredNodeTypes).not.toContain('google_slides.create');
+    expect(intent.needsGoogleConnection).toBe(true);
+  });
+
   it('does not invent Slides or Apps Script when both outputs are explicitly negated', () => {
     const intent = detectWorkflowIntent(
       '讀取 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 內 Excel 並匯總，不要建立簡報，也不要部署 GAS。',

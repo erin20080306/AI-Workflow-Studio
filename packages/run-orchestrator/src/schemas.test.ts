@@ -98,6 +98,103 @@ describe('WorkflowRunViewSchema', () => {
     ).toBe(false);
   });
 
+  it('exposes bounded Drive workbook progress without accepting private checkpoint data', () => {
+    const parsed = WorkflowRunViewSchema.parse({
+      ...runView,
+      steps: [
+        {
+          attempt: 1,
+          driveWorkbookProgress: { phase: 'batching', totalWorkbookCount: 120 },
+          nodeId: 'read_drive_excel',
+          nodeType: 'google_drive.read_excel_folder',
+          processedFileCount: 40,
+          processedRowCount: 2_400,
+          status: 'running',
+        },
+      ],
+    });
+
+    expect(parsed.steps[0]?.driveWorkbookProgress).toEqual({
+      phase: 'batching',
+      totalWorkbookCount: 120,
+    });
+    expect(
+      WorkflowRunViewSchema.safeParse({
+        ...runView,
+        steps: [
+          {
+            attempt: 1,
+            driveWorkbookProgress: {
+              fileNames: ['private-ledger.xlsx'],
+              phase: 'batching',
+              totalWorkbookCount: 120,
+            },
+            nodeId: 'read_drive_excel',
+            nodeType: 'google_drive.read_excel_folder',
+            processedFileCount: 0,
+            processedRowCount: 0,
+            status: 'running',
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      WorkflowRunViewSchema.safeParse({
+        ...runView,
+        steps: [
+          {
+            attempt: 1,
+            driveWorkbookProgress: { phase: 'batching', totalWorkbookCount: 1_001 },
+            nodeId: 'read_drive_excel',
+            nodeType: 'google_drive.read_excel_folder',
+            processedFileCount: 0,
+            processedRowCount: 0,
+            status: 'running',
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts strict count-only local workbook progress and rejects private fields', () => {
+    expect(
+      WorkflowRunViewSchema.safeParse({
+        ...runView,
+        steps: [
+          {
+            attempt: 1,
+            nodeId: 'read_local_workbooks',
+            nodeType: 'excel.read',
+            processedFileCount: 40,
+            processedRowCount: 2_400,
+            progress: { kind: 'workbook_batch', totalWorkbookCount: 481 },
+            status: 'running',
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      WorkflowRunViewSchema.safeParse({
+        ...runView,
+        steps: [
+          {
+            attempt: 1,
+            nodeId: 'read_local_workbooks',
+            nodeType: 'excel.read',
+            processedFileCount: 40,
+            processedRowCount: 2_400,
+            progress: {
+              fileNames: ['private-ledger.xls'],
+              kind: 'workbook_batch',
+              totalWorkbookCount: 481,
+            },
+            status: 'running',
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it('exposes only validated report artifacts and trusted Google Slides links', () => {
     const parsed = WorkflowRunViewSchema.parse({
       ...runView,

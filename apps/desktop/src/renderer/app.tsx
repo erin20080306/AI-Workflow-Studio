@@ -13,7 +13,7 @@ type DesktopLocale = 'en' | 'zh-Hant';
 const DESKTOP_LOCALE_KEY = 'ai-workflow-studio-desktop-locale';
 
 const previewSnapshot: AgentSnapshot = {
-  agentVersion: '0.1.0-dev',
+  agentVersion: '0.2.0-dev',
   autoStart: false,
   computerUse: {
     enabled: false,

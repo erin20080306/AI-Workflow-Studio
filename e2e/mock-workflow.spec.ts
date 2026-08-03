@@ -84,6 +84,6 @@ test('creates, persists, reviews, and dry-runs a safe AI Workflow', async ({ pag
   await expect(page.getByRole('heading', { name: '需要執行核准' })).toBeVisible();
   await page.getByRole('button', { name: '核准並派送' }).click();
   await expect(page.getByText('佇列中', { exact: true })).toBeVisible();
-  await expect(page.getByText('approval.approved', { exact: true })).toBeVisible();
-  await expect(page.getByText('agent_job.queued', { exact: true })).toBeVisible();
+  await expect(page.getByText('已核准執行', { exact: true })).toBeVisible();
+  await expect(page.getByText('桌面工作已進入佇列', { exact: true })).toBeVisible();
 });

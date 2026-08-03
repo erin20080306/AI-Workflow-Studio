@@ -1,7 +1,5 @@
 import 'server-only';
 
-import { createHash } from 'node:crypto';
-
 import {
   RunOrchestrationError,
   RunStepResultSchema,
@@ -29,6 +27,15 @@ import { z } from 'zod';
 
 import type { WorkspaceContext } from '@/lib/auth/context';
 import type { AgentCloudNode } from '@/lib/agent-cloud-step-schema';
+import { isAssistantAgentVersionCompatible } from '@/lib/assistant-device-status';
+import {
+  agentCloudClaimDisposition,
+  agentCloudInputHash,
+  agentCloudInputsEqual,
+  immediateAgentCloudPredecessor,
+} from '@/lib/agent-cloud-step-state';
+import { validateDesktopExcelProfile } from '@/lib/agent-cloud-step-schema';
+import { isAgentCloudNodeType } from '@/lib/agent-progress-schema';
 import {
   advanceDriveExcelBatch,
   executeCloudWorkflow,
@@ -40,6 +47,7 @@ import {
   type DriveExcelCheckpoint,
 } from '@/lib/cloud-drive-excel-checkpoint';
 import { nextRetryTimeoutAt } from '@/lib/production-run-timeout';
+import { driveWorkbookProgressForRunStep } from '@/lib/run-drive-workbook-progress';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
@@ -138,6 +146,14 @@ const AgentCloudStepRowSchema = z
     status: z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled', 'timed_out']),
   })
   .strict();
+const AgentCloudPredecessorStepRowSchema = z
+  .object({
+    node_id: z.string().min(1).max(120),
+    node_type: z.string().min(1).max(120),
+    output_summary: z.record(z.string(), z.unknown()),
+    status: z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled', 'timed_out']),
+  })
+  .strict();
 const DriveBatchLeaseSchema = z
   .object({
     claimId: UuidSchema,
@@ -177,6 +193,7 @@ const JobRowSchema = z.object({
   status: z.enum(['pending', 'claimed', 'running', 'succeeded', 'failed', 'cancelled', 'expired']),
 });
 const DeviceRowSchema = z.object({
+  agent_version: z.string().min(1).max(80).nullable(),
   id: UuidSchema,
   status: z.enum(['offline', 'online', 'pairing', 'revoked']),
 });
@@ -271,7 +288,7 @@ async function requireProductionTarget(
   const admin = createSupabaseAdminClient();
   const deviceResult = await admin
     .from('devices')
-    .select('id, status')
+    .select('id, status, agent_version')
     .eq('tenant_id', tenantId)
     .eq('id', workflow.executionTarget.deviceId)
     .neq('status', 'revoked')
@@ -285,7 +302,13 @@ async function requireProductionTarget(
       'The selected Desktop Agent is unavailable or revoked.',
     );
   }
-  DeviceRowSchema.parse(deviceResult.data);
+  const device = DeviceRowSchema.parse(deviceResult.data);
+  if (!isAssistantAgentVersionCompatible(device.agent_version)) {
+    throw new RunOrchestrationError(
+      'RUN_INVALID',
+      'Update the selected Desktop Agent before dispatching this workflow.',
+    );
+  }
 
   const folderAliasIds = [
     ...new Set(
@@ -560,33 +583,41 @@ async function runView(tenantId: string, runId: string): Promise<WorkflowRunView
     })),
     ...(run.started_at === null ? {} : { startedAt: run.started_at }),
     status: run.status === 'pending' ? 'queued' : run.status,
-    steps: steps.map((step) => ({
-      attempt: step.attempt,
-      ...(step.completed_at === null ? {} : { completedAt: step.completed_at }),
-      ...(step.error_code === null
-        ? {}
-        : {
-            error: {
-              code: step.error_code,
-              message: step.error_message ?? 'The workflow step did not complete.',
-              retryable: step.status === 'failed' || step.status === 'timed_out',
-            },
-          }),
-      nodeId: step.node_id,
-      nodeType: step.node_type,
-      ...(ComputerUseProgressSchema.safeParse(step.output_summary).success
-        ? {
-            currentAction: ComputerUseProgressSchema.parse(step.output_summary).computerUseAction,
-          }
-        : {}),
-      ...(RunStepResultSchema.safeParse(step.output_summary).success
-        ? { result: RunStepResultSchema.parse(step.output_summary) }
-        : {}),
-      processedFileCount: step.processed_file_count,
-      processedRowCount: step.processed_row_count,
-      ...(step.started_at === null ? {} : { startedAt: step.started_at }),
-      status: step.status === 'timed_out' ? 'cancelled' : step.status,
-    })),
+    steps: steps.map((step) => {
+      const driveWorkbookProgress = driveWorkbookProgressForRunStep({
+        nodeType: step.node_type,
+        outputSummary: step.output_summary,
+        status: step.status,
+      });
+      return {
+        attempt: step.attempt,
+        ...(step.completed_at === null ? {} : { completedAt: step.completed_at }),
+        ...(step.error_code === null
+          ? {}
+          : {
+              error: {
+                code: step.error_code,
+                message: step.error_message ?? 'The workflow step did not complete.',
+                retryable: step.status === 'failed' || step.status === 'timed_out',
+              },
+            }),
+        nodeId: step.node_id,
+        nodeType: step.node_type,
+        ...(ComputerUseProgressSchema.safeParse(step.output_summary).success
+          ? {
+              currentAction: ComputerUseProgressSchema.parse(step.output_summary).computerUseAction,
+            }
+          : {}),
+        ...(driveWorkbookProgress === undefined ? {} : { driveWorkbookProgress }),
+        ...(RunStepResultSchema.safeParse(step.output_summary).success
+          ? { result: RunStepResultSchema.parse(step.output_summary) }
+          : {}),
+        processedFileCount: step.processed_file_count,
+        processedRowCount: step.processed_row_count,
+        ...(step.started_at === null ? {} : { startedAt: step.started_at }),
+        status: step.status === 'timed_out' ? 'cancelled' : step.status,
+      };
+    }),
     tenantId,
     timeoutAt: run.timeout_at,
     workflowId: run.workflow_id,
@@ -1345,7 +1376,9 @@ export async function retryProductionRun(
   return await runView(actor.tenantId, view.id);
 }
 
-export async function syncProductionAgentProgress(input: AgentProgressInput): Promise<void> {
+export async function syncProductionAgentProgress(
+  input: AgentProgressInput & { readonly workflow: Workflow },
+): Promise<void> {
   const parsed = z
     .object({
       deviceId: UuidSchema,
@@ -1353,6 +1386,7 @@ export async function syncProductionAgentProgress(input: AgentProgressInput): Pr
       jobId: UuidSchema,
       step: StepResultSchema,
       tenantId: UuidSchema,
+      workflow: WorkflowSchema,
     })
     .strict()
     .parse(input);
@@ -1369,6 +1403,19 @@ export async function syncProductionAgentProgress(input: AgentProgressInput): Pr
     .object({ attempt: z.number().int().min(1), workflow_run_id: UuidSchema })
     .parse(jobResult.data);
   const run = await runView(parsed.tenantId, job.workflow_run_id);
+  const workflowNode = parsed.workflow.nodes.find((node) => node.id === parsed.step.nodeId);
+  const runStep = run.steps.find((step) => step.nodeId === parsed.step.nodeId);
+  if (
+    workflowNode === undefined ||
+    runStep === undefined ||
+    runStep.nodeType !== workflowNode.type
+  ) {
+    throw new RunOrchestrationError('RUN_INVALID', 'The progress node is not in this run.');
+  }
+  if (isAgentCloudNodeType(workflowNode.type)) {
+    // The reviewed cloud-step endpoint is the sole owner of cloud step state.
+    return;
+  }
   if (run.status === 'queued') {
     await transition(undefined, parsed.tenantId, run.id, 'queued', 'running', {
       deviceId: parsed.deviceId,
@@ -1376,7 +1423,22 @@ export async function syncProductionAgentProgress(input: AgentProgressInput): Pr
   }
   const safeStep = StepResultSchema.parse(parsed.step);
   const computerUseProgress = ComputerUseProgressSchema.safeParse(safeStep.output);
-  const publicResult = RunStepResultSchema.safeParse(safeStep.output);
+  const workbookBatchProgress =
+    safeStep.status === 'running' &&
+    workflowNode.type === 'excel.read' &&
+    safeStep.progress !== undefined
+      ? safeStep.progress
+      : undefined;
+  const isAiSummaryPredecessor = parsed.workflow.edges.some((edge) => {
+    if (edge.from !== safeStep.nodeId) return false;
+    return parsed.workflow.nodes.some(
+      (node) => node.id === edge.to && node.type === 'ai.summarize',
+    );
+  });
+  const safeProfile =
+    safeStep.status === 'succeeded' && isAiSummaryPredecessor && safeStep.output !== undefined
+      ? validateDesktopExcelProfile(safeStep.output)
+      : undefined;
   const update = await admin
     .from('workflow_run_steps')
     .update({
@@ -1386,9 +1448,7 @@ export async function syncProductionAgentProgress(input: AgentProgressInput): Pr
       output_summary:
         safeStep.status === 'running' && computerUseProgress.success
           ? computerUseProgress.data
-          : publicResult.success
-            ? publicResult.data
-            : {},
+          : (workbookBatchProgress ?? safeProfile ?? {}),
       processed_file_count: safeStep.processedFileCount,
       processed_row_count: safeStep.processedRowCount,
       started_at: safeStep.startedAt ?? null,
@@ -1590,7 +1650,7 @@ export async function executeProductionAgentCloudStep(
     );
   }
   const input = JsonValueSchema.parse(inputValue);
-  const inputHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  const inputHash = agentCloudInputHash(input);
   const admin = createSupabaseAdminClient();
   const runResult = await admin
     .from('workflow_runs')
@@ -1623,11 +1683,11 @@ export async function executeProductionAgentCloudStep(
     );
   }
   const step = AgentCloudStepRowSchema.parse(stepResult.data);
-  const storedHash =
-    typeof step.input_summary.agentCloudInputHash === 'string'
-      ? step.input_summary.agentCloudInputHash
-      : undefined;
-  if (step.status === 'succeeded' && storedHash === inputHash) {
+  const disposition = agentCloudClaimDisposition(
+    { inputSummary: step.input_summary, status: step.status },
+    inputHash,
+  );
+  if (disposition === 'duplicate') {
     return {
       duplicate: true,
       output: JsonValueSchema.parse(step.output_summary),
@@ -1635,28 +1695,73 @@ export async function executeProductionAgentCloudStep(
       processedRowCount: step.processed_row_count,
     };
   }
-  if (storedHash !== undefined && storedHash !== inputHash) {
+  if (disposition === 'input_conflict') {
     throw new RunOrchestrationError(
       'RUN_CONFLICT',
       'The cloud continuation input changed after execution began.',
     );
   }
-  const startedAt = new Date().toISOString();
-  const claimed = await admin
+  if (disposition !== 'claim') {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      disposition === 'in_progress'
+        ? 'The cloud continuation step is already in progress.'
+        : 'The cloud continuation step is not claimable.',
+    );
+  }
+
+  let predecessor: ReturnType<typeof immediateAgentCloudPredecessor>;
+  try {
+    predecessor = immediateAgentCloudPredecessor(job.workflow, node.id);
+  } catch (error) {
+    throw new RunOrchestrationError(
+      'RUN_INVALID',
+      'The reviewed cloud continuation graph has an invalid predecessor.',
+      { cause: error },
+    );
+  }
+  const predecessorResult = await admin
     .from('workflow_run_steps')
-    .update({
-      input_summary: { agentCloudInputHash: inputHash, nodeType: node.type },
-      started_at: startedAt,
-      status: 'running',
-      updated_at: startedAt,
-    })
+    .select('node_id, node_type, output_summary, status')
     .eq('tenant_id', job.tenantId)
     .eq('workflow_run_id', job.workflowRunId)
-    .eq('node_id', node.id)
-    .eq('node_type', node.type)
+    .eq('node_id', predecessor.id)
+    .eq('node_type', predecessor.type)
     .eq('attempt', attempt)
-    .in('status', ['pending', 'running'])
-    .select('id');
+    .single();
+  if (predecessorResult.error !== null) {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The cloud continuation predecessor is unavailable.',
+    );
+  }
+  const predecessorStep = AgentCloudPredecessorStepRowSchema.parse(predecessorResult.data);
+  if (predecessorStep.status !== 'succeeded') {
+    throw new RunOrchestrationError(
+      'RUN_STATE_CONFLICT',
+      'The cloud continuation predecessor has not succeeded.',
+    );
+  }
+  if (!agentCloudInputsEqual(input, predecessorStep.output_summary)) {
+    throw new RunOrchestrationError(
+      'RUN_CONFLICT',
+      'The cloud continuation input does not match the stored predecessor output.',
+    );
+  }
+
+  const startedAt = new Date().toISOString();
+  const claimed = await admin.rpc('claim_agent_cloud_step', {
+    requested_attempt: attempt,
+    requested_input: input,
+    requested_input_hash: inputHash,
+    requested_node_id: node.id,
+    requested_node_type: node.type,
+    requested_predecessor_node_id: predecessor.id,
+    requested_predecessor_node_type: predecessor.type,
+    requested_run_id: job.workflowRunId,
+    requested_started_at: startedAt,
+    requested_tenant_id: job.tenantId,
+  });
   if (
     claimed.error !== null ||
     z.array(z.object({ id: UuidSchema })).parse(claimed.data).length !== 1
@@ -1666,57 +1771,107 @@ export async function executeProductionAgentCloudStep(
       'The cloud continuation step could not be claimed.',
     );
   }
-  const context = await systemWorkspaceContextForRun(run);
-  const executed = await executeCloudWorkflowNode(context, node, input, {
-    idempotencyKey: `${job.idempotencyKey}:${node.id}`,
-    runId: job.workflowRunId,
-    ...(signal === undefined ? {} : { signal }),
-  });
-  const output = z.record(z.string(), z.unknown()).parse(JsonValueSchema.parse(executed.output));
-  const processedFileCount = executed.metrics?.processedFileCount ?? 0;
-  const processedRowCount = executed.metrics?.processedRowCount ?? 0;
-  const completedAt = new Date().toISOString();
-  const saved = await admin
-    .from('workflow_run_steps')
-    .update({
-      completed_at: completedAt,
-      output_summary: output,
-      processed_file_count: processedFileCount,
-      processed_row_count: processedRowCount,
-      status: 'succeeded',
-      updated_at: completedAt,
-    })
-    .eq('tenant_id', job.tenantId)
-    .eq('workflow_run_id', job.workflowRunId)
-    .eq('node_id', node.id)
-    .eq('node_type', node.type)
-    .eq('attempt', attempt)
-    .eq('input_summary->>agentCloudInputHash', inputHash)
-    .select('id');
-  if (
-    saved.error !== null ||
-    z.array(z.object({ id: UuidSchema })).parse(saved.data).length !== 1
-  ) {
-    throw new RunOrchestrationError(
-      'RUN_STATE_CONFLICT',
-      'The cloud continuation result could not be saved.',
-    );
+  try {
+    const context = await systemWorkspaceContextForRun(run);
+    const executed = await executeCloudWorkflowNode(context, node, input, {
+      idempotencyKey: `${job.idempotencyKey}:${node.id}`,
+      runId: job.workflowRunId,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    const output = z.record(z.string(), z.unknown()).parse(JsonValueSchema.parse(executed.output));
+    const processedFileCount = executed.metrics?.processedFileCount ?? 0;
+    const processedRowCount = executed.metrics?.processedRowCount ?? 0;
+    const completedAt = new Date().toISOString();
+    const saved = await admin
+      .from('workflow_run_steps')
+      .update({
+        completed_at: completedAt,
+        output_summary: output,
+        processed_file_count: processedFileCount,
+        processed_row_count: processedRowCount,
+        status: 'succeeded',
+        updated_at: completedAt,
+      })
+      .eq('tenant_id', job.tenantId)
+      .eq('workflow_run_id', job.workflowRunId)
+      .eq('node_id', node.id)
+      .eq('node_type', node.type)
+      .eq('attempt', attempt)
+      .eq('status', 'running')
+      .eq('input_summary->>agentCloudInputHash', inputHash)
+      .select('id');
+    if (
+      saved.error !== null ||
+      z.array(z.object({ id: UuidSchema })).parse(saved.data).length !== 1
+    ) {
+      throw new RunOrchestrationError(
+        'RUN_STATE_CONFLICT',
+        'The cloud continuation result could not be saved.',
+      );
+    }
+    try {
+      await admin.from('audit_logs').insert({
+        action: 'agent_cloud_step.succeeded',
+        actor_device_id: job.deviceId,
+        correlation_id: job.workflowRunId,
+        metadata: { nodeType: node.type },
+        resource_id: job.workflowRunId,
+        resource_type: 'workflow_run',
+        tenant_id: job.tenantId,
+      });
+    } catch {
+      // The durable succeeded step remains authoritative if audit delivery is unavailable.
+    }
+    return {
+      duplicate: false,
+      output: JsonValueSchema.parse(output),
+      processedFileCount,
+      processedRowCount,
+    };
+  } catch (error) {
+    const failedAt = new Date().toISOString();
+    const errorCode = signal?.aborted ? 'AGENT_CLOUD_STEP_ABORTED' : 'AGENT_CLOUD_STEP_FAILED';
+    const errorMessage = signal?.aborted
+      ? 'The reviewed cloud continuation step was interrupted.'
+      : 'The reviewed cloud continuation step could not be completed.';
+    try {
+      const failed = await admin
+        .from('workflow_run_steps')
+        .update({
+          completed_at: failedAt,
+          error_code: errorCode,
+          error_message: errorMessage,
+          output_summary: {},
+          status: 'failed',
+          updated_at: failedAt,
+        })
+        .eq('tenant_id', job.tenantId)
+        .eq('workflow_run_id', job.workflowRunId)
+        .eq('node_id', node.id)
+        .eq('node_type', node.type)
+        .eq('attempt', attempt)
+        .eq('status', 'running')
+        .eq('input_summary->>agentCloudInputHash', inputHash)
+        .select('id');
+      if (
+        failed.error === null &&
+        z.array(z.object({ id: UuidSchema })).parse(failed.data).length === 1
+      ) {
+        await admin.from('audit_logs').insert({
+          action: 'agent_cloud_step.failed',
+          actor_device_id: job.deviceId,
+          correlation_id: job.workflowRunId,
+          metadata: { errorCode, nodeType: node.type },
+          resource_id: job.workflowRunId,
+          resource_type: 'workflow_run',
+          tenant_id: job.tenantId,
+        });
+      }
+    } catch {
+      // Preserve the originating execution error if failure bookkeeping is unavailable.
+    }
+    throw error;
   }
-  await admin.from('audit_logs').insert({
-    action: 'agent_cloud_step.succeeded',
-    actor_device_id: job.deviceId,
-    correlation_id: job.workflowRunId,
-    metadata: { nodeType: node.type },
-    resource_id: job.workflowRunId,
-    resource_type: 'workflow_run',
-    tenant_id: job.tenantId,
-  });
-  return {
-    duplicate: false,
-    output: JsonValueSchema.parse(output),
-    processedFileCount,
-    processedRowCount,
-  };
 }
 
 export interface CloudBatchTickResult {

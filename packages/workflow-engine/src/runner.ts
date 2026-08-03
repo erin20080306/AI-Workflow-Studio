@@ -59,6 +59,7 @@ export interface WorkflowExecutionResult {
 export interface WorkflowProgressEvent {
   readonly nodeId: string;
   readonly runId: string;
+  readonly step?: WorkflowExecutionStep;
   readonly status: WorkflowStepStatus | 'running';
 }
 
@@ -349,7 +350,7 @@ export class WorkflowEngine {
       const completedOutput = completedNodeOutputs.get(workflowNode.id);
       if (completedOutput !== undefined) {
         const completedAt = now();
-        steps.push({
+        const restoredStep: WorkflowExecutionStep = {
           attempts: 0,
           completedAt: completedAt.toISOString(),
           durationMs: Math.max(0, completedAt.getTime() - stepStartedAt.getTime()),
@@ -360,10 +361,12 @@ export class WorkflowEngine {
           startedAt: stepStartedAt.toISOString(),
           status: 'succeeded',
           warnings: ['Restored from a validated durable checkpoint.'],
-        });
+        };
+        steps.push(restoredStep);
         await options.onProgress?.({
           nodeId: workflowNode.id,
           runId: options.runId,
+          step: restoredStep,
           status: 'succeeded',
         });
         continue;
@@ -395,6 +398,7 @@ export class WorkflowEngine {
         await options.onProgress?.({
           nodeId: workflowNode.id,
           runId: options.runId,
+          step,
           status: 'planned',
         });
         continue;
@@ -445,6 +449,7 @@ export class WorkflowEngine {
           await options.onProgress?.({
             nodeId: workflowNode.id,
             runId: options.runId,
+            step,
             status: 'succeeded',
           });
           stepCompleted = true;
@@ -477,6 +482,7 @@ export class WorkflowEngine {
           await options.onProgress?.({
             nodeId: workflowNode.id,
             runId: options.runId,
+            step: failedStep,
             status: failedStep.status,
           });
 

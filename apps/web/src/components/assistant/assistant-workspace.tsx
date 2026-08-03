@@ -58,6 +58,7 @@ import {
   type AssistantAttachmentSummary,
 } from '@/lib/assistant-resource-schema';
 import { NODE_PRESENTATION } from '@/lib/mock-workflows';
+import { selectPreferredAssistantDeviceId } from '@/lib/workflow-planning-context';
 
 const PlannerResponseSchema = z
   .object({
@@ -89,6 +90,18 @@ const AssistantErrorResponseSchema = z
   })
   .passthrough();
 
+const EXACT_DOWNLOADS_ALIAS_NAMES = new Set(['downloads', '下載項目', '下载项目']);
+
+function isExactApprovedDownloadsAlias(
+  folder: AssistantExecutionTarget['folderAliases'][number],
+): boolean {
+  return (
+    EXACT_DOWNLOADS_ALIAS_NAMES.has(folder.displayName.trim().toLocaleLowerCase('en')) &&
+    folder.permissions.read &&
+    folder.permissions.write
+  );
+}
+
 class AssistantRequestError extends Error {
   readonly code: string;
 
@@ -115,7 +128,9 @@ const copy = {
     ask: 'Ask',
     askBody:
       'Ask mode streams an explanation, saves the conversation, and may read only the sources you explicitly select. It cannot run workflow actions.',
-    assistant: 'AI Workspace',
+    access: 'Access & approvals',
+    approvedDownloads: 'Approved Downloads',
+    assistant: 'Work',
     artifact: 'Create Markdown',
     artifactCreated: 'Markdown artifact created',
     artifacts: 'Artifacts',
@@ -124,7 +139,7 @@ const copy = {
     attachmentLimit: 'Select up to 5 sources for one message.',
     attachmentTooLarge: 'The source must be 1 MB or smaller.',
     cancelled: 'Generation stopped. The partial response was kept for audit.',
-    conversations: 'Conversations',
+    conversations: 'Work history',
     delete: 'Delete',
     deleteCancel: 'Cancel',
     deleteConfirm: 'Delete conversation',
@@ -133,15 +148,18 @@ const copy = {
     deleteFailed: 'The conversation could not be deleted.',
     deleteTitle: 'Delete this conversation?',
     deleting: 'Deleting…',
-    draftOnly: 'Validated AI automation',
+    draftOnly: 'Outcome request · validated steps',
     desktopAgent: 'Desktop Agent',
     desktopOffline: 'Offline · jobs will wait',
     desktopOnline: 'Online',
+    desktopUpdateRequired: 'Update required · install Desktop Agent 0.2.0+',
     emptyAsk: 'Ask a question, refine an idea, or explore a safe automation approach.',
     emptyImage: 'Describe the image you want. It will be generated inside this conversation.',
+    downloadsAmbiguous: 'More than one exact Downloads alias is approved. Choose one in Devices.',
+    downloadsMissing: 'No exact read/write Downloads alias is approved.',
     emptyPlan:
-      'Describe the source, transformation rules, output, and timing. The model can only propose validated Workflow JSON.',
-    emptyTitle: 'What would you like to work on?',
+      'Describe the finished result. Work will turn it into validated steps before anything can run.',
+    emptyTitle: 'What outcome should Work deliver?',
     error: 'The assistant response could not be completed. Nothing was executed.',
     errorAuthentication:
       'The selected AI provider could not be verified. Choose Auto or contact the administrator.',
@@ -167,30 +185,36 @@ const copy = {
     levelLocked: 'Locked',
     modelAuto: 'Auto · task, allowance, and cost aware',
     modelUnavailable: 'temporarily unavailable',
-    newConversation: 'New conversation',
+    googleTools: 'Google tools in this plan',
+    googleToolsEmpty: 'Google tools will appear here when a validated plan needs them.',
+    newConversation: 'New work',
     noProvider: 'AI is unavailable. Please contact the platform administrator.',
+    noArtifacts: 'Completed files and links will appear here.',
     noDesktopAgent: 'Pair a Desktop Agent before creating an executable plan.',
     noSaved: 'No saved conversations yet',
     plan: 'Plan',
     image: 'Image',
     imageBody:
       'Image mode creates a private, quota-controlled PNG and shows it directly in this conversation.',
-    planCreated: 'Validated plan created',
-    planEmpty: 'A validated Workflow plan will appear here in Plan mode.',
-    planHeading: 'Plan review',
+    outcomeHelp:
+      'Describe the finished result. Work handles the validated steps, shows progress, and asks before external or write actions.',
+    planCreated: 'Validated steps ready',
+    planEmpty: 'Plan mode turns the requested outcome into validated Workflow steps.',
+    planHeading: 'Progress',
     placeholderAsk:
       'Ask how to design a safe workflow, compare approaches, or clarify requirements…',
     placeholderImage: 'Describe the image, composition, style, lighting, and intended use…',
     placeholderPlan:
-      'Example: Open this Drive folder, download and consolidate Excel in Downloads, then create a summary, report, 8-slide deck, and approved GAS.',
+      'Example: Use Visible Codex mode to open Chrome, download Drive Excel files, merge them safely on this computer, then send only a statistical profile for the report, 8-slide deck, and approved GAS.',
     promptHelpAsk: 'Ask mode can read selected sources but never runs workflow actions.',
     promptHelpImage: 'Use at least 10 characters. Image requests use your workspace AI allowance.',
     promptHelpPlan:
-      'A short phrase is enough. AI fills safe defaults and the plan remains an inactive draft.',
+      'Ask for the outcome. Work fills safe defaults and keeps the result inactive until review.',
     promptShortAsk: 'Please enter at least 2 characters.',
     promptShortImage: 'Please describe the image in at least 10 characters.',
     promptShortPlan: 'Enter at least 2 meaningful characters.',
     requestRun: 'Create run request',
+    readWrite: 'Read + write',
     run: 'Run',
     runOpen: 'Open run details',
     runQueued: 'Automatic run started',
@@ -205,26 +229,28 @@ const copy = {
     sources: 'Sources',
     setupDesktop: 'Open Devices',
     setupGoogle: 'Connect Google Workspace',
-    stage: 'Intelligent Work · Drive to Excel',
+    stage: 'Outcome-first automation',
     steps: 'steps',
     stop: 'Stop generating',
     streaming: 'Generating…',
-    title: 'Discuss, refine, and plan with AI',
-    waiting: 'New conversation',
+    title: 'Tell Work the outcome you need',
+    waiting: 'Untitled work',
   },
   'zh-Hant': {
+    access: '存取與核准',
+    approvedDownloads: '已核准的下載項目',
     ask: '詢問',
     askBody: '詢問模式會串流說明並保存對話，只能讀取你明確選取的來源，不能執行工作流動作。',
     artifact: '建立 Markdown',
     artifactCreated: '已建立 Markdown 產出',
-    artifacts: '產出檔案',
-    assistant: 'AI 工作台',
+    artifacts: '產出',
+    assistant: '工作',
     attachment: '加入來源',
     attachmentHelp: '.txt、.md、.csv 或 .json，最多 1 MB',
     attachmentLimit: '每則訊息最多選取 5 個來源。',
     attachmentTooLarge: '來源檔案必須小於或等於 1 MB。',
     cancelled: '已停止產生；部分回應會保留以供稽核。',
-    conversations: '對話紀錄',
+    conversations: '工作紀錄',
     delete: '刪除',
     deleteCancel: '取消',
     deleteConfirm: '刪除對話',
@@ -232,14 +258,17 @@ const copy = {
     deleteFailed: '無法刪除此對話。',
     deleteTitle: '確定刪除這個對話？',
     deleting: '刪除中⋯',
-    draftOnly: '已驗證 AI 自動化',
+    draftOnly: '成果要求 · 已驗證步驟',
     desktopAgent: '桌面 Agent',
     desktopOffline: '離線 · 工作會等待連線',
     desktopOnline: '在線',
+    desktopUpdateRequired: '需要更新 · 請安裝 Desktop Agent 0.2.0 以上版本',
     emptyAsk: '提出問題、釐清想法，或一起探索安全的自動化做法。',
     emptyImage: '描述你想要的圖片，產生結果會直接顯示在這個對話中。',
-    emptyPlan: '描述資料來源、處理規則、輸出與時間；模型只能提出經驗證的 Workflow JSON。',
-    emptyTitle: '今天想一起處理什麼？',
+    downloadsAmbiguous: '目前核准了多個名稱完全相符的下載項目，請到裝置設定只保留一個。',
+    downloadsMissing: '尚未核准名稱完全相符且可讀寫的 Downloads／下載項目。',
+    emptyPlan: '描述完成後要得到的成果；Work 會先拆成已驗證步驟，之後才可能執行。',
+    emptyTitle: '你希望 Work 完成什麼成果？',
     error: '助理回應未能完成；沒有執行任何動作。',
     errorAuthentication: '所選 AI Provider 無法通過驗證，請改用「自動」或聯絡管理者。',
     errorDesktop:
@@ -262,27 +291,33 @@ const copy = {
     levelLocked: '未解鎖',
     modelAuto: '自動 · 依任務、額度與成本選擇',
     modelUnavailable: '暫不可用',
-    newConversation: '新增對話',
+    googleTools: '此計畫使用的 Google 工具',
+    googleToolsEmpty: '通過驗證的計畫需要 Google 工具時，會列在這裡。',
+    newConversation: '新增工作',
+    noArtifacts: '完成的檔案與連結會顯示在這裡。',
     noProvider: 'AI 目前尚未開放，請聯絡平台管理者。',
     noDesktopAgent: '請先配對 Desktop Agent，才能建立可執行的規劃。',
     noSaved: '目前沒有已保存的對話',
     plan: '規劃',
     image: '圖片',
     imageBody: '圖片模式會產生私密、受額度控管的 PNG，並直接顯示在這個對話中。',
-    planCreated: '已建立通過驗證的計畫',
-    planEmpty: '切換到規劃模式後，通過驗證的 Workflow 計畫會顯示在這裡。',
-    planHeading: '計畫檢視',
+    outcomeHelp:
+      '描述完成後要得到什麼；Work 會處理已驗證步驟、顯示進度，並在對外或寫入前要求核准。',
+    planCreated: '已建立通過驗證的步驟',
+    planEmpty: '規劃模式會把要求的成果拆成通過驗證的 Workflow 步驟。',
+    planHeading: '進度',
     placeholderAsk: '詢問如何設計安全工作流、比較做法，或協助釐清需求⋯',
     placeholderImage: '描述圖片內容、構圖、風格、光線與使用情境⋯',
     placeholderPlan:
-      '例如：開啟這個 Drive 資料夾，把 Excel 下載到下載項目並整合，再產生摘要、報告、8 頁簡報與核准型 GAS。',
+      '例如：使用可見 Codex 模式開啟 Chrome，下載 Drive Excel 並在電腦安全整合，再只交回統計摘要以產生報告、8 頁簡報與核准型 GAS。',
     promptHelpAsk: '詢問模式可讀取已選來源，但絕不執行工作流動作。',
     promptHelpImage: '請至少輸入 10 個字；圖片生成會計入工作區 AI 額度。',
-    promptHelpPlan: '輸入短句即可；AI 會補上安全預設，產生的計畫仍是未啟用草稿。',
+    promptHelpPlan: '直接說明想要的成果；Work 會補上安全預設，並在審閱前保持未啟用。',
     promptShortAsk: '請至少輸入 2 個字。',
     promptShortImage: '請至少用 10 個字描述要產生的圖片。',
     promptShortPlan: '請至少輸入 2 個有意義的字元。',
     requestRun: '建立執行要求',
+    readWrite: '讀取＋寫入',
     run: '執行',
     runOpen: '開啟執行詳情',
     runQueued: '自動執行已開始',
@@ -297,12 +332,12 @@ const copy = {
     sources: '參考來源',
     setupDesktop: '開啟裝置設定',
     setupGoogle: '連接 Google Workspace',
-    stage: '智慧 Work · Drive 到 Excel',
+    stage: '以成果為起點',
     steps: '個步驟',
     stop: '停止產生',
     streaming: '產生中⋯',
-    title: '與 AI 對話、釐清並規劃工作',
-    waiting: '新增對話',
+    title: '告訴 Work 你要的成果',
+    waiting: '未命名工作',
   },
 } as const;
 
@@ -350,9 +385,9 @@ export function AssistantWorkspace({
   const [selectedModel, setSelectedModel] = useState<AssistantModelId>('auto');
   const [selectedTier, setSelectedTier] = useState<AiModelTierSelection>('auto');
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(
-    executionTargets[0]?.deviceId ?? '',
+    selectPreferredAssistantDeviceId(executionTargets),
   );
-  const [mode, setMode] = useState<AssistantConversationMode>('ask');
+  const [mode, setMode] = useState<AssistantConversationMode>('plan');
   const [prompt, setPrompt] = useState('');
   const [promptError, setPromptError] = useState<AssistantPromptError>();
   const [pending, setPending] = useState(false);
@@ -399,6 +434,25 @@ export function AssistantWorkspace({
     () => executionTargets.find((target) => target.deviceId === selectedDeviceId),
     [executionTargets, selectedDeviceId],
   );
+  const approvedDownloadsAliases = useMemo(
+    () => selectedExecutionTarget?.folderAliases.filter(isExactApprovedDownloadsAlias) ?? [],
+    [selectedExecutionTarget],
+  );
+  const inferredGoogleTools = useMemo(() => {
+    if (plan === undefined) return [];
+    const labels = plan.workflow.nodes
+      .filter(
+        (node) =>
+          node.type.startsWith('google_') ||
+          node.type.startsWith('gmail.') ||
+          node.type.startsWith('apps_script.'),
+      )
+      .map((node) => {
+        const presentation = NODE_PRESENTATION[node.type];
+        return locale === 'en' ? presentation.label.en : presentation.label.zhHant;
+      });
+    return [...new Set(labels)];
+  }, [locale, plan]);
   async function refreshConversations(): Promise<void> {
     try {
       const response = await fetch('/api/ai/conversations', { cache: 'no-store' });
@@ -414,6 +468,10 @@ export function AssistantWorkspace({
   useEffect(() => {
     void refreshConversations();
   }, []);
+
+  useEffect(() => {
+    setSelectedDeviceId((current) => selectPreferredAssistantDeviceId(executionTargets, current));
+  }, [executionTargets]);
 
   async function refreshResources(id: string): Promise<void> {
     const response = await fetch(`/api/ai/resources?conversationId=${encodeURIComponent(id)}`, {
@@ -447,6 +505,7 @@ export function AssistantWorkspace({
     setExecutionDraft(undefined);
     setExecutionRun(undefined);
     setExecutionStatus(undefined);
+    setMode('plan');
     setPrompt('');
     setPromptError(undefined);
     setStreamingBody('');
@@ -980,6 +1039,7 @@ export function AssistantWorkspace({
         <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl">
           {text.title}
         </h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">{text.outcomeHelp}</p>
       </header>
 
       <div className="assistant-workspace-grid grid min-h-[700px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -1055,98 +1115,13 @@ export function AssistantWorkspace({
         </aside>
 
         <section className="flex min-h-[620px] min-w-0 flex-col">
-          <div className="space-y-3 border-b border-slate-100 px-5 py-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="size-2 rounded-full bg-emerald-500" />
-                  <span className="text-xs font-semibold text-slate-700">{text.draftOnly}</span>
-                </div>
-                <p className="mt-1 max-w-sm truncate text-[10px] text-slate-400">{currentTitle}</p>
+          <div className="border-b border-slate-100 px-5 py-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="size-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-semibold text-slate-700">{text.draftOnly}</span>
               </div>
-              <label className="flex min-w-0 items-center gap-2 text-xs text-slate-500">
-                <span className="hidden sm:inline">{text.model}</span>
-                <select
-                  aria-label={text.model}
-                  className="max-w-[460px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800"
-                  disabled={pending}
-                  onChange={(event) => {
-                    const option = exactModelOptions.find(
-                      (candidate) =>
-                        candidate.id === (event.target.value as AssistantExactModelOptionId),
-                    );
-                    if (option === undefined || !option.enabled) return;
-                    setSelectedModel(option.provider);
-                    setSelectedTier(option.tier);
-                    setPromptError(undefined);
-                  }}
-                  value={selectedExactModelId}
-                >
-                  <option disabled={exactModelOptions[0]?.enabled !== true} value="auto">
-                    {text.modelAuto}
-                  </option>
-                  {tiers.map((tier) => {
-                    const tierLabel = locale === 'en' ? tier.label.en : tier.label.zhHant;
-                    const options = exactModelOptions.filter((option) => option.tier === tier.id);
-                    return (
-                      <optgroup key={tier.id} label={tierLabel}>
-                        {options.map((option) => (
-                          <option disabled={!option.enabled} key={option.id} value={option.id}>
-                            {tierLabel} · {option.providerLabel} · {option.model}
-                            {option.enabled ? '' : ` · ${text.levelLocked}`}
-                          </option>
-                        ))}
-                      </optgroup>
-                    );
-                  })}
-                  {exactModelOptions.some((option) => option.id === 'mock:auto') && (
-                    <optgroup label={locale === 'en' ? 'Development' : '開發測試'}>
-                      {exactModelOptions
-                        .filter((option) => option.id === 'mock:auto')
-                        .map((option) => (
-                          <option disabled={!option.enabled} key={option.id} value={option.id}>
-                            {option.providerLabel} · {locale === 'en' ? 'development' : '開發測試'}
-                          </option>
-                        ))}
-                    </optgroup>
-                  )}
-                </select>
-              </label>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[10px] leading-4 text-slate-400">
-                {selectedExactModelId === 'auto'
-                  ? text.modelAuto
-                  : (exactModelOptions.find((option) => option.id === selectedExactModelId)
-                      ?.model ?? text.modelAuto)}
-              </p>
-              <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-500">
-                <span>{text.desktopAgent}</span>
-                <select
-                  aria-label={text.desktopAgent}
-                  className="max-w-[220px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800"
-                  disabled={pending || executionTargets.length === 0}
-                  onChange={(event) => {
-                    setSelectedDeviceId(event.target.value);
-                    setPlan(undefined);
-                    setPlanMessageId(undefined);
-                    setExecutionDraft(undefined);
-                    setExecutionRun(undefined);
-                  }}
-                  value={selectedDeviceId}
-                >
-                  {executionTargets.length === 0 ? (
-                    <option value="">{text.noDesktopAgent}</option>
-                  ) : (
-                    executionTargets.map((target) => (
-                      <option key={target.deviceId} value={target.deviceId}>
-                        {target.deviceName} ·{' '}
-                        {target.status === 'online' ? text.desktopOnline : text.desktopOffline}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
+              <p className="mt-1 max-w-xl truncate text-[10px] text-slate-400">{currentTitle}</p>
             </div>
           </div>
 
@@ -1467,178 +1442,351 @@ export function AssistantWorkspace({
         </section>
 
         <aside className="border-slate-200 bg-slate-50 p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-600">
-                {text.planHeading}
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-950">
-                {plan?.workflow.name ??
-                  (mode === 'ask' ? text.ask : mode === 'image' ? text.image : text.waiting)}
-              </h2>
-            </div>
-            {plan !== undefined && (
-              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-800">
-                {plan.workflow.nodes.length} {text.steps}
-              </span>
-            )}
-          </div>
-
-          {plan === undefined ? (
-            <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-5">
-              <ShieldIcon className="size-5 text-indigo-600" />
-              <h3 className="mt-3 text-sm font-semibold text-slate-950">
-                {mode === 'ask' ? text.safetyTitle : mode === 'image' ? text.image : text.planEmpty}
-              </h3>
-              <p className="mt-2 text-xs leading-5 text-slate-500">
-                {mode === 'ask'
-                  ? text.askBody
-                  : mode === 'image'
-                    ? text.imageBody
-                    : text.safetyBody}
-              </p>
-            </div>
-          ) : (
-            <div className="mt-5 space-y-3">
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-900">
-                  <CheckIcon className="size-4" />
-                  {text.planCreated}
-                </div>
-                <p className="mt-2 text-xs leading-5 text-emerald-800">{plan.explanation}</p>
+          <section aria-labelledby="work-progress-heading">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2
+                  className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-600"
+                  id="work-progress-heading"
+                >
+                  {text.planHeading}
+                </h2>
+                <h3 className="mt-1 truncate text-lg font-semibold text-slate-950">
+                  {plan?.workflow.name ??
+                    (mode === 'ask' ? text.ask : mode === 'image' ? text.image : text.waiting)}
+                </h3>
               </div>
-              {plan.workflow.nodes.map((node, index) => {
-                const presentation = NODE_PRESENTATION[node.type];
-                return (
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4" key={node.id}>
-                    <div className="flex items-start gap-3">
-                      <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-slate-950 text-[10px] font-bold text-white">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-950">
-                          {locale === 'en' ? presentation.label.en : presentation.label.zhHant}
-                        </p>
-                        <p className="mt-1 font-mono text-[9px] text-slate-400">{node.id}</p>
+              {plan !== undefined && (
+                <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-800">
+                  {plan.workflow.nodes.length} {text.steps}
+                </span>
+              )}
+            </div>
+
+            {plan === undefined ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-4">
+                <ShieldIcon className="size-5 text-indigo-600" />
+                <h3 className="mt-3 text-sm font-semibold text-slate-950">
+                  {mode === 'ask'
+                    ? text.safetyTitle
+                    : mode === 'image'
+                      ? text.image
+                      : text.planEmpty}
+                </h3>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  {mode === 'ask'
+                    ? text.askBody
+                    : mode === 'image'
+                      ? text.imageBody
+                      : text.safetyBody}
+                </p>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-2">
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-900">
+                    <CheckIcon className="size-4" />
+                    {text.planCreated}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-emerald-800">{plan.explanation}</p>
+                </div>
+                {plan.workflow.nodes.map((node, index) => {
+                  const presentation = NODE_PRESENTATION[node.type];
+                  return (
+                    <div className="rounded-xl border border-slate-200 bg-white p-3" key={node.id}>
+                      <div className="flex items-start gap-3">
+                        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-slate-950 text-[10px] font-bold text-white">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-950">
+                            {locale === 'en' ? presentation.label.en : presentation.label.zhHant}
+                          </p>
+                          <p className="mt-1 truncate font-mono text-[9px] text-slate-400">
+                            {node.id}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-              <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
-                <div className="flex items-center gap-2 text-xs font-semibold text-indigo-950">
-                  <ShieldIcon className="size-4" />
-                  {executionDraft === undefined ? text.executionDraft : text.executionDraftReady}
-                </div>
-                <p className="mt-2 text-[10px] leading-5 text-indigo-800">
-                  {text.executionReviewHelp}
-                </p>
-                {executionDraft !== undefined && (
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-[9px] text-indigo-900">
-                    <span>Read · {executionDraft.risk.read}</span>
-                    <span>Write · {executionDraft.risk.write}</span>
-                    <span>External · {executionDraft.risk.external}</span>
-                    <span>Destructive · {executionDraft.risk.destructive}</span>
-                    <span className="col-span-2 truncate font-mono text-indigo-500">
-                      sha256:{executionDraft.definitionHash.slice(0, 16)}
-                    </span>
-                  </div>
-                )}
-                {executionRun === undefined ? (
-                  <button
-                    className="mt-4 w-full rounded-xl bg-indigo-600 px-3 py-2.5 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
-                    disabled={executionWorking}
-                    onClick={() =>
-                      void (executionDraft === undefined
-                        ? prepareExecutionReview()
-                        : requestExecutionRun())
-                    }
-                    type="button"
-                  >
-                    {executionDraft === undefined ? text.executionDraft : text.requestRun}
-                  </button>
-                ) : (
-                  <div className="mt-4 rounded-xl bg-white p-3">
-                    <p className="text-[10px] font-semibold text-slate-900">
-                      {executionRun.status === 'awaiting_approval'
-                        ? text.executionApproval
-                        : text.runQueued}
-                    </p>
-                    <a
-                      className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-700"
-                      href={`/dashboard/runs/${encodeURIComponent(executionRun.id)}`}
-                    >
-                      {text.runOpen}
-                      <ArrowRightIcon className="size-3" />
-                    </a>
-                  </div>
-                )}
-                {executionStatus === 'error' && (
-                  <p className="mt-3 text-[10px] font-semibold text-rose-700" role="alert">
-                    {text.executionError}
-                  </p>
-                )}
+                  );
+                })}
               </div>
-              <div className="rounded-2xl bg-slate-950 p-4 text-white">
-                <div className="flex items-center gap-2">
-                  <ShieldIcon className="size-4 text-emerald-300" />
-                  <p className="text-xs font-semibold">{text.safetyTitle}</p>
-                </div>
-                <p className="mt-2 text-[10px] leading-5 text-slate-400">{text.safetyBody}</p>
-              </div>
-            </div>
-          )}
+            )}
+          </section>
 
-          <div className="mt-6 border-t border-slate-200 pt-5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-              {text.sources}
-            </p>
-            {attachments.length === 0 ? (
-              <p className="mt-2 text-[10px] leading-5 text-slate-400">{text.attachmentHelp}</p>
+          <section
+            aria-labelledby="work-artifacts-heading"
+            className="mt-6 border-t border-slate-200 pt-5"
+          >
+            <h2
+              className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600"
+              id="work-artifacts-heading"
+            >
+              {text.artifacts}
+            </h2>
+            {artifacts.length === 0 ? (
+              <p className="mt-2 text-[10px] leading-5 text-slate-400">{text.noArtifacts}</p>
             ) : (
               <div className="mt-3 space-y-2">
-                {attachments.map((attachment) => (
+                {artifacts.map((artifact) => (
                   <a
                     className="block rounded-xl border border-slate-200 bg-white p-3 transition hover:border-indigo-300"
-                    href={`/api/ai/attachments/${encodeURIComponent(attachment.id)}`}
-                    key={attachment.id}
+                    href={`/api/ai/artifacts/${encodeURIComponent(artifact.id)}`}
+                    key={artifact.id}
                   >
-                    <p className="truncate text-[10px] font-semibold text-slate-800">
-                      {attachment.filename}
-                    </p>
-                    <p className="mt-1 line-clamp-2 text-[9px] leading-4 text-slate-400">
-                      {attachment.preview}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-[10px] font-semibold text-slate-800">
+                        {artifact.title}
+                      </p>
+                      <span className="shrink-0 text-[9px] text-indigo-600">.md ↓</span>
+                    </div>
+                    <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[9px] leading-4 text-slate-400">
+                      {artifact.preview}
                     </p>
                   </a>
                 ))}
               </div>
             )}
-          </div>
 
-          <div className="mt-6 border-t border-slate-200 pt-5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-              {text.artifacts}
-            </p>
-            <div className="mt-3 space-y-2">
-              {artifacts.map((artifact) => (
-                <a
-                  className="block rounded-xl border border-slate-200 bg-white p-3 transition hover:border-indigo-300"
-                  href={`/api/ai/artifacts/${encodeURIComponent(artifact.id)}`}
-                  key={artifact.id}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-[10px] font-semibold text-slate-800">
-                      {artifact.title}
-                    </p>
-                    <span className="shrink-0 text-[9px] text-indigo-600">.md ↓</span>
-                  </div>
-                  <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-[9px] leading-4 text-slate-400">
-                    {artifact.preview}
-                  </p>
-                </a>
-              ))}
+            <div className="mt-4 border-t border-slate-200 pt-4">
+              <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                {text.sources}
+              </p>
+              {attachments.length === 0 ? (
+                <p className="mt-2 text-[10px] leading-5 text-slate-400">{text.attachmentHelp}</p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {attachments.map((attachment) => (
+                    <a
+                      className="block rounded-xl border border-slate-200 bg-white p-3 transition hover:border-indigo-300"
+                      href={`/api/ai/attachments/${encodeURIComponent(attachment.id)}`}
+                      key={attachment.id}
+                    >
+                      <p className="truncate text-[10px] font-semibold text-slate-800">
+                        {attachment.filename}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-[9px] leading-4 text-slate-400">
+                        {attachment.preview}
+                      </p>
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
+          </section>
+
+          <section
+            aria-labelledby="work-access-heading"
+            className="mt-6 border-t border-slate-200 pt-5"
+          >
+            <h2
+              className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600"
+              id="work-access-heading"
+            >
+              {text.access}
+            </h2>
+
+            <div className="mt-3 space-y-3">
+              <label className="block text-[10px] font-semibold text-slate-500">
+                <span>{text.model}</span>
+                <select
+                  aria-label={text.model}
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800"
+                  disabled={pending}
+                  onChange={(event) => {
+                    const option = exactModelOptions.find(
+                      (candidate) =>
+                        candidate.id === (event.target.value as AssistantExactModelOptionId),
+                    );
+                    if (option === undefined || !option.enabled) return;
+                    setSelectedModel(option.provider);
+                    setSelectedTier(option.tier);
+                    setPromptError(undefined);
+                  }}
+                  value={selectedExactModelId}
+                >
+                  <option disabled={exactModelOptions[0]?.enabled !== true} value="auto">
+                    {text.modelAuto}
+                  </option>
+                  {tiers.map((tier) => {
+                    const tierLabel = locale === 'en' ? tier.label.en : tier.label.zhHant;
+                    const options = exactModelOptions.filter((option) => option.tier === tier.id);
+                    return (
+                      <optgroup key={tier.id} label={tierLabel}>
+                        {options.map((option) => (
+                          <option disabled={!option.enabled} key={option.id} value={option.id}>
+                            {tierLabel} · {option.providerLabel} · {option.model}
+                            {option.enabled ? '' : ` · ${text.levelLocked}`}
+                          </option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                  {exactModelOptions.some((option) => option.id === 'mock:auto') && (
+                    <optgroup label={locale === 'en' ? 'Development' : '開發測試'}>
+                      {exactModelOptions
+                        .filter((option) => option.id === 'mock:auto')
+                        .map((option) => (
+                          <option disabled={!option.enabled} key={option.id} value={option.id}>
+                            {option.providerLabel} · {locale === 'en' ? 'development' : '開發測試'}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
+                </select>
+              </label>
+
+              <label className="block text-[10px] font-semibold text-slate-500">
+                <span>{text.desktopAgent}</span>
+                <select
+                  aria-label={text.desktopAgent}
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800"
+                  disabled={pending || executionTargets.length === 0}
+                  onChange={(event) => {
+                    setSelectedDeviceId(event.target.value);
+                    setPlan(undefined);
+                    setPlanMessageId(undefined);
+                    setExecutionDraft(undefined);
+                    setExecutionRun(undefined);
+                  }}
+                  value={selectedDeviceId}
+                >
+                  {selectedDeviceId.length === 0 && (
+                    <option value="">
+                      {executionTargets.length > 0 &&
+                      executionTargets.every((target) => !target.agentCompatible)
+                        ? text.desktopUpdateRequired
+                        : text.noDesktopAgent}
+                    </option>
+                  )}
+                  {executionTargets.map((target) => (
+                    <option
+                      disabled={!target.agentCompatible}
+                      key={target.deviceId}
+                      value={target.deviceId}
+                    >
+                      {target.deviceName} ·{' '}
+                      {!target.agentCompatible
+                        ? text.desktopUpdateRequired
+                        : target.status === 'online'
+                          ? text.desktopOnline
+                          : text.desktopOffline}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                  {text.approvedDownloads}
+                </p>
+                {approvedDownloadsAliases.length === 1 ? (
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="truncate text-xs font-semibold text-slate-800">
+                      {approvedDownloadsAliases[0]?.displayName}
+                    </p>
+                    <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-semibold text-emerald-700">
+                      {text.readWrite}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[10px] leading-4 text-amber-700">
+                    {approvedDownloadsAliases.length > 1
+                      ? text.downloadsAmbiguous
+                      : text.downloadsMissing}
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                  {text.googleTools}
+                </p>
+                {inferredGoogleTools.length === 0 ? (
+                  <p className="mt-2 text-[10px] leading-4 text-slate-400">
+                    {text.googleToolsEmpty}
+                  </p>
+                ) : (
+                  <ul className="mt-2 space-y-1.5">
+                    {inferredGoogleTools.map((tool) => (
+                      <li
+                        className="flex items-center gap-2 text-[10px] font-semibold text-slate-700"
+                        key={tool}
+                      >
+                        <span className="size-1.5 shrink-0 rounded-full bg-indigo-500" />
+                        {tool}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {plan === undefined ? (
+                <div className="rounded-xl bg-slate-950 p-4 text-white">
+                  <div className="flex items-center gap-2">
+                    <ShieldIcon className="size-4 text-emerald-300" />
+                    <p className="text-xs font-semibold">{text.safetyTitle}</p>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-5 text-slate-400">{text.safetyBody}</p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-indigo-950">
+                    <ShieldIcon className="size-4" />
+                    {executionDraft === undefined ? text.executionDraft : text.executionDraftReady}
+                  </div>
+                  <p className="mt-2 text-[10px] leading-5 text-indigo-800">
+                    {text.executionReviewHelp}
+                  </p>
+                  {executionDraft !== undefined && (
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-[9px] text-indigo-900">
+                      <span>Read · {executionDraft.risk.read}</span>
+                      <span>Write · {executionDraft.risk.write}</span>
+                      <span>External · {executionDraft.risk.external}</span>
+                      <span>Destructive · {executionDraft.risk.destructive}</span>
+                      <span className="col-span-2 truncate font-mono text-indigo-500">
+                        sha256:{executionDraft.definitionHash.slice(0, 16)}
+                      </span>
+                    </div>
+                  )}
+                  {executionRun === undefined ? (
+                    <button
+                      className="mt-4 w-full rounded-xl bg-indigo-600 px-3 py-2.5 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+                      disabled={executionWorking}
+                      onClick={() =>
+                        void (executionDraft === undefined
+                          ? prepareExecutionReview()
+                          : requestExecutionRun())
+                      }
+                      type="button"
+                    >
+                      {executionDraft === undefined ? text.executionDraft : text.requestRun}
+                    </button>
+                  ) : (
+                    <div className="mt-4 rounded-xl bg-white p-3">
+                      <p className="text-[10px] font-semibold text-slate-900">
+                        {executionRun.status === 'awaiting_approval'
+                          ? text.executionApproval
+                          : text.runQueued}
+                      </p>
+                      <a
+                        className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-700"
+                        href={`/dashboard/runs/${encodeURIComponent(executionRun.id)}`}
+                      >
+                        {text.runOpen}
+                        <ArrowRightIcon className="size-3" />
+                      </a>
+                    </div>
+                  )}
+                  {executionStatus === 'error' && (
+                    <p className="mt-3 text-[10px] font-semibold text-rose-700" role="alert">
+                      {text.executionError}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
         </aside>
       </div>
       {deleteCandidate !== undefined && (

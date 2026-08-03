@@ -21,45 +21,117 @@ const DesktopExcelProfileSchema = z
       .array(
         z
           .object({
-            name: z.string().min(1).max(200),
-            nonEmptyCount: z.number().int().nonnegative(),
-            numeric: z
+            categorical: z
               .object({
-                count: z.number().int().nonnegative(),
-                maximum: z.number().finite().optional(),
-                minimum: z.number().finite().optional(),
-                sum: z.number().finite(),
-                sumOverflowed: z.boolean(),
+                sampledDistinctCount: z.number().int().min(0).max(40),
+                topFrequencies: z.array(z.number().int().positive().max(1_000_000)).max(8),
+                unprofiledValueCount: z.number().int().min(0).max(1_000_000),
               })
               .strict(),
-            otherValueCount: z.number().int().nonnegative(),
-            topValues: z
-              .array(
-                z
+            id: z.string().regex(/^column_[1-9][0-9]?$/u),
+            nonEmptyCount: z.number().int().min(0).max(1_000_000),
+            numeric: z
+              .object({
+                count: z.number().int().min(0).max(1_000_000),
+                statistics: z
                   .object({
-                    count: z.number().int().positive(),
-                    value: z.string().max(80),
+                    maximum: z.number().finite(),
+                    minimum: z.number().finite(),
+                    sum: z.number().finite(),
+                    sumOverflowed: z.boolean(),
                   })
-                  .strict(),
-              )
-              .max(8),
+                  .strict()
+                  .optional(),
+              })
+              .strict(),
+            semanticHint: z
+              .enum([
+                'amount',
+                'cost',
+                'customer',
+                'date',
+                'id',
+                'item',
+                'name',
+                'order',
+                'price',
+                'quantity',
+                'status',
+                'total',
+              ])
+              .optional(),
           })
           .strict(),
       )
       .max(40),
-    fileCount: z.number().int().nonnegative(),
+    fileCount: z.number().int().min(1).max(500),
     kind: z.literal('desktop_excel_profile'),
-    rowCount: z.number().int().nonnegative(),
-    sheetCount: z.number().int().nonnegative(),
-    sheetNames: z.array(z.string().min(1).max(200)).max(30),
-    truncatedColumns: z.number().int().nonnegative(),
-    truncatedSheetNames: z.number().int().nonnegative(),
+    rowCount: z.number().int().min(0).max(1_000_000),
+    sheetCount: z.number().int().min(1).max(2_000),
+    truncatedColumns: z.number().int().min(0).max(1_000_000),
   })
-  .strict();
+  .strict()
+  .superRefine((profile, context) => {
+    profile.columns.forEach((column, index) => {
+      if (column.id !== `column_${index + 1}`) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Profile column identifiers must be sequential.',
+          path: ['columns', index, 'id'],
+        });
+      }
+      if (column.nonEmptyCount > profile.rowCount) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Profile column counts must not exceed the total row count.',
+          path: ['columns', index, 'nonEmptyCount'],
+        });
+      }
+      if (column.numeric.count > column.nonEmptyCount) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Numeric counts must not exceed non-empty counts.',
+          path: ['columns', index, 'numeric', 'count'],
+        });
+      }
+      if (column.numeric.statistics !== undefined) {
+        if (
+          column.numeric.count < 5 ||
+          !['amount', 'cost', 'price', 'quantity', 'total'].includes(column.semanticHint ?? '') ||
+          column.numeric.statistics.minimum > column.numeric.statistics.maximum
+        ) {
+          context.addIssue({
+            code: 'custom',
+            message: 'Numeric statistics require a bounded metric cohort.',
+            path: ['columns', index, 'numeric', 'statistics'],
+          });
+        }
+      }
+      const categoricalCount = column.nonEmptyCount - column.numeric.count;
+      const visibleFrequencyCount = column.categorical.topFrequencies.reduce(
+        (sum, value) => sum + value,
+        0,
+      );
+      if (
+        column.categorical.topFrequencies.length > column.categorical.sampledDistinctCount ||
+        visibleFrequencyCount + column.categorical.unprofiledValueCount > categoricalCount
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Categorical profile counts are inconsistent.',
+          path: ['columns', index, 'categorical'],
+        });
+      }
+    });
+  });
+
+export function validateDesktopExcelProfile(input: unknown): JsonValue {
+  return JsonValueSchema.parse(DesktopExcelProfileSchema.parse(input));
+}
 
 export function validateAgentCloudStepInput(node: AgentCloudNode, input: unknown): JsonValue {
   if (node.type === 'ai.summarize') {
-    return JsonValueSchema.parse(DesktopExcelProfileSchema.parse(input));
+    return validateDesktopExcelProfile(input);
   }
   const result = RunStepResultSchema.parse(input);
   const accepted =

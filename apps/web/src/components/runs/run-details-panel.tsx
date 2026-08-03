@@ -12,6 +12,7 @@ import {
   localizeComputerUseAction,
   localizeNotification,
   localizeRunStep,
+  localizeRunStepProgress,
   localizeWorkflowName,
 } from '@/components/runs/run-details-i18n';
 
@@ -89,7 +90,6 @@ const copy = {
     cancelConfirm: 'Press again to confirm',
     destructive: 'Destructive',
     external: 'External',
-    files: 'files',
     generatedReport: 'Generated report',
     generatedSummary: 'AI summary',
     gasDeployment: 'Approved GAS deployment',
@@ -99,7 +99,6 @@ const copy = {
     refresh: 'Refresh',
     reject: 'Reject',
     retry: 'Retry',
-    rows: 'rows',
     statusUpdated: 'Run status updated.',
     timeout: 'Timeout',
     write: 'Write',
@@ -114,7 +113,6 @@ const copy = {
     cancelConfirm: '再次按下確認取消',
     destructive: '破壞性',
     external: '外部服務',
-    files: '個檔案',
     generatedReport: '已產生報告',
     generatedSummary: 'AI 摘要',
     gasDeployment: '已核准 GAS 部署',
@@ -124,7 +122,6 @@ const copy = {
     refresh: '重新整理',
     reject: '拒絕',
     retry: '重試',
-    rows: '列',
     statusUpdated: '執行狀態已更新。',
     timeout: '逾時時間',
     write: '寫入',
@@ -282,8 +279,8 @@ export function RunDetailsPanel({ initialRun }: RunDetailsPanelProps) {
                   <p className="text-sm font-semibold text-slate-900" title={step.nodeType}>
                     {localizeRunStep(step.nodeId, step.nodeType, locale)}
                   </p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {step.processedFileCount} {text.files} · {step.processedRowCount} {text.rows}
+                  <p className="mt-0.5 text-xs text-slate-500" aria-live="polite">
+                    {localizeRunStepProgress(step, locale)}
                   </p>
                   {step.status === 'running' && step.currentAction !== undefined ? (
                     <p className="mt-1 text-xs font-semibold text-indigo-700" aria-live="polite">

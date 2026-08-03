@@ -4,11 +4,14 @@ import { extname } from 'node:path';
 import { z } from 'zod';
 
 import { LocalExecutorError } from './errors';
+import { looksLikeSpreadsheetHeader } from './header-detection';
 import { hashFile } from './hash';
+import { readLegacyXls } from './legacy-xls';
 import type {
   ResolvedSpreadsheetReadOptions,
   SpreadsheetCell,
   SpreadsheetDocument,
+  SpreadsheetReadControl,
   SpreadsheetReadOptions,
   SpreadsheetRow,
   SpreadsheetTable,
@@ -131,28 +134,6 @@ function uniqueHeaders(
   return headers;
 }
 
-const HEADER_TERMS = [
-  'amount',
-  'cost',
-  'customer',
-  'date',
-  'id',
-  'name',
-  'order',
-  'price',
-  'quantity',
-  'total',
-  '品名',
-  '單價',
-  '客戶',
-  '成本',
-  '日期',
-  '料號',
-  '數量',
-  '訂單',
-  '金額',
-] as const;
-
 function headerCandidateScore(worksheet: ExcelJS.Worksheet, rowNumber: number): number {
   const state: CellConversionState = { formulaCellCount: 0 };
   const values = Array.from({ length: worksheet.columnCount }, (_, index) =>
@@ -163,9 +144,7 @@ function headerCandidateScore(worksheet: ExcelJS.Worksheet, rowNumber: number): 
   const normalized = values.map((value) => String(value).trim().toLocaleLowerCase());
   const uniqueCount = new Set(normalized).size;
   const textCount = values.filter((value) => typeof value === 'string').length;
-  const keywordCount = normalized.filter((value) =>
-    HEADER_TERMS.some((term) => value.includes(term)),
-  ).length;
+  const keywordCount = normalized.filter(looksLikeSpreadsheetHeader).length;
   const shortLabelCount = normalized.filter((value) => value.length <= 80).length;
   let followingDataRows = 0;
   for (
@@ -287,14 +266,22 @@ async function loadWorkbook(filePath: string, format: 'csv' | 'xlsx'): Promise<E
 export async function readSpreadsheet(
   filePath: string,
   inputOptions: SpreadsheetReadOptions = {},
+  control: SpreadsheetReadControl = {},
 ): Promise<SpreadsheetDocument> {
   const options = resolvedOptions(inputOptions);
   const extension = extname(filePath).toLowerCase();
-  const format = extension === '.xlsx' ? 'xlsx' : extension === '.csv' ? 'csv' : undefined;
+  const format =
+    extension === '.xlsx'
+      ? 'xlsx'
+      : extension === '.xls'
+        ? 'xls'
+        : extension === '.csv'
+          ? 'csv'
+          : undefined;
   if (format === undefined) {
     throw new LocalExecutorError(
       'FILE_FORMAT_UNSUPPORTED',
-      'Only .xlsx and .csv spreadsheet inputs are supported.',
+      'Only .xls, .xlsx, and .csv spreadsheet inputs are supported.',
     );
   }
 
@@ -326,6 +313,22 @@ export async function readSpreadsheet(
       maxEntries: 5_000,
       maxUncompressedBytes: options.maxUncompressedBytes,
     });
+  }
+
+  if (format === 'xls') {
+    const [fileHash, legacy] = await Promise.all([
+      hashFile(filePath),
+      readLegacyXls(filePath, options, control),
+    ]);
+    return {
+      sheets: legacy.sheets,
+      source: {
+        fileHash,
+        fileSizeBytes,
+        format,
+        formulaCellCount: legacy.formulaCellCount,
+      },
+    };
   }
 
   const [fileHash, workbook] = await Promise.all([

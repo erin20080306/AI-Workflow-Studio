@@ -10,6 +10,7 @@ import {
 } from '@ai-workflow-studio/agent-protocol';
 
 import { requireWorkspaceActor } from './auth/context';
+import { isAssistantAgentVersionCompatible } from './assistant-device-status';
 import { getEnvironment } from './env';
 import { SupabaseAgentStore } from './supabase-agent-store';
 
@@ -39,10 +40,14 @@ function agentPepper(): string {
 }
 
 function createState(): AgentServerState {
-  const store = getEnvironment().mockMode ? new InMemoryAgentStore() : new SupabaseAgentStore();
+  const environment = getEnvironment();
+  const store = environment.mockMode ? new InMemoryAgentStore() : new SupabaseAgentStore();
   return {
     service: new AgentService({
       crypto: new AgentCrypto({ pepper: agentPepper() }),
+      ...(environment.mockMode
+        ? {}
+        : { isAgentVersionSupported: isAssistantAgentVersionCompatible }),
       store,
     }),
     store,

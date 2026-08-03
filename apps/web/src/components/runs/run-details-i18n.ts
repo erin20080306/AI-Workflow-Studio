@@ -1,4 +1,5 @@
 import type { AppLocale } from '@/components/language-provider';
+import type { RunStepView } from '@ai-workflow-studio/run-orchestrator';
 
 interface LocalizedValue {
   readonly en: string;
@@ -84,6 +85,10 @@ const nodeTypes: Readonly<Record<string, LocalizedValue>> = {
 };
 
 const auditActions: Readonly<Record<string, LocalizedValue>> = {
+  'agent_cloud_step.failed': {
+    en: 'Approved cloud continuation failed',
+    'zh-Hant': '核准的雲端續接步驟失敗',
+  },
   'agent_cloud_step.succeeded': {
     en: 'Approved cloud continuation completed',
     'zh-Hant': '已完成核准的雲端續接步驟',
@@ -227,6 +232,45 @@ export function localizeNodeType(nodeType: string, locale: AppLocale): string | 
 
 export function localizeRunStep(nodeId: string, nodeType: string, locale: AppLocale): string {
   return localizeNodeType(nodeType, locale) ?? nodeId;
+}
+
+export function localizeRunStepProgress(
+  step: Pick<
+    RunStepView,
+    'driveWorkbookProgress' | 'processedFileCount' | 'processedRowCount' | 'progress'
+  >,
+  locale: AppLocale,
+): string {
+  const numberFormat = new Intl.NumberFormat(locale === 'en' ? 'en-US' : 'zh-TW');
+  const processedFiles = numberFormat.format(step.processedFileCount);
+  const processedRows = numberFormat.format(step.processedRowCount);
+  const workbookProgress =
+    step.driveWorkbookProgress ??
+    (step.progress?.kind === 'workbook_batch'
+      ? { phase: 'batching' as const, totalWorkbookCount: step.progress.totalWorkbookCount }
+      : undefined);
+  if (workbookProgress?.phase === 'scanning') {
+    return locale === 'en'
+      ? 'Scanning the approved Drive folder for Excel workbooks…'
+      : '正在掃描核准的 Drive 資料夾以尋找 Excel 活頁簿…';
+  }
+  if (workbookProgress?.phase === 'batching') {
+    const totalFiles = numberFormat.format(workbookProgress.totalWorkbookCount);
+    const batchState =
+      step.processedFileCount >= workbookProgress.totalWorkbookCount
+        ? locale === 'en'
+          ? 'Workbook batches complete'
+          : '活頁簿批次已完成'
+        : locale === 'en'
+          ? 'Processing workbook batch'
+          : '正在分批處理活頁簿';
+    return locale === 'en'
+      ? `${batchState} · ${processedFiles} / ${totalFiles} workbooks · ${processedRows} rows`
+      : `${batchState} · ${processedFiles} / ${totalFiles} 個活頁簿 · ${processedRows} 列`;
+  }
+  return locale === 'en'
+    ? `${processedFiles} files · ${processedRows} rows`
+    : `${processedFiles} 個檔案 · ${processedRows} 列`;
 }
 
 export function localizeComputerUseAction(

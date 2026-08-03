@@ -24,4 +24,13 @@ export default defineConfig({
     },
     target: 'node22',
   },
+  worker: {
+    format: 'iife',
+    rolldownOptions: {
+      external: (id) => id.startsWith('node:') || nodeBuiltins.has(id),
+      output: {
+        entryFileNames: 'assets/[name].cjs',
+      },
+    },
+  },
 });

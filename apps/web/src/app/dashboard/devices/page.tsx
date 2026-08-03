@@ -3,6 +3,11 @@ import type { Metadata } from 'next';
 import { DevicePairingPanel } from '@/components/devices/device-pairing-panel';
 import { DeviceIcon } from '@/components/icons';
 import { LocalizedText } from '@/components/language-provider';
+import {
+  effectiveAssistantDeviceStatus,
+  isAssistantAgentVersionCompatible,
+  MINIMUM_ASSISTANT_AGENT_VERSION,
+} from '@/lib/assistant-device-status';
 import { requireWorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
@@ -14,12 +19,16 @@ export const metadata: Metadata = {
 
 const mockDevices = [
   {
+    agentCompatible: true,
+    agentVersion: MINIMUM_ASSISTANT_AGENT_VERSION,
     lastSeenEn: 'Online now',
     lastSeenZhHant: '目前在線',
     name: 'Erin’s MacBook',
     status: 'online',
   },
   {
+    agentCompatible: true,
+    agentVersion: MINIMUM_ASSISTANT_AGENT_VERSION,
     lastSeenEn: 'Seen 18 minutes ago',
     lastSeenZhHant: '18 分鐘前上線',
     name: 'Finance Windows PC',
@@ -28,6 +37,7 @@ const mockDevices = [
 ] as const;
 
 const ProductionDeviceSchema = z.object({
+  agent_version: z.string().min(1).max(80).nullable(),
   id: z.string().uuid(),
   last_seen_at: z.string().datetime({ offset: true }).nullable(),
   name: z.string().min(1).max(120),
@@ -85,10 +95,28 @@ export default async function DevicesPage() {
                       new Date(device.lastSeenAt).toLocaleString()
                     )}
                   </p>
+                  <p
+                    className={`mt-1 text-[11px] font-semibold ${
+                      device.agentCompatible ? 'text-slate-500' : 'text-amber-700'
+                    }`}
+                  >
+                    {device.agentCompatible ? (
+                      `Desktop Agent v${device.agentVersion}`
+                    ) : (
+                      <LocalizedText
+                        en={`Update required · install v${MINIMUM_ASSISTANT_AGENT_VERSION} or newer`}
+                        zhHant={`需要更新 · 請安裝 v${MINIMUM_ASSISTANT_AGENT_VERSION} 以上版本`}
+                      />
+                    )}
+                  </p>
                 </div>
                 <span
                   className={`size-2.5 rounded-full ${
-                    device.status === 'online' ? 'bg-emerald-500' : 'bg-slate-300'
+                    !device.agentCompatible
+                      ? 'bg-amber-400'
+                      : device.status === 'online'
+                        ? 'bg-emerald-500'
+                        : 'bg-slate-300'
                   }`}
                 />
               </article>
@@ -119,7 +147,7 @@ async function productionDevices() {
   const context = await requireWorkspaceContext();
   const result = await createSupabaseAdminClient()
     .from('devices')
-    .select('id, name, status, last_seen_at')
+    .select('id, name, status, last_seen_at, agent_version')
     .eq('tenant_id', context.actor.tenantId)
     .neq('status', 'revoked')
     .order('name');
@@ -128,9 +156,14 @@ async function productionDevices() {
     .array(ProductionDeviceSchema)
     .parse(result.data)
     .map((device) => ({
+      agentCompatible: isAssistantAgentVersionCompatible(device.agent_version),
+      agentVersion: device.agent_version ?? 'unknown',
       id: device.id,
       ...(device.last_seen_at === null ? {} : { lastSeenAt: device.last_seen_at }),
       name: device.name,
-      status: device.status,
+      status:
+        device.status === 'online'
+          ? effectiveAssistantDeviceStatus(device.status, device.last_seen_at)
+          : device.status,
     }));
 }

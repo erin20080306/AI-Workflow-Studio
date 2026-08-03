@@ -33,6 +33,12 @@ const JobResponseSchema = z
     jobs: AgentJobListSchema,
   })
   .strict();
+const HeartbeatResponseSchema = z
+  .object({
+    acceptedAt: z.iso.datetime({ offset: true }),
+    deviceStatus: z.string(),
+  })
+  .strict();
 const ClaimResponseSchema = z
   .object({
     claimToken: z.string().regex(/^clm_[A-Za-z0-9_-]{40,60}$/),
@@ -275,38 +281,7 @@ export class AgentClient {
 
   async pollOnce(signal?: AbortSignal): Promise<readonly AgentJob[]> {
     const session = this.requireSession();
-    const folderAliases = ((await this.listFolderAliases?.()) ?? []).map((alias) => ({
-      displayName: alias.displayName,
-      folderAliasId: alias.folderAliasId,
-      permissions: {
-        read: alias.permissions.read,
-        watch: alias.permissions.watch,
-        write: alias.permissions.write,
-      },
-    }));
-    const requestTimestamp = new Date().toISOString();
-    const headers = {
-      authorization: `Bearer ${session.deviceToken}`,
-      'content-type': 'application/json',
-      'x-request-timestamp': requestTimestamp,
-    };
-    await this.requestJson(
-      `${session.agentBaseUrl}/api/agent/heartbeat`,
-      {
-        body: JSON.stringify({
-          agentVersion: this.agentVersion,
-          executorRunning: this.executorRunning,
-          metadata: {
-            folderAliases,
-            platform: process.platform,
-          },
-        }),
-        headers,
-        method: 'POST',
-        ...(signal === undefined ? {} : { signal }),
-      },
-      z.object({ acceptedAt: z.iso.datetime({ offset: true }), deviceStatus: z.string() }).strict(),
-    );
+    const heartbeat = await this.sendHeartbeat(session, signal);
     const jobResponse = await this.requestJson(
       `${session.agentBaseUrl}/api/agent/jobs`,
       {
@@ -323,7 +298,7 @@ export class AgentClient {
     this.setStatus({
       connection: 'online',
       deviceName: session.deviceName,
-      lastHeartbeatAt: new Date().toISOString(),
+      lastHeartbeatAt: heartbeat.acceptedAt,
       paired: true,
       pendingJobCount: jobResponse.jobs.length,
     });
@@ -524,6 +499,39 @@ export class AgentClient {
     };
     const leaseTimer = setInterval(() => void renewLease(), JOB_LEASE_RENEW_MS);
     leaseTimer.unref?.();
+    const heartbeatController = new AbortController();
+    const onJobAbort = () => heartbeatController.abort(controller.signal.reason);
+    controller.signal.addEventListener('abort', onJobAbort, { once: true });
+    let heartbeatInFlight: Promise<void> | undefined;
+    const heartbeatDuringJob = () => {
+      if (heartbeatInFlight !== undefined || heartbeatController.signal.aborted) return;
+      heartbeatInFlight = this.sendHeartbeat(session, heartbeatController.signal)
+        .then((heartbeat) => {
+          this.setStatus({
+            ...this.status,
+            connection: 'online',
+            deviceName: session.deviceName,
+            lastHeartbeatAt: heartbeat.acceptedAt,
+            paired: true,
+          });
+        })
+        .catch((error: unknown) => {
+          if (heartbeatController.signal.aborted) return;
+          this.logger.warn(
+            'AGENT_JOB_HEARTBEAT_FAILED',
+            'Device heartbeat failed while the current job remains protected by its lease.',
+            {
+              jobId: job.id,
+              type: error instanceof Error ? error.name : 'UnknownError',
+            },
+          );
+        })
+        .finally(() => {
+          heartbeatInFlight = undefined;
+        });
+    };
+    const heartbeatTimer = setInterval(heartbeatDuringJob, HEALTHY_POLL_MS);
+    heartbeatTimer.unref?.();
 
     const reportStep = async (stepInput: StepResult) => {
       const step = StepResultSchema.parse(stepInput);
@@ -645,8 +653,44 @@ export class AgentClient {
       });
     } finally {
       clearInterval(leaseTimer);
+      clearInterval(heartbeatTimer);
+      controller.signal.removeEventListener('abort', onJobAbort);
+      heartbeatController.abort('job_finished');
+      await heartbeatInFlight;
       parentSignal?.removeEventListener('abort', onParentAbort);
     }
+  }
+
+  private async sendHeartbeat(
+    session: PairingSession,
+    signal?: AbortSignal,
+  ): Promise<z.infer<typeof HeartbeatResponseSchema>> {
+    const folderAliases = ((await this.listFolderAliases?.()) ?? []).map((alias) => ({
+      displayName: alias.displayName,
+      folderAliasId: alias.folderAliasId,
+      permissions: {
+        read: alias.permissions.read,
+        watch: alias.permissions.watch,
+        write: alias.permissions.write,
+      },
+    }));
+    return await this.requestJson(
+      `${session.agentBaseUrl}/api/agent/heartbeat`,
+      {
+        body: JSON.stringify({
+          agentVersion: this.agentVersion,
+          executorRunning: this.executorRunning,
+          metadata: {
+            folderAliases,
+            platform: process.platform,
+          },
+        }),
+        headers: this.deviceHeaders(session),
+        method: 'POST',
+        ...(signal === undefined ? {} : { signal }),
+      },
+      HeartbeatResponseSchema,
+    );
   }
 
   private deviceHeaders(session: PairingSession): Readonly<Record<string, string>> {

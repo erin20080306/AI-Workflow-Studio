@@ -11,7 +11,7 @@ export interface SpreadsheetTable {
 export interface SpreadsheetSourceMetadata {
   readonly fileHash: string;
   readonly fileSizeBytes: number;
-  readonly format: 'csv' | 'xlsx';
+  readonly format: 'csv' | 'xls' | 'xlsx';
   readonly formulaCellCount: number;
 }
 
@@ -32,6 +32,11 @@ export interface SpreadsheetReadOptions {
   readonly maxUncompressedBytes?: number;
   readonly sheetMode?: 'all' | 'named';
   readonly sheetNames?: readonly string[];
+}
+
+export interface SpreadsheetReadControl {
+  readonly legacyXlsTimeoutMs?: number;
+  readonly signal?: AbortSignal;
 }
 
 export interface ResolvedSpreadsheetReadOptions {

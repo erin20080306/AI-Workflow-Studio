@@ -4003,3 +4003,86 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
   seconds before the verification query, confirming that the retry/log storm
   stopped; the historical monitoring warning may remain visible until its
   rolling budget window refreshes.
+
+### Outcome-first Work and local-first Visible Codex hardening
+
+- Reworked the AI workspace into an outcome-first **Work / 工作** experience,
+  informed by the interaction structure of OpenWorker without copying its
+  branding, assets, or text. The default Plan mode now presents validated
+  progress, completed artifacts, exact access requirements, and approvals in
+  separate reviewable regions while retaining Ask and Image modes.
+- Grounded the requested Visible Codex operation as one reviewed chain:
+  visible Chrome Drive download → local Excel read/merge/report → visible Excel
+  verification → metadata-only AI summary/report → optional Google Slides → an
+  allowlisted Apps Script template. A GAS-only request uses
+  `sheet-cost-summary` without inventing Slides; an explicit GAS presentation
+  uses Slides and `slides-executive-report`.
+- Raised the Desktop Agent protocol/application version to `0.2.0`. Production
+  target selection, planning, dispatch, job listing, and direct job claim all
+  fail closed for missing or older Agent versions. A stale Agent therefore
+  cannot claim an already-pending job left from an earlier Web deployment.
+  Device freshness also requires a recent bounded heartbeat; the Agent now sends
+  independent heartbeats during long local work.
+- Added safe live workbook progress for local `excel.read`. The Agent reports
+  only total workbook count plus existing processed file/row counts, so a known
+  481-workbook batch can display progress such as `40 / 481` without sending
+  filenames, paths, or row data.
+- Added bounded legacy `.xls` support through a dedicated worker thread with
+  resource limits, timeout/abort handling, OLE signature validation, Traditional
+  Chinese codepage support, cached formula values only, and strict file, row,
+  sheet, and column bounds. The emitted worker was verified in the packaged
+  macOS application.
+- Tightened the Desktop-to-Cloud privacy boundary. Only ordinal columns,
+  allowlisted semantic hints, counts, capped unlabeled frequencies, and
+  sufficiently large metric cohorts may leave the computer. Raw headers,
+  category labels, customer/status values, filenames, sheet names, local paths,
+  workbook rows, and the workbook itself are rejected before network progress
+  or cloud continuation.
+- Added immutable migration `202608030002_agent_cloud_step_claim.sql`. Its
+  service-role-only RPC atomically claims exactly one pending reviewed cloud
+  step, binds it to the stored direct predecessor and canonical input hash, and
+  rejects duplicate, reordered, changed-input, or cross-Tenant execution. A
+  claimed cloud step now converges to a fixed safe failed record if provider
+  execution, output validation, or result persistence fails; the separate audit
+  event remains best-effort while the run-step record is authoritative.
+- The local batch remains intentionally bounded to 500 workbooks, 100,000 total
+  rows, 2,000 aggregate sheets, and configured per-file limits. The normal
+  481-file dataset fits those workbook-count bounds, but processing is
+  sequential for memory safety and is not represented as instant.
+
+### Validation and production rollout after outcome-first Work
+
+- `pnpm format:check`: passed after final formatting.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed across all 14 applicable workspace projects.
+- `pnpm test`: passed outside the process sandbox — 413 tests across 77 files;
+  one separately gated real Excel operating-system acceptance test remains
+  skipped. The sandboxed AppleScript compiler-service attempt failed as
+  expected; the identical permitted run passed without a code change.
+- Focused Playwright acceptance passed: all 4 Work conversation/Plan/Image/source
+  scenarios plus the existing reviewed mock-workflow scenario.
+- `pnpm db:test`: passed against a fresh local Supabase database, including the
+  atomic cloud-step claim, duplicate/input-change/predecessor, service-role, and
+  Tenant-isolation assertions.
+- `pnpm build:web`: passed — all 47 application pages and Agent routes compiled.
+  The initial sandboxed Turbopack worker could not bind a port; the identical
+  permitted build passed.
+- `pnpm build:desktop`: passed; the main bundle includes the emitted
+  `legacy-xls-worker.cjs` worker.
+- `pnpm security:scan-client`: passed — 35 generated browser files scanned.
+- `pnpm audit --prod`: passed with no known vulnerabilities.
+- `pnpm --filter @ai-workflow-studio/desktop package:test`: passed and produced
+  an ad-hoc-signed macOS arm64 `AI Workflow Studio Agent.app` version `0.2.0`.
+- The linked production migration dry-run listed only
+  `202608030002_agent_cloud_step_claim.sql`; it was then applied successfully,
+  and the remote migration list confirmed local and remote `202608030002` match.
+- Vercel production deployment `dpl_4UAFUfRFKwsEmFvsw5AHzgN7rLMQ` reached
+  `READY` and was aliased to `https://www.erin-aiworkflowstudio.com`. Authenticated
+  production smoke testing confirmed the `Work｜工作` page, default Plan mode,
+  Progress/Artifacts/Access & approvals regions, no browser console errors, and
+  an explicit update-required state for the connected pre-`0.2.0` Agent.
+- No real Drive item was selected or downloaded, no 481-workbook consolidation
+  was started, and no real Slides or GAS deployment was performed. Phase 50
+  remains in progress until the user installs/opens Agent `0.2.0`, approves one
+  exact read/write Downloads alias and macOS permissions, and completes the
+  real-app acceptance run; Windows acceptance also remains outstanding.
