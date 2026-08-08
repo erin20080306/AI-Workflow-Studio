@@ -31,11 +31,13 @@ test('creates, pauses, resumes, and safely triggers a recurring schedule', async
   );
   expect(tickResponse.ok()).toBe(true);
   const tick = (await tickResponse.json()) as {
-    readonly fires: readonly { readonly runId?: string }[];
-    readonly runCount: number;
+    readonly schedules: {
+      readonly fires: readonly { readonly runId?: string }[];
+      readonly runCount: number;
+    };
   };
-  expect(tick.runCount).toBe(1);
-  const runId = tick.fires[0]?.runId;
+  expect(tick.schedules.runCount).toBe(1);
+  const runId = tick.schedules.fires[0]?.runId;
   expect(runId).toBeDefined();
 
   await page.goto(`/dashboard/runs/${runId!}`);

@@ -22,10 +22,12 @@ import {
   IPC_CHANNELS,
   type AgentSnapshot,
   type FolderPermissionInput,
+  type PairDeviceErrorCode,
   type PairDeviceInput,
+  type PairDeviceResult,
 } from '../shared/contracts';
 import { ProcessingLedger } from '@ai-workflow-studio/local-executor';
-import { AgentClient, type AgentClientStatus } from './agent-client';
+import { AgentClient, AgentHttpError, type AgentClientStatus } from './agent-client';
 import { createPlatformExcelDriver, DesktopComputerUseController } from './computer-use';
 import { createPlatformVisibleDriveDriver } from './visible-drive';
 import { FolderGrantStore } from './folder-grants';
@@ -177,6 +179,12 @@ function secureCipher(): SecureCipher {
   };
 }
 
+function safePairDeviceErrorCode(error: unknown): PairDeviceErrorCode {
+  return error instanceof AgentHttpError && error.agentCode !== undefined
+    ? error.agentCode
+    : 'PAIRING_FAILED';
+}
+
 function registerIpc(): void {
   safeIpc(IPC_CHANNELS.getSnapshot, () => currentSnapshot());
   safeIpc(IPC_CHANNELS.listLogs, () => logger.list());
@@ -184,11 +192,20 @@ function registerIpc(): void {
     const deviceId = agentClient.getSession()?.deviceId;
     return deviceId === undefined ? [] : folderGrants.list(deviceId);
   });
-  safeIpc(IPC_CHANNELS.pair, async (_event, input: PairDeviceInput) => {
-    const request = PairInputSchema.parse(input);
-    await agentClient.pair(request.agentBaseUrl, request.pairingCode);
-    broadcastSnapshot();
-    return currentSnapshot();
+  safeIpc(IPC_CHANNELS.pair, async (_event, input: PairDeviceInput): Promise<PairDeviceResult> => {
+    try {
+      const request = PairInputSchema.parse(input);
+      await agentClient.pair(request.agentBaseUrl, request.pairingCode);
+      broadcastSnapshot();
+      return { ok: true, snapshot: currentSnapshot() };
+    } catch (error) {
+      const errorCode = safePairDeviceErrorCode(error);
+      logger.warn('AGENT_PAIRING_REJECTED', 'Device pairing was rejected.', {
+        errorCode,
+        type: error instanceof Error ? error.name : 'UnknownError',
+      });
+      return { errorCode, ok: false };
+    }
   });
   safeIpc(IPC_CHANNELS.setExecutorRunning, async (_event, running: boolean) => {
     z.boolean().parse(running);

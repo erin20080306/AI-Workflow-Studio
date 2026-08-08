@@ -318,7 +318,12 @@ export class AgentService {
       );
     }
     const deviceId = parseJobId(deviceIdInput);
-    const revoked = await this.store.revokeDevice(actor.tenantId, deviceId, this.clock());
+    const revoked = await this.store.revokeDevice({
+      actorUserId: actor.userId,
+      deviceId,
+      now: this.clock(),
+      tenantId: actor.tenantId,
+    });
     if (!revoked) {
       throw new AgentProtocolError('AGENT_JOB_NOT_FOUND', 'Device was not found.');
     }

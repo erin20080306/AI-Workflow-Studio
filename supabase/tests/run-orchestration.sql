@@ -18,6 +18,16 @@ values (
   'owner'
 );
 
+insert into public.devices (id, tenant_id, paired_by, name, status, paired_at)
+values (
+  '96000000-0000-4000-8000-000000000001',
+  '92000000-0000-4000-8000-000000000001',
+  '91000000-0000-4000-8000-000000000001',
+  'Run timeout Agent',
+  'online',
+  now()
+);
+
 insert into public.workflows (id, tenant_id, created_by, name, status)
 values (
   '93000000-0000-4000-8000-000000000001',
@@ -55,15 +65,25 @@ insert into public.workflow_runs (
   status,
   idempotency_key
 )
-values (
-  '95000000-0000-4000-8000-000000000001',
-  '92000000-0000-4000-8000-000000000001',
-  '93000000-0000-4000-8000-000000000001',
-  '94000000-0000-4000-8000-000000000001',
-  '91000000-0000-4000-8000-000000000001',
-  'pending',
-  'run-orchestration-test'
-);
+values
+  (
+    '95000000-0000-4000-8000-000000000001',
+    '92000000-0000-4000-8000-000000000001',
+    '93000000-0000-4000-8000-000000000001',
+    '94000000-0000-4000-8000-000000000001',
+    '91000000-0000-4000-8000-000000000001',
+    'pending',
+    'run-orchestration-test'
+  ),
+  (
+    '95000000-0000-4000-8000-000000000002',
+    '92000000-0000-4000-8000-000000000001',
+    '93000000-0000-4000-8000-000000000001',
+    '94000000-0000-4000-8000-000000000001',
+    '91000000-0000-4000-8000-000000000001',
+    'pending',
+    'run-timeout-cancels-job'
+  );
 
 do $$
 begin
@@ -92,6 +112,61 @@ select public.transition_workflow_run(
   'queued',
   '91000000-0000-4000-8000-000000000001'
 );
+
+select public.transition_workflow_run(
+  '92000000-0000-4000-8000-000000000001',
+  '95000000-0000-4000-8000-000000000002',
+  'pending',
+  'queued',
+  '91000000-0000-4000-8000-000000000001'
+);
+
+insert into public.agent_jobs (
+  tenant_id,
+  device_id,
+  workflow_run_id,
+  payload,
+  idempotency_key
+)
+values (
+  '92000000-0000-4000-8000-000000000001',
+  '96000000-0000-4000-8000-000000000001',
+  '95000000-0000-4000-8000-000000000002',
+  '{"workflow":{"schemaVersion":1}}',
+  '95000000-0000-4000-8000-000000000002:desktop:1'
+);
+
+select public.transition_workflow_run(
+  '92000000-0000-4000-8000-000000000001',
+  '95000000-0000-4000-8000-000000000002',
+  'queued',
+  'running',
+  null,
+  null
+);
+select public.transition_workflow_run(
+  '92000000-0000-4000-8000-000000000001',
+  '95000000-0000-4000-8000-000000000002',
+  'running',
+  'timed_out',
+  null,
+  null,
+  'RUN_TIMEOUT',
+  'The run exceeded its deadline.'
+);
+
+do $$
+begin
+  if (
+    select status
+    from public.agent_jobs
+    where workflow_run_id = '95000000-0000-4000-8000-000000000002'
+  ) <> 'cancelled' then
+    raise exception 'timing out a Run must cancel its stale Desktop Jobs before retry';
+  end if;
+end;
+$$;
+
 select public.transition_workflow_run(
   '92000000-0000-4000-8000-000000000001',
   '95000000-0000-4000-8000-000000000001',

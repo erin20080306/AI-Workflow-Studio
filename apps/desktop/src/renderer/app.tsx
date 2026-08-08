@@ -7,13 +7,17 @@ import type {
   LogEntry,
 } from '../shared/contracts';
 import { defaultControlPlaneOrigin } from './control-plane';
+import {
+  desktopErrorGuidance,
+  type DesktopErrorCode,
+  type DesktopLocale,
+} from './pairing-error-guidance';
 
 type View = 'activity' | 'folders' | 'overview' | 'settings';
-type DesktopLocale = 'en' | 'zh-Hant';
 const DESKTOP_LOCALE_KEY = 'ai-workflow-studio-desktop-locale';
 
 const previewSnapshot: AgentSnapshot = {
-  agentVersion: '0.2.0-dev',
+  agentVersion: '0.2.1-dev',
   autoStart: false,
   computerUse: {
     enabled: false,
@@ -93,13 +97,15 @@ function createPreviewBridge(): DesktopAgentBridge {
       snapshotListeners.add(listener);
       return () => snapshotListeners.delete(listener);
     },
-    pair: () =>
-      emit({
+    async pair() {
+      const next = await emit({
         ...snapshot,
         connection: 'offline',
         deviceName: 'Preview Mac',
         paired: true,
-      }),
+      });
+      return { ok: true, snapshot: next };
+    },
     async removeFolder() {
       folders = [];
       return folders;
@@ -204,7 +210,7 @@ export function DesktopAgentApp() {
     write: false,
   });
   const [busy, setBusy] = useState<string>();
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<DesktopErrorCode>();
   const previewMode = window.desktopAgent === undefined;
   const t = (en: string, zhHant: string) => (locale === 'en' ? en : zhHant);
 
@@ -282,13 +288,17 @@ export function DesktopAgentApp() {
                     ? t('Verify active workbook', '驗證目前活頁簿')
                     : undefined;
 
-  async function perform<T>(key: string, action: () => Promise<T>): Promise<T | undefined> {
+  async function perform<T>(
+    key: string,
+    action: () => Promise<T>,
+    fallbackError: DesktopErrorCode = 'DESKTOP_ACTION_FAILED',
+  ): Promise<T | undefined> {
     setBusy(key);
-    setError(false);
+    setError(undefined);
     try {
       return await action();
     } catch {
-      setError(true);
+      setError(fallbackError);
       return undefined;
     } finally {
       setBusy(undefined);
@@ -297,15 +307,20 @@ export function DesktopAgentApp() {
 
   async function pair(event: FormEvent) {
     event.preventDefault();
-    const result = await perform('pair', () =>
-      bridge.pair({
-        agentBaseUrl,
-        pairingCode: pairingCode.trim().toUpperCase(),
-      }),
+    const result = await perform(
+      'pair',
+      () =>
+        bridge.pair({
+          agentBaseUrl,
+          pairingCode: pairingCode.trim().toUpperCase(),
+        }),
+      'PAIRING_FAILED',
     );
-    if (result !== undefined) {
-      setSnapshot(result);
+    if (result?.ok === true) {
+      setSnapshot(result.snapshot);
       setPairingCode('');
+    } else if (result !== undefined) {
+      setError(result.errorCode);
     }
   }
 
@@ -409,10 +424,7 @@ export function DesktopAgentApp() {
 
         {error && (
           <div className="error-banner" role="alert">
-            {t(
-              'The action did not complete. Check the pairing code, network, or secure local storage and try again.',
-              '操作未完成。請檢查配對碼、網路或本機安全儲存後再試。',
-            )}
+            {desktopErrorGuidance(locale, error)}
           </div>
         )}
 

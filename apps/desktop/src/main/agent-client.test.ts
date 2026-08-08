@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { AgentClient, type AgentFetch, type AgentClientStatus } from './agent-client';
+import {
+  AgentClient,
+  AgentHttpError,
+  type AgentFetch,
+  type AgentClientStatus,
+  type SessionVault,
+} from './agent-client';
 import type { PairingSession } from './token-vault';
 
 const DEVICE_ID = '10000000-0000-4000-8000-000000000821';
@@ -25,6 +31,24 @@ function pairingSession(): PairingSession {
     expiresAt: '2026-10-24T06:00:00.000Z',
     tenantId: TENANT_ID,
   };
+}
+
+function pairingClient(fetchTransport: AgentFetch, vault?: SessionVault): AgentClient {
+  return new AgentClient({
+    agentVersion: '0.2.0-test',
+    fetchTransport,
+    logger: { info: vi.fn(), warn: vi.fn() },
+    onStatus: vi.fn(),
+    vault:
+      vault ??
+      ({
+        async clear() {},
+        async load() {
+          return undefined;
+        },
+        async save() {},
+      } satisfies SessionVault),
+  });
 }
 
 function jobPayload() {
@@ -146,6 +170,97 @@ describe('AgentClient', () => {
       },
     });
     expect(requests[2]?.url).toBe('https://agent.example.invalid/api/agent/jobs');
+  });
+
+  it('retains only an allowlisted Agent code from a pairing error response', async () => {
+    const rawServerMessage = 'database constraint and private row details';
+    const client = pairingClient(async () =>
+      jsonResponse(
+        {
+          error: {
+            code: 'AGENT_DEVICE_LIMIT_REACHED',
+            message: rawServerMessage,
+          },
+        },
+        409,
+      ),
+    );
+
+    const error: unknown = await client
+      .pair('https://agent.example.invalid', 'ABCD2345EFGH')
+      .catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(AgentHttpError);
+    if (!(error instanceof AgentHttpError)) {
+      throw new Error('Expected an AgentHttpError.');
+    }
+    expect(error.agentCode).toBe('AGENT_DEVICE_LIMIT_REACHED');
+    expect(error.status).toBe(409);
+    expect(error.message).not.toContain(rawServerMessage);
+  });
+
+  it('drops unknown and oversized pairing error bodies instead of retaining server details', async () => {
+    const rawServerMessage = 'raw postgres failure that must remain server-side';
+    const responses = [
+      jsonResponse(
+        {
+          error: {
+            code: 'POSTGRES_INTERNAL_FAILURE',
+            message: rawServerMessage,
+          },
+        },
+        500,
+      ),
+      jsonResponse(
+        {
+          error: {
+            code: 'AGENT_PAIRING_INVALID',
+            message: rawServerMessage.repeat(2_000),
+          },
+        },
+        400,
+      ),
+    ];
+    const client = pairingClient(async () => responses.shift() ?? jsonResponse({}, 500));
+
+    for (let index = 0; index < 2; index += 1) {
+      const error: unknown = await client
+        .pair('https://agent.example.invalid', 'ABCD2345EFGH')
+        .catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(AgentHttpError);
+      if (!(error instanceof AgentHttpError)) {
+        throw new Error('Expected an AgentHttpError.');
+      }
+      expect(error.agentCode).toBeUndefined();
+      expect(error.message).not.toContain(rawServerMessage);
+    }
+  });
+
+  it('bounds successful JSON before parsing it', async () => {
+    const client = pairingClient(async () => jsonResponse({ padding: 'x'.repeat(1_000_001) }));
+
+    await expect(client.pair('https://agent.example.invalid', 'ABCD2345EFGH')).rejects.toThrow(
+      'Agent server response is too large.',
+    );
+  });
+
+  it('checks secure storage before consuming a one-time pairing code', async () => {
+    const fetchTransport = vi.fn(async () => jsonResponse({}));
+    const client = pairingClient(fetchTransport, {
+      async clear() {},
+      async load() {
+        return undefined;
+      },
+      async prepare() {
+        throw new Error('Operating-system secure storage is unavailable.');
+      },
+      async save() {},
+    });
+
+    await expect(client.pair('https://agent.example.invalid', 'ABCD2345EFGH')).rejects.toThrow(
+      'Operating-system secure storage is unavailable.',
+    );
+    expect(fetchTransport).not.toHaveBeenCalled();
   });
 
   it('enters bounded reconnect state after a polling failure and can be stopped', async () => {
@@ -389,6 +504,66 @@ describe('AgentClient', () => {
     finishJob?.();
     await processing;
     expect(completed).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('aborts local execution when a heartbeat reports a revoked device session', async () => {
+    vi.useFakeTimers();
+    let jobSignal: AbortSignal | undefined;
+    let heartbeatRequestCount = 0;
+    const requests: string[] = [];
+    const pendingJob = jobPayload().jobs[0];
+    const fetchTransport: AgentFetch = async (input) => {
+      const url = String(input);
+      requests.push(url);
+      if (url.endsWith('/heartbeat')) {
+        heartbeatRequestCount += 1;
+        return heartbeatRequestCount === 1
+          ? jsonResponse({ acceptedAt: new Date().toISOString(), deviceStatus: 'online' })
+          : jsonResponse({ error: { code: 'AGENT_UNAUTHORIZED' } }, 401);
+      }
+      if (url.endsWith('/jobs')) return jsonResponse(jobPayload());
+      if (url.endsWith('/claim')) {
+        return jsonResponse({
+          claimToken: `clm_${'C'.repeat(43)}`,
+          job: { ...pendingJob, attempt: 1, status: 'claimed' },
+        });
+      }
+      return jsonResponse({ error: 'unexpected route' }, 404);
+    };
+    const client = new AgentClient({
+      agentVersion: '0.2.1-test',
+      executeJob: async (_job, reporter) => {
+        jobSignal = reporter.signal;
+        await new Promise<void>((resolve) => {
+          if (reporter.signal.aborted) {
+            resolve();
+            return;
+          }
+          reporter.signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+      },
+      fetchTransport,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      onStatus: vi.fn(),
+      vault: {
+        async clear() {},
+        async load() {
+          return pairingSession();
+        },
+        async save() {},
+      },
+    });
+    await client.initialize();
+
+    const processing = client.processOnce();
+    await vi.advanceTimersByTimeAsync(15_000);
+    await processing;
+
+    expect(heartbeatRequestCount).toBe(2);
+    expect(jobSignal?.aborted).toBe(true);
+    expect(requests.some((url) => url.endsWith('/complete'))).toBe(false);
+    expect(requests.some((url) => url.endsWith('/fail'))).toBe(false);
     vi.useRealTimers();
   });
 

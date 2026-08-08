@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { DevicePairingPanel } from '@/components/devices/device-pairing-panel';
+import { DeviceRevokeControl } from '@/components/devices/device-revoke-control';
 import { DeviceIcon } from '@/components/icons';
 import { LocalizedText } from '@/components/language-provider';
 import {
@@ -46,9 +47,11 @@ const ProductionDeviceSchema = z.object({
 
 export default async function DevicesPage() {
   const environment = getEnvironment();
+  const context = await requireWorkspaceContext();
+  const canManageDevices = context.actor.role === 'owner' || context.actor.role === 'admin';
   const devices = environment.mockMode
     ? mockDevices.map((device, index) => ({ ...device, id: `mock-${index}` }))
-    : await productionDevices();
+    : await productionDevices(context.actor.tenantId);
 
   return (
     <div className="mx-auto max-w-[1120px]">
@@ -109,6 +112,9 @@ export default async function DevicesPage() {
                       />
                     )}
                   </p>
+                  {!environment.mockMode && canManageDevices && (
+                    <DeviceRevokeControl deviceId={device.id} deviceName={device.name} />
+                  )}
                 </div>
                 <span
                   className={`size-2.5 rounded-full ${
@@ -137,21 +143,36 @@ export default async function DevicesPage() {
           </div>
         </section>
 
-        <DevicePairingPanel />
+        {canManageDevices ? (
+          <DevicePairingPanel />
+        ) : (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <h2 className="text-base font-semibold text-slate-950">
+              <LocalizedText en="Administrator access required" zhHant="需要管理員權限" />
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              <LocalizedText
+                en="Ask a workspace owner or administrator to pair or revoke Desktop Agents."
+                zhHant="請由工作區擁有者或管理員配對或撤銷 Desktop Agent。"
+              />
+            </p>
+          </section>
+        )}
       </div>
     </div>
   );
 }
 
-async function productionDevices() {
-  const context = await requireWorkspaceContext();
+async function productionDevices(tenantId: string) {
   const result = await createSupabaseAdminClient()
     .from('devices')
     .select('id, name, status, last_seen_at, agent_version')
-    .eq('tenant_id', context.actor.tenantId)
+    .eq('tenant_id', tenantId)
     .neq('status', 'revoked')
     .order('name');
-  if (result.error !== null) return [];
+  if (result.error !== null) {
+    throw new Error('Desktop Agent metadata could not be loaded.');
+  }
   return z
     .array(ProductionDeviceSchema)
     .parse(result.data)

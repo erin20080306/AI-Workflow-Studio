@@ -282,6 +282,12 @@ begin
     raise exception 'authenticated users must not read pairing code hashes';
   end if;
 
+  if has_table_privilege('authenticated', 'public.devices', 'insert')
+    or has_table_privilege('authenticated', 'public.devices', 'update')
+    or has_table_privilege('authenticated', 'public.devices', 'delete') then
+    raise exception 'authenticated users must not bypass server-owned device lifecycle RPCs';
+  end if;
+
   if has_function_privilege(
     'authenticated',
     'public.claim_agent_job(uuid,uuid,uuid,bytea,integer)',
@@ -312,6 +318,68 @@ begin
     'execute'
   ) then
     raise exception 'authenticated users must not revoke Desktop Agents';
+  end if;
+
+  if has_function_privilege(
+    'authenticated',
+    'public.revoke_agent_device_v2(uuid,uuid,uuid,timestamp with time zone)',
+    'execute'
+  ) then
+    raise exception 'authenticated users must not call audited Desktop Agent revocation';
+  end if;
+
+  if has_function_privilege(
+    'service_role',
+    'public.revoke_agent_device(uuid,uuid,timestamp with time zone)',
+    'execute'
+  ) then
+    raise exception 'service role must not retain the unaudited legacy revocation entry point';
+  end if;
+
+  if not has_function_privilege(
+    'service_role',
+    'public.revoke_agent_device_v2(uuid,uuid,uuid,timestamp with time zone)',
+    'execute'
+  ) then
+    raise exception 'service role must execute the audited revocation entry point';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgrelid = 'public.devices'::regclass
+      and tgname = 'a_lock_tenant_for_device_limit'
+      and not tgisinternal
+      and tgenabled = 'O'
+      and (tgtype & 2) = 2
+      and (tgtype & 4) = 4
+      and tgfoid = 'public.lock_tenant_for_device_limit()'::regprocedure
+  ) then
+    raise exception 'device inserts must serialize before enforcing the active-device limit';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgrelid = 'public.agent_jobs'::regclass
+      and tgname = 'require_active_device_for_agent_job'
+      and not tgisinternal
+      and tgenabled = 'O'
+      and (tgtype & 2) = 2
+      and (tgtype & 4) = 4
+      and tgfoid = 'public.require_active_agent_job_device()'::regprocedure
+  ) then
+    raise exception 'Agent Job inserts must reject revoked devices atomically';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_trigger
+    where tgrelid = 'public.devices'::regclass
+      and tgname = 'prevent_revoked_device_reactivation'
+      and not tgisinternal
+  ) then
+    raise exception 'revoked Desktop Agents must not be reactivated';
   end if;
 
   if has_function_privilege(
@@ -429,6 +497,44 @@ begin
     raise exception 'the cloud step claim must persist only bounded metadata';
   end if;
 
+  begin
+    perform count(*)
+    from public.complete_agent_pairing(
+      extensions.digest('plaintext-pairing-code', 'sha256'),
+      '73000000-0000-4000-8000-000000000004',
+      '1.2.3-test',
+      '74000000-0000-4000-8000-000000000004',
+      extensions.digest('paired-device-token', 'sha256'),
+      'ce-token',
+      statement_timestamp() + interval '90 days',
+      statement_timestamp()
+    );
+    raise exception 'free device limit unexpectedly allowed atomic pairing';
+  exception
+    when check_violation then
+      null;
+  end;
+
+  if (
+    select consumed_at is not null
+    from public.device_pairing_codes
+    where code_hash = extensions.digest('plaintext-pairing-code', 'sha256')
+  ) then
+    raise exception 'failed quota-limited pairing must not consume its one-time code';
+  end if;
+
+  if exists (
+    select 1
+    from public.devices
+    where id = '73000000-0000-4000-8000-000000000004'
+  ) or exists (
+    select 1
+    from public.device_tokens
+    where id = '74000000-0000-4000-8000-000000000004'
+  ) then
+    raise exception 'failed quota-limited pairing must roll back device credentials';
+  end if;
+
   update public.tenant_subscriptions
   set plan_code = 'team'
   where tenant_id = '72000000-0000-4000-8000-000000000001';
@@ -498,37 +604,222 @@ begin
     raise exception 'heartbeat metadata must be persisted for the paired device';
   end if;
 
+  insert into public.workflow_runs (
+    id,
+    tenant_id,
+    workflow_id,
+    workflow_version_id,
+    status,
+    idempotency_key
+  )
+  values
+    (
+      '77000000-0000-4000-8000-000000000003',
+      '72000000-0000-4000-8000-000000000001',
+      '75000000-0000-4000-8000-000000000001',
+      '76000000-0000-4000-8000-000000000001',
+      'queued',
+      'agent-run-revoke-active'
+    ),
+    (
+      '77000000-0000-4000-8000-000000000004',
+      '72000000-0000-4000-8000-000000000001',
+      '75000000-0000-4000-8000-000000000001',
+      '76000000-0000-4000-8000-000000000001',
+      'queued',
+      'agent-run-revoke-after-finish'
+    );
+
+  insert into public.workflow_run_steps (
+    tenant_id,
+    workflow_run_id,
+    node_id,
+    node_type,
+    status,
+    attempt
+  )
+  values
+    (
+      '72000000-0000-4000-8000-000000000001',
+      '77000000-0000-4000-8000-000000000003',
+      'revoke-active-step',
+      'excel.read',
+      'pending',
+      1
+    ),
+    (
+      '72000000-0000-4000-8000-000000000001',
+      '77000000-0000-4000-8000-000000000004',
+      'revoke-finished-step',
+      'excel.read',
+      'pending',
+      1
+    );
+
   insert into public.agent_jobs (
     id,
     tenant_id,
     device_id,
     workflow_run_id,
     payload,
-    idempotency_key
+    idempotency_key,
+    status,
+    completed_at
   )
-  values (
-    '78000000-0000-4000-8000-000000000004',
-    '72000000-0000-4000-8000-000000000001',
-    '73000000-0000-4000-8000-000000000004',
-    '77000000-0000-4000-8000-000000000001',
-    '{"workflow":{"schemaVersion":1}}',
-    'agent-job-revoke'
-  );
+  values
+    (
+      '78000000-0000-4000-8000-000000000004',
+      '72000000-0000-4000-8000-000000000001',
+      '73000000-0000-4000-8000-000000000004',
+      '77000000-0000-4000-8000-000000000003',
+      '{"workflow":{"schemaVersion":1}}',
+      'agent-job-revoke',
+      'pending',
+      null
+    ),
+    (
+      '78000000-0000-4000-8000-000000000006',
+      '72000000-0000-4000-8000-000000000001',
+      '73000000-0000-4000-8000-000000000001',
+      '77000000-0000-4000-8000-000000000003',
+      '{"workflow":{"schemaVersion":1}}',
+      'agent-job-revoke-sibling',
+      'pending',
+      null
+    ),
+    (
+      '78000000-0000-4000-8000-000000000007',
+      '72000000-0000-4000-8000-000000000001',
+      '73000000-0000-4000-8000-000000000004',
+      '77000000-0000-4000-8000-000000000004',
+      '{"workflow":{"schemaVersion":1}}',
+      'agent-job-finished-before-revoke',
+      'succeeded',
+      statement_timestamp()
+    );
 
-  if not public.revoke_agent_device(
+  begin
+    perform public.revoke_agent_device_v2(
+      '72000000-0000-4000-8000-000000000001',
+      '73000000-0000-4000-8000-000000000004',
+      '71000000-0000-4000-8000-000000000002',
+      statement_timestamp()
+    );
+    raise exception 'a cross-Tenant actor unexpectedly revoked the Desktop Agent';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+
+  if not public.revoke_agent_device_v2(
     '72000000-0000-4000-8000-000000000001',
     '73000000-0000-4000-8000-000000000004',
+    '71000000-0000-4000-8000-000000000001',
     statement_timestamp()
   ) then
     raise exception 'the paired Desktop Agent must be revocable';
   end if;
 
+  if exists (
+    select 1
+    from public.agent_jobs
+    where workflow_run_id in (
+      '77000000-0000-4000-8000-000000000003',
+      '77000000-0000-4000-8000-000000000004'
+    )
+      and status in ('pending', 'claimed', 'running')
+  ) then
+    raise exception 'revocation must cancel every active Job for an affected Run';
+  end if;
+
   if (
     select status
     from public.agent_jobs
-    where id = '78000000-0000-4000-8000-000000000004'
-  ) <> 'cancelled' then
-    raise exception 'revocation must cancel active Desktop Agent jobs';
+    where id = '78000000-0000-4000-8000-000000000007'
+  ) <> 'succeeded' then
+    raise exception 'revocation must not rewrite an already terminal Job result';
+  end if;
+
+  if (
+    select count(*)
+    from public.workflow_runs
+    where id in (
+      '77000000-0000-4000-8000-000000000003',
+      '77000000-0000-4000-8000-000000000004'
+    )
+      and status = 'cancelled'
+  ) <> 2 then
+    raise exception 'revocation must converge active Runs even after a Job result committed';
+  end if;
+
+  if exists (
+    select 1
+    from public.workflow_run_steps
+    where workflow_run_id in (
+      '77000000-0000-4000-8000-000000000003',
+      '77000000-0000-4000-8000-000000000004'
+    )
+      and status in ('pending', 'running')
+  ) then
+    raise exception 'revocation must converge pending and running steps to cancelled';
+  end if;
+
+  begin
+    insert into public.agent_jobs (
+      id,
+      tenant_id,
+      device_id,
+      workflow_run_id,
+      payload,
+      idempotency_key
+    )
+    values (
+      '78000000-0000-4000-8000-000000000008',
+      '72000000-0000-4000-8000-000000000001',
+      '73000000-0000-4000-8000-000000000004',
+      '77000000-0000-4000-8000-000000000003',
+      '{"workflow":{"schemaVersion":1}}',
+      'agent-job-after-revoke'
+    );
+    raise exception 'a revoked Desktop Agent unexpectedly accepted a new Job';
+  exception
+    when check_violation then
+      null;
+  end;
+
+  begin
+    update public.devices
+    set status = 'online', revoked_at = null
+    where id = '73000000-0000-4000-8000-000000000004';
+    raise exception 'a revoked Desktop Agent unexpectedly reactivated';
+  exception
+    when check_violation then
+      null;
+  end;
+
+  if (
+    select count(*)
+    from public.audit_logs
+    where tenant_id = '72000000-0000-4000-8000-000000000001'
+      and actor_user_id = '71000000-0000-4000-8000-000000000001'
+      and action = 'device.revoked'
+      and resource_id = '73000000-0000-4000-8000-000000000004'
+  ) <> 1 then
+    raise exception 'revocation must create one actor-bound device audit event';
+  end if;
+
+  if (
+    select count(*)
+    from public.audit_logs
+    where tenant_id = '72000000-0000-4000-8000-000000000001'
+      and actor_user_id = '71000000-0000-4000-8000-000000000001'
+      and action = 'run.cancelled'
+      and resource_id in (
+        '77000000-0000-4000-8000-000000000003',
+        '77000000-0000-4000-8000-000000000004'
+      )
+  ) <> 2 then
+    raise exception 'revocation must audit every affected Run cancellation';
   end if;
 
   if (

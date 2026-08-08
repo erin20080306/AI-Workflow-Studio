@@ -47,6 +47,7 @@ import {
   type DriveExcelCheckpoint,
 } from '@/lib/cloud-drive-excel-checkpoint';
 import { nextRetryTimeoutAt } from '@/lib/production-run-timeout';
+import { isCurrentProductionAgentJobAttempt } from '@/lib/production-agent-job-attempt';
 import { driveWorkbookProgressForRunStep } from '@/lib/run-drive-workbook-progress';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
@@ -1393,16 +1394,32 @@ export async function syncProductionAgentProgress(
   const admin = createSupabaseAdminClient();
   const jobResult = await admin
     .from('agent_jobs')
-    .select('workflow_run_id, attempt')
+    .select('workflow_run_id, attempt, status, idempotency_key')
     .eq('tenant_id', parsed.tenantId)
     .eq('device_id', parsed.deviceId)
     .eq('id', parsed.jobId)
+    .in('status', ['claimed', 'running'])
     .single();
   if (jobResult.error !== null) return;
   const job = z
-    .object({ attempt: z.number().int().min(1), workflow_run_id: UuidSchema })
+    .object({
+      attempt: z.number().int().min(1),
+      idempotency_key: z.string().min(8).max(200),
+      status: z.enum(['claimed', 'running']),
+      workflow_run_id: UuidSchema,
+    })
     .parse(jobResult.data);
   const run = await runView(parsed.tenantId, job.workflow_run_id);
+  if (run.status === 'cancelled') return;
+  if (
+    !isCurrentProductionAgentJobAttempt({
+      idempotencyKey: job.idempotency_key,
+      runAttempt: run.attempts,
+      runId: run.id,
+    })
+  ) {
+    return;
+  }
   const workflowNode = parsed.workflow.nodes.find((node) => node.id === parsed.step.nodeId);
   const runStep = run.steps.find((step) => step.nodeId === parsed.step.nodeId);
   if (
@@ -1459,13 +1476,44 @@ export async function syncProductionAgentProgress(
     .eq('workflow_run_id', run.id)
     .eq('node_id', safeStep.nodeId)
     .eq('attempt', Math.max(1, run.attempts))
+    .in('status', ['pending', 'running'])
     .select('id');
-  if (
-    update.error !== null ||
-    z.array(z.object({ id: UuidSchema })).parse(update.data).length !== 1
-  ) {
+  if (update.error !== null) {
     throw new RunOrchestrationError('RUN_INVALID', 'The progress node is not in this run.');
   }
+  if (z.array(z.object({ id: UuidSchema })).parse(update.data).length === 1) return;
+
+  const current = await admin
+    .from('workflow_run_steps')
+    .select('status')
+    .eq('tenant_id', parsed.tenantId)
+    .eq('workflow_run_id', run.id)
+    .eq('node_id', safeStep.nodeId)
+    .eq('attempt', Math.max(1, run.attempts))
+    .maybeSingle();
+  const currentStep = z
+    .object({
+      status: z.enum([
+        'pending',
+        'running',
+        'succeeded',
+        'failed',
+        'skipped',
+        'cancelled',
+        'timed_out',
+      ]),
+    })
+    .safeParse(current.data);
+  if (
+    current.error === null &&
+    currentStep.success &&
+    (currentStep.data.status === safeStep.status ||
+      currentStep.data.status === 'cancelled' ||
+      currentStep.data.status === 'timed_out')
+  ) {
+    return;
+  }
+  throw new RunOrchestrationError('RUN_INVALID', 'The progress node is not in this run.');
 }
 
 export async function syncProductionAgentCompletion(input: AgentCompletionInput): Promise<void> {
@@ -1481,14 +1529,27 @@ export async function syncProductionAgentCompletion(input: AgentCompletionInput)
   const admin = createSupabaseAdminClient();
   const jobResult = await admin
     .from('agent_jobs')
-    .select('workflow_run_id')
+    .select('workflow_run_id, idempotency_key')
     .eq('tenant_id', parsed.tenantId)
     .eq('device_id', parsed.deviceId)
     .eq('id', parsed.jobId)
     .single();
   if (jobResult.error !== null) return;
-  const runId = z.object({ workflow_run_id: UuidSchema }).parse(jobResult.data).workflow_run_id;
+  const job = z
+    .object({ idempotency_key: z.string().min(8).max(200), workflow_run_id: UuidSchema })
+    .parse(jobResult.data);
+  const runId = job.workflow_run_id;
   let run = await runView(parsed.tenantId, runId);
+  if (run.status === 'cancelled') return;
+  if (
+    !isCurrentProductionAgentJobAttempt({
+      idempotencyKey: job.idempotency_key,
+      runAttempt: run.attempts,
+      runId: run.id,
+    })
+  ) {
+    return;
+  }
   if (run.status === 'queued') {
     await transition(undefined, parsed.tenantId, run.id, 'queued', 'running', {
       deviceId: parsed.deviceId,
@@ -1533,14 +1594,27 @@ export async function syncProductionAgentFailure(input: AgentFailureInput): Prom
   const admin = createSupabaseAdminClient();
   const jobResult = await admin
     .from('agent_jobs')
-    .select('workflow_run_id')
+    .select('workflow_run_id, idempotency_key')
     .eq('tenant_id', parsed.tenantId)
     .eq('device_id', parsed.deviceId)
     .eq('id', parsed.jobId)
     .single();
   if (jobResult.error !== null) return;
-  const runId = z.object({ workflow_run_id: UuidSchema }).parse(jobResult.data).workflow_run_id;
+  const job = z
+    .object({ idempotency_key: z.string().min(8).max(200), workflow_run_id: UuidSchema })
+    .parse(jobResult.data);
+  const runId = job.workflow_run_id;
   let run = await runView(parsed.tenantId, runId);
+  if (run.status === 'cancelled') return;
+  if (
+    !isCurrentProductionAgentJobAttempt({
+      idempotencyKey: job.idempotency_key,
+      runAttempt: run.attempts,
+      runId: run.id,
+    })
+  ) {
+    return;
+  }
   if (run.status === 'queued') {
     await transition(undefined, parsed.tenantId, run.id, 'queued', 'running', {
       deviceId: parsed.deviceId,

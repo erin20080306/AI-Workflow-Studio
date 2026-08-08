@@ -90,6 +90,13 @@ export interface ActiveJobInput {
   readonly tenantId: string;
 }
 
+export interface DeviceRevocationInput {
+  readonly actorUserId: string;
+  readonly deviceId: string;
+  readonly now: Date;
+  readonly tenantId: string;
+}
+
 export interface AgentStore {
   createPairing(record: PairingRecord): Promise<void>;
   findPairingByHash(codeHash: string): Promise<PairingRecord | undefined>;
@@ -116,7 +123,7 @@ export interface AgentStore {
     },
   ): Promise<{ readonly duplicate: boolean; readonly job: AgentJob } | undefined>;
   cancelJob(tenantId: string, jobId: string, now: Date): Promise<boolean>;
-  revokeDevice(tenantId: string, deviceId: string, now: Date): Promise<boolean>;
+  revokeDevice(input: DeviceRevocationInput): Promise<boolean>;
 }
 
 function cloneJob(job: AgentJob): AgentJob {
@@ -334,16 +341,32 @@ export class InMemoryAgentStore implements AgentStore {
     return true;
   }
 
-  async revokeDevice(tenantId: string, deviceId: string, now: Date): Promise<boolean> {
-    const device = this.devices.get(deviceId);
-    if (device === undefined || device.tenantId !== tenantId) {
+  async revokeDevice(input: DeviceRevocationInput): Promise<boolean> {
+    const device = this.devices.get(input.deviceId);
+    if (device === undefined || device.tenantId !== input.tenantId || device.status === 'revoked') {
       return false;
     }
     device.status = 'revoked';
-    device.revokedAt = now;
+    device.revokedAt = input.now;
     for (const token of this.tokens.values()) {
-      if (token.deviceId === deviceId && token.tenantId === tenantId) {
-        token.revokedAt = now;
+      if (token.deviceId === input.deviceId && token.tenantId === input.tenantId) {
+        token.revokedAt = input.now;
+      }
+    }
+    for (const record of this.jobs.values()) {
+      if (
+        record.job.deviceId === input.deviceId &&
+        record.job.tenantId === input.tenantId &&
+        ['pending', 'claimed', 'running'].includes(record.job.status)
+      ) {
+        record.job.status = 'cancelled';
+        delete record.job.leaseExpiresAt;
+        record.events.push({
+          eventId: `revoke-${input.now.toISOString()}`,
+          occurredAt: input.now,
+          payload: {},
+          type: 'cancelled',
+        });
       }
     }
     return true;

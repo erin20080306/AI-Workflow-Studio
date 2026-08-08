@@ -63,6 +63,9 @@ function parseAgentProgressRequest(job: AgentJob, input: unknown): ProgressJobRe
   if (AGENT_CLOUD_NODE_TYPES.has(node.type)) {
     return invalidProgress('Cloud workflow steps do not accept generic Agent progress.');
   }
+  if (parsed.step.status === 'pending') {
+    return invalidProgress('Agent progress cannot move a workflow step back to pending.');
+  }
 
   if (
     parsed.step.progress !== undefined &&

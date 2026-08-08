@@ -1,6 +1,6 @@
 {
   "name": "@ai-workflow-studio/desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "author": "AI Workflow Studio",
   "description": "AI Workflow Studio local Desktop Agent",

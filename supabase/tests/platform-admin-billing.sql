@@ -183,6 +183,47 @@ begin
 end;
 $$;
 
+select tests.assert_true(
+  public.revoke_agent_device_v2(
+    '20000000-0000-0000-0000-000000000001',
+    (
+      select id
+      from public.devices
+      where tenant_id = '20000000-0000-0000-0000-000000000001'
+        and name = 'Free device one'
+    ),
+    '10000000-0000-0000-0000-000000000001',
+    now()
+  ),
+  'an ordinary Free tenant must be able to explicitly revoke its active device'
+);
+
+insert into public.devices (tenant_id, paired_by, name, status, paired_at)
+values (
+  '20000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  'Free replacement device',
+  'online',
+  now()
+);
+
+select tests.assert_true(
+  (
+    select count(*)
+    from public.devices
+    where tenant_id = '20000000-0000-0000-0000-000000000001'
+      and status <> 'revoked'
+  ) = 1
+  and exists (
+    select 1
+    from public.devices
+    where tenant_id = '20000000-0000-0000-0000-000000000001'
+      and name = 'Free replacement device'
+      and status = 'online'
+  ),
+  'revoking the old device must release the Free device quota for one replacement'
+);
+
 do $$
 begin
   begin

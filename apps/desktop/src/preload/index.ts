@@ -8,6 +8,7 @@ import {
   type FolderPermissionInput,
   type LogEntry,
   type PairDeviceInput,
+  type PairDeviceResult,
 } from '../shared/contracts';
 
 const bridge: DesktopAgentBridge = {
@@ -33,7 +34,7 @@ const bridge: DesktopAgentBridge = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.onSnapshot, handler);
   },
   pair: (input: PairDeviceInput) =>
-    ipcRenderer.invoke(IPC_CHANNELS.pair, input) as Promise<AgentSnapshot>,
+    ipcRenderer.invoke(IPC_CHANNELS.pair, input) as Promise<PairDeviceResult>,
   removeFolder: (folderAliasId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.removeFolder, folderAliasId) as Promise<
       readonly FolderGrantView[]

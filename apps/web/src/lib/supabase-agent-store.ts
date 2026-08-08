@@ -5,6 +5,7 @@ import type {
   AgentStore,
   AtomicClaimInput,
   DeviceRecord,
+  DeviceRevocationInput,
   DeviceTokenRecord,
   HeartbeatRecord,
   PairCompletionInput,
@@ -18,6 +19,7 @@ import {
 } from '@ai-workflow-studio/workflow-schema';
 import { z } from 'zod';
 
+import { mapCompletePairingDatabaseError } from '@/lib/agent-pairing-database-error';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
 const ByteaHexSchema = z.string().regex(/^(?:\\x)?[a-f0-9]{64}$/);
@@ -234,6 +236,8 @@ export class SupabaseAgentStore implements AgentStore {
       requested_token_id: input.token.id,
     });
     if (result.error !== null) {
+      const protocolError = mapCompletePairingDatabaseError(result.error);
+      if (protocolError !== undefined) throw protocolError;
       throw new Error('The device pairing request could not be completed.');
     }
     const row = z.array(DeviceRowSchema).parse(result.data)[0];
@@ -477,11 +481,12 @@ export class SupabaseAgentStore implements AgentStore {
     return z.array(z.object({ id: z.string().uuid() })).parse(result.data).length === 1;
   }
 
-  async revokeDevice(tenantId: string, deviceId: string, now: Date): Promise<boolean> {
-    const result = await createSupabaseAdminClient().rpc('revoke_agent_device', {
-      requested_device_id: deviceId,
-      requested_now: now.toISOString(),
-      requested_tenant_id: tenantId,
+  async revokeDevice(input: DeviceRevocationInput): Promise<boolean> {
+    const result = await createSupabaseAdminClient().rpc('revoke_agent_device_v2', {
+      requested_actor_user_id: input.actorUserId,
+      requested_device_id: input.deviceId,
+      requested_now: input.now.toISOString(),
+      requested_tenant_id: input.tenantId,
     });
     if (result.error !== null) {
       throw new Error('The Desktop Agent could not be revoked.');

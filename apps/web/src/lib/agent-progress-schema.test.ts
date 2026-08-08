@@ -107,6 +107,20 @@ function progress(nodeId: string, status: 'running' | 'succeeded', output?: unkn
 }
 
 describe('validateAgentProgressRequest', () => {
+  it('rejects progress that would move a workflow step back to pending', () => {
+    expect(() =>
+      validateAgentProgressRequest(job, {
+        eventId: '10000000-0000-4000-8000-000000000006',
+        step: {
+          nodeId: 'read_workbooks',
+          processedFileCount: 0,
+          processedRowCount: 0,
+          status: 'pending',
+        },
+      }),
+    ).toThrow();
+  });
+
   it('accepts only the strict statistical profile from the local AI-summary predecessor', () => {
     expect(
       validateAgentProgressRequest(job, progress('review_workbook', 'succeeded', safeProfile)),

@@ -11,6 +11,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
+import { isPairDeviceAgentErrorCode, type PairDeviceAgentErrorCode } from '../shared/contracts';
 import type { PairingSession } from './token-vault';
 
 const PairingResponseSchema = z
@@ -82,6 +83,7 @@ const DriveExcelTransferManifestSchema = z
   .strict();
 
 const MAX_RESPONSE_BYTES = 1_000_000;
+const MAX_ERROR_RESPONSE_BYTES = 32_000;
 const MAX_BINARY_RESPONSE_BYTES = 20_000_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const BINARY_REQUEST_TIMEOUT_MS = 60_000;
@@ -149,14 +151,88 @@ export interface AgentClientOptions {
 export interface SessionVault {
   clear(): Promise<void>;
   load(): Promise<PairingSession | undefined>;
+  prepare?(): Promise<void>;
   save(session: PairingSession): Promise<void>;
 }
 
-class AgentHttpError extends Error {
-  constructor(readonly status: number) {
+export class AgentHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly agentCode: PairDeviceAgentErrorCode | undefined = undefined,
+  ) {
     super(`Agent server request failed with status ${status}.`);
     this.name = 'AgentHttpError';
   }
+}
+
+function safeAgentErrorCode(text: string | undefined): PairDeviceAgentErrorCode | undefined {
+  if (text === undefined) {
+    return undefined;
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (typeof value !== 'object' || value === null || !('error' in value)) {
+    return undefined;
+  }
+  const error = value.error;
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return undefined;
+  }
+  return isPairDeviceAgentErrorCode(error.code) ? error.code : undefined;
+}
+
+async function readBoundedResponseBytes(
+  response: Response,
+  maximumBytes: number,
+): Promise<Uint8Array | undefined> {
+  const declaredLength = Number(response.headers.get('content-length') ?? '0');
+  if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) {
+    await response.body?.cancel();
+    return undefined;
+  }
+  if (response.body === null) {
+    return new Uint8Array();
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) {
+        break;
+      }
+      totalBytes += result.value.byteLength;
+      if (totalBytes > maximumBytes) {
+        await reader.cancel();
+        return undefined;
+      }
+      chunks.push(result.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+async function readBoundedResponseText(
+  response: Response,
+  maximumBytes: number,
+): Promise<string | undefined> {
+  const bytes = await readBoundedResponseBytes(response, maximumBytes);
+  return bytes === undefined ? undefined : new TextDecoder().decode(bytes);
 }
 
 function validateBaseUrl(input: string): string {
@@ -245,6 +321,7 @@ export class AgentClient {
 
   async pair(agentBaseUrlInput: string, pairingCode: string): Promise<PairingSession> {
     const agentBaseUrl = validateBaseUrl(agentBaseUrlInput);
+    await this.vault.prepare?.();
     const response = await this.requestJson(
       `${agentBaseUrl}/api/agent/pair/complete`,
       {
@@ -372,12 +449,13 @@ export class AgentClient {
     const timeout = AbortSignal.timeout(timeoutMs);
     const signal = init.signal == null ? timeout : AbortSignal.any([timeout, init.signal]);
     const response = await this.fetchTransport(url, { ...init, signal });
-    const text = await response.text();
-    if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) {
-      throw new Error('Agent server response is too large.');
-    }
     if (!response.ok) {
-      throw new AgentHttpError(response.status);
+      const errorText = await readBoundedResponseText(response, MAX_ERROR_RESPONSE_BYTES);
+      throw new AgentHttpError(response.status, safeAgentErrorCode(errorText));
+    }
+    const text = await readBoundedResponseText(response, MAX_RESPONSE_BYTES);
+    if (text === undefined) {
+      throw new Error('Agent server response is too large.');
     }
     let value: unknown;
     try {
@@ -393,12 +471,8 @@ export class AgentClient {
     const signal = init.signal == null ? timeout : AbortSignal.any([timeout, init.signal]);
     const response = await this.fetchTransport(url, { ...init, signal });
     if (!response.ok) throw new AgentHttpError(response.status);
-    const declaredLength = Number(response.headers.get('content-length') ?? '0');
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_BINARY_RESPONSE_BYTES) {
-      throw new Error('Agent binary response is too large.');
-    }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > MAX_BINARY_RESPONSE_BYTES) {
+    const bytes = await readBoundedResponseBytes(response, MAX_BINARY_RESPONSE_BYTES);
+    if (bytes === undefined) {
       throw new Error('Agent binary response is too large.');
     }
     return bytes;
@@ -517,6 +591,10 @@ export class AgentClient {
         })
         .catch((error: unknown) => {
           if (heartbeatController.signal.aborted) return;
+          if (error instanceof AgentHttpError && (error.status === 401 || error.status === 403)) {
+            leaseFailure = error;
+            controller.abort('device_session_rejected');
+          }
           this.logger.warn(
             'AGENT_JOB_HEARTBEAT_FAILED',
             'Device heartbeat failed while the current job remains protected by its lease.',

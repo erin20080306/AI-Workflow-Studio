@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 50 — Visible Computer Use (in progress; Drive selection, long-run lease, and authorization guidance hardened; real-app acceptance pending)
+Phase 50 — Visible Computer Use (in progress; pairing recovery, Drive selection, long-run lease, and authorization guidance hardened; real-app acceptance pending)
 
 ## Repository baseline
 
@@ -4086,3 +4086,82 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
   remains in progress until the user installs/opens Agent `0.2.0`, approves one
   exact read/write Downloads alias and macOS permissions, and completes the
   real-app acceptance run; Windows acceptance also remains outstanding.
+
+### Production Desktop pairing recovery
+
+- Production evidence isolated the pairing failure after the Web console had
+  successfully created a one-time code. `/api/agent/pair/start` returned `201`,
+  while four `/api/agent/pair/complete` attempts returned `500`; the matching
+  PostgreSQL entries were SQLSTATE `23514` with the exact safe message
+  `free plan device limit reached`.
+- The Tenant already had one non-revoked pre-`0.2.0` Desktop device, consuming
+  the Free plan's single active-device allowance. Its old authenticated session
+  was rejected, and the local encrypted session was subsequently cleared. This
+  was not a DNS, Vercel, Supabase connectivity, pairing-code creation, or
+  current Desktop-version failure.
+- Added the missing operator recovery path. Owners and administrators now get a
+  two-stage revoke control that states the token, pending Jobs, active Runs, and
+  local-session effects before confirmation. Editors and viewers receive an
+  explicit administrator-access explanation. A failed device query now fails
+  closed into the safe retry page instead of pretending that the device list is
+  empty.
+- Added the safe `AGENT_DEVICE_LIMIT_REACHED` protocol response. Only SQLSTATE
+  `23514` plus the four exact allowlisted plan/device-limit messages maps to
+  HTTP `409`; all other database details remain server-only. Desktop accepts
+  only fixed allowlisted Agent error codes and renders bounded bilingual
+  guidance without retaining a provider or database message.
+- Raised both root and Desktop application versions to `0.2.1`. The Desktop
+  preflights operating-system secure storage before consuming a pairing code,
+  bounds successful and failed JSON bodies while streaming, bounds binary
+  bodies before materializing them, and keeps executor startup an explicit
+  local action.
+- Added immutable migration
+  `202608080001_safe_device_limits_and_revocation.sql`. A name-ordered trigger
+  locks the Tenant before the existing active-device count trigger, preventing
+  concurrent pairing codes from exceeding the plan allowance. The new
+  actor-bound revocation RPC revokes tokens, cancels active Agent Jobs, converges
+  their Run and unfinished step records, and writes Run/device audit events in
+  one transaction. The unaudited legacy service-role RPC is disabled.
+- Normal owners and members remain subject to device/member plan limits. The
+  existing platform-administrator support override remains limited to Workflow
+  and Run acceptance and does not bypass active-device limits.
+
+### Validation and production rollout after Desktop pairing recovery
+
+- `pnpm format:check`: passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed across all 14 applicable workspace projects.
+- `pnpm test`: passed outside the process sandbox — 444 tests passed across 82
+  files; one separately gated real Excel operating-system acceptance test
+  remains skipped.
+- `pnpm db:test`: passed against a fresh local Supabase database, including
+  Free-plan quota rollback, actor-bound revocation, revoked-device enqueue and
+  reactivation guards, terminal-job convergence, and timed-out Run cancellation
+  before retry.
+- `pnpm test:e2e`: passed — all 10 Chromium end-to-end tests. The two corrected
+  assertions now follow the intended automatic Run navigation and the current
+  `{ cloudBatches, schedules }` response contract.
+- `pnpm build:web`: passed — all 47 application pages and Agent routes compiled.
+- `pnpm build:desktop`: passed. The root and Desktop application versions are
+  `0.2.1`.
+- `pnpm security:scan-client`: passed — 35 generated browser files scanned.
+- `pnpm --filter @ai-workflow-studio/desktop package:test`: passed and produced
+  an ad-hoc-signed macOS arm64 test application. This is a local package
+  acceptance result, not a notarized public Desktop release.
+- The linked-production migration dry-run listed only
+  `202608080001_safe_device_limits_and_revocation.sql`. It was applied
+  successfully, and the remote migration list confirms local and remote
+  `202608080001` match.
+- Vercel production deployment `dpl_Br6tBj8qNMJxdJvmguFz7YQS2PhK` reached
+  `READY` and is aliased to `https://www.erin-aiworkflowstudio.com` plus the
+  existing apex and wildcard site aliases.
+- Authenticated production smoke testing confirmed that the stale pre-`0.2.0`
+  Desktop device is still visible, is correctly marked as requiring an Agent
+  update, and exposes the new two-stage revoke warning to an authorized
+  administrator. The warning was cancelled during acceptance, and the page
+  reported no browser console errors.
+- No production device was revoked and no new pairing code was consumed during
+  acceptance. Free-plan pairing remains blocked until the user explicitly
+  revokes the stale device, installs or opens Agent `0.2.1`, enters a fresh
+  one-time code, and explicitly starts the local executor. Phase 50 real Drive,
+  Excel, Slides, GAS, macOS, and Windows acceptance gates remain outstanding.

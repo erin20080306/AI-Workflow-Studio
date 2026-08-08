@@ -312,6 +312,9 @@ describe('AgentService', () => {
     await expect(
       fixture.service.listJobs(fixture.credentials(paired.deviceToken)),
     ).rejects.toMatchObject({ code: 'AGENT_AUTHENTICATION_FAILED' });
+    await expect(
+      fixture.service.revokeDevice(fixture.actor, paired.device.id),
+    ).rejects.toMatchObject({ code: 'AGENT_JOB_NOT_FOUND' });
   });
 
   it('records a bounded structured failure idempotently', async () => {

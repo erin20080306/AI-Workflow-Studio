@@ -25,6 +25,8 @@ export interface SecureCipher {
 }
 
 export class TokenVault {
+  private prepared = false;
+
   constructor(
     private readonly filePath: string,
     private readonly cipher: SecureCipher,
@@ -32,6 +34,7 @@ export class TokenVault {
 
   async clear(): Promise<void> {
     await removePrivateFile(this.filePath);
+    this.prepared = false;
   }
 
   async load(): Promise<PairingSession | undefined> {
@@ -51,11 +54,21 @@ export class TokenVault {
     return parsed;
   }
 
-  async save(input: PairingSession): Promise<void> {
-    const session = PairingSessionSchema.parse(input);
+  async prepare(): Promise<void> {
+    if (this.prepared) return;
     if (!(await this.cipher.isAvailable())) {
       throw new Error('Operating-system secure storage is unavailable.');
     }
+    const probePath = `${this.filePath}.write-probe`;
+    const encryptedProbe = await this.cipher.encrypt('ai-workflow-studio-vault-probe');
+    await writePrivateFile(probePath, encryptedProbe.toString('base64'));
+    await removePrivateFile(probePath);
+    this.prepared = true;
+  }
+
+  async save(input: PairingSession): Promise<void> {
+    const session = PairingSessionSchema.parse(input);
+    await this.prepare();
     const encrypted = await this.cipher.encrypt(JSON.stringify(session));
     await writePrivateFile(this.filePath, encrypted.toString('base64'));
   }

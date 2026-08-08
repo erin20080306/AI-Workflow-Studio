@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('creates, persists, reviews, and dry-runs a safe AI Workflow', async ({ page }) => {
+test('creates, persists, and sends a safe AI Workflow to approval', async ({ page }) => {
   await page.goto('/');
   await expect(
     page.getByRole('heading', { name: '用一句話，讓工作流理解你的需求。' }),
@@ -39,16 +39,10 @@ test('creates, persists, reviews, and dry-runs a safe AI Workflow', async ({ pag
     .fill('每天整理訂單資料夾裡的 Excel，依訂單編號去重，並建立一份新的彙整報表。');
   await page.getByRole('button', { name: '由 AI 建立工作流' }).click();
 
-  await expect(page.getByText('安全檢查通過')).toBeVisible();
-  await expect(page.getByText('AI 工作流草稿已建立')).toBeVisible();
-  await expect(page.getByText('4 個節點')).toBeVisible();
-  await page.getByRole('button', { name: /建立 Excel 報表/ }).click();
-  await expect(page.getByRole('heading', { name: '建立 Excel 報表' })).toBeVisible();
-  await expect(page.getByText('首次執行需核准')).toBeVisible();
-
-  await page.getByRole('button', { name: '執行 Dry Run' }).click();
-  await expect(page.getByText('Dry Run 完成')).toBeVisible();
-  await expect(page.getByText('4 / 4 個步驟已規劃')).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard\/runs\/[0-9a-f-]+$/);
+  await expect(page.getByRole('heading', { name: '執行詳情' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '需要執行核准' })).toBeVisible();
+  await expect(page.locator('main article')).toHaveCount(4);
 
   await page.goto('/dashboard/settings/ai-models');
   await expect(page).toHaveURL(/\/dashboard\/settings$/);

@@ -87,6 +87,32 @@ export interface PairDeviceInput {
   readonly pairingCode: string;
 }
 
+export const PairDeviceAgentErrorCodes = [
+  'AGENT_DEVICE_LIMIT_REACHED',
+  'AGENT_PAIRING_EXPIRED',
+  'AGENT_PAIRING_INVALID',
+  'AGENT_SERVER_NOT_CONFIGURED',
+] as const;
+
+export type PairDeviceAgentErrorCode = (typeof PairDeviceAgentErrorCodes)[number];
+export type PairDeviceErrorCode = PairDeviceAgentErrorCode | 'PAIRING_FAILED';
+
+export type PairDeviceResult =
+  | {
+      readonly ok: true;
+      readonly snapshot: AgentSnapshot;
+    }
+  | {
+      readonly errorCode: PairDeviceErrorCode;
+      readonly ok: false;
+    };
+
+export function isPairDeviceAgentErrorCode(value: unknown): value is PairDeviceAgentErrorCode {
+  return (
+    typeof value === 'string' && (PairDeviceAgentErrorCodes as readonly string[]).includes(value)
+  );
+}
+
 export interface FolderPermissionInput {
   readonly read: boolean;
   readonly watch: boolean;
@@ -102,7 +128,7 @@ export interface DesktopAgentBridge {
   listLogs(): Promise<readonly LogEntry[]>;
   onLog(listener: (entry: LogEntry) => void): () => void;
   onSnapshot(listener: (snapshot: AgentSnapshot) => void): () => void;
-  pair(input: PairDeviceInput): Promise<AgentSnapshot>;
+  pair(input: PairDeviceInput): Promise<PairDeviceResult>;
   removeFolder(folderAliasId: string): Promise<readonly FolderGrantView[]>;
   setAutoStart(enabled: boolean): Promise<AgentSnapshot>;
   setComputerUseEnabled(enabled: boolean): Promise<AgentSnapshot>;
