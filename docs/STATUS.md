@@ -4160,8 +4160,19 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
   update, and exposes the new two-stage revoke warning to an authorized
   administrator. The warning was cancelled during acceptance, and the page
   reported no browser console errors.
-- No production device was revoked and no new pairing code was consumed during
-  acceptance. Free-plan pairing remains blocked until the user explicitly
-  revokes the stale device, installs or opens Agent `0.2.1`, enters a fresh
-  one-time code, and explicitly starts the local executor. Phase 50 real Drive,
-  Excel, Slides, GAS, macOS, and Windows acceptance gates remain outstanding.
+- After later explicit user confirmation, the stale device was revoked through
+  the production two-stage control and the Free-plan slot was released. A fresh
+  one-time code completed pairing from the packaged `0.2.1` test application;
+  the encrypted local Session was persisted with owner-only permissions. The
+  already-installed compatible `0.2.0` application then loaded that Session,
+  started the executor, and maintained recurring successful heartbeats.
+- Authenticated Production verification showed exactly one compatible device
+  with a fresh green online state and no browser errors. A separately reloaded
+  Work page automatically selected the same device as an online execution
+  target after the 90-second freshness boundary. No Agent Job or Computer Use
+  action was started, and the Agent reported zero pending Jobs.
+- Interactive local acceptance used a loopback-only debugging channel with no
+  LAN listener. Removing that temporary channel requires one normal Agent
+  restart followed by another explicit executor start; therefore the secure
+  local handoff, approved Downloads alias, real Drive/Excel/Slides/GAS run, and
+  Windows acceptance gates remain outstanding.
