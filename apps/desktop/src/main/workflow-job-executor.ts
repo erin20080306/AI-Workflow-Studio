@@ -251,7 +251,7 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
               maxFileSizeBytes: parsed.config.maxFileSizeBytes,
               maxFiles: parsed.config.maxFiles,
             },
-            this.reporter.signal,
+            AbortSignal.any([context.signal, this.reporter.signal]),
             async (action) => {
               await this.reporter.reportStep({
                 nodeId: context.nodeId,
@@ -329,7 +329,7 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
                   ? {}
                   : { sheetNames: parsed.config.sheetNames }),
               },
-              { signal: this.reporter.signal },
+              { signal: AbortSignal.any([context.signal, this.reporter.signal]) },
             );
             const documentRowCount = countRows(document.sheets);
             const documentSheetCount = document.sheets.length;
@@ -527,7 +527,7 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
               actions: parsed.config.actions as readonly VisibleExcelAction[],
               workbookPath,
             },
-            this.reporter.signal,
+            AbortSignal.any([context.signal, this.reporter.signal]),
             async (action) => {
               await this.reporter.reportStep({
                 nodeId: context.nodeId,

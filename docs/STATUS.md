@@ -4176,3 +4176,88 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
   restart followed by another explicit executor start; therefore the secure
   local handoff, approved Downloads alias, real Drive/Excel/Slides/GAS run, and
   Windows acceptance gates remain outstanding.
+
+### Visible Drive download and GAS authorization hardening
+
+- Raised the root and Desktop application versions to `0.2.2`. The visible
+  Drive node now reproduces the reviewed human operation: it opens the exact
+  allowlisted Drive folder in Chrome, selects the visible items, invokes the
+  unique Download action, and supports either Chrome automatic download or the
+  native macOS Save panel before local workbook processing begins.
+- Raised the production execution-target compatibility floor to Desktop Agent
+  `0.2.2`, so planning and dispatch cannot send this hardened visible Drive
+  workflow to an older paired Agent that lacks the corrected download path.
+- Bound native Save handling to the original Chrome window, exact Drive folder
+  URL, unique `save-panel`, and fixed accessibility identifiers observed on the
+  supported macOS build. The Agent enters only the approved Downloads root,
+  uses a run-specific short filename, and stops the watcher as soon as the
+  expected download is confirmed so it cannot act on a later unrelated dialog.
+- Added trusted selection-count checks. A multi-item Drive selection accepts
+  exactly one new ZIP; a single item accepts exactly one supported workbook or
+  ZIP. A recent active `.crdownload`, multiple candidates, a changed baseline
+  file, an unverified destination, or an unrelated file type now fails closed.
+- Hardened local staging with bounded `O_NOFOLLOW` snapshots, repeated canonical
+  approved-directory checks, abort-aware copy/read/write operations, atomic
+  private outputs, deterministic retry naming, and macOS case-collision
+  handling. ZIP traversal, symlinks, encryption, compression bombs, excess
+  entries, excess workbooks, and byte limits are rejected before the next
+  workbook is written.
+- The Workflow Engine timeout signal now reaches visible Drive, visible Excel,
+  and `excel.read` together with explicit user takeover. The Computer Use
+  controller retains one fail-closed operation slot until the underlying visible
+  promise actually settles; another visible call during that interval receives
+  `COMPUTER_USE_OPERATION_IN_PROGRESS` instead of starting concurrently. This
+  prevents overlapping Agent-side visible operations, but does not claim that a
+  server retry waits automatically or that aborting the Agent cancels a transfer
+  already owned by Chrome. Direct Chrome collision names such as `(1)` reuse
+  identical staged content rather than changing the reviewed input set.
+- Added Google's required `script.deployments` OAuth scope alongside
+  `script.projects`. GAS execution checks both scopes before usage accounting,
+  Token access, or the first Apps Script write, then verifies them again after
+  Token refresh. Only allowlisted API-executable templates with manifest access
+  restricted to `MYSELF` are supported; `web_app` fails before project creation.
+- Legacy Google connections are marked for upgrade and excluded only from GAS
+  planning. Those records predate storage of a stable Google provider principal,
+  so the platform cannot prove a later OAuth grant belongs to the same Google
+  account and must not replace credentials behind a reviewed reference. Only a
+  Tenant owner or administrator may start and complete the short-lived
+  HMAC-bound upgrade flow. Success creates a new encrypted connection with a new
+  `connectionId`; the old Workflow and Run references remain unchanged, cannot
+  be retried as upgraded, and require a fresh plan.
+- Real-folder acceptance remains open. The Save panel exposes only the selected
+  directory basename after navigation, so the Agent combines exact-path entry
+  with approved-root observation rather than claiming a canonical UI path
+  attestation. The large-folder download, snapshot, and ZIP extraction still
+  share the 600-second node limit, and stopping the Agent cannot cancel a
+  network transfer already owned by Chrome. A packaged `0.2.2` canary must run
+  with no existing Save sheet, active partial download, or other concurrent
+  browser download before the full Excel/Slides/GAS Run is approved.
+
+### Validation after visible Drive and GAS authorization hardening
+
+- `pnpm format:check`, `pnpm lint`, and `pnpm typecheck` passed across all 14
+  applicable workspace projects.
+- `pnpm test` passed outside the macOS service sandbox: 485 tests across 85
+  files passed; the separately gated real Excel operating-system acceptance
+  test remains skipped. The sandboxed AppleScript compiler-service attempt was
+  rejected by HIServices, while the identical permitted run passed without a
+  source change.
+- `pnpm test:e2e` passed all 10 Chromium end-to-end scenarios.
+- `pnpm build:web` passed and generated all 47 application pages and Agent
+  routes. `pnpm security:scan-client` passed across 35 generated browser files.
+- `pnpm build:desktop` passed. The packaged macOS arm64 test application reports
+  version `0.2.2`; the ad-hoc signing acceptance verified the complete app and
+  embedded helper/framework signatures. This is not a notarized public release.
+- The dependency audit initially identified three newly published high-severity
+  advisories in transitive packages. Exact pnpm overrides upgraded
+  `brace-expansion`, `js-yaml`, and `nanoid` to their patched versions; the full
+  test/build gates were repeated afterward and `pnpm audit --prod` then reported
+  no known vulnerabilities.
+- Focused Desktop regression coverage verifies both manual takeover and Workflow
+  Engine timeout when the aborted driver settles asynchronously. In both cases a
+  second visible operation fails closed while the first promise remains pending,
+  and a later operation starts only after that promise has settled.
+- No real Drive item was selected or downloaded, no local customer workbook was
+  opened, and no Google Slides or Apps Script project was created during these
+  automated gates. Production deployment, Google re-consent, packaged-Agent
+  replacement, and the real-folder canary remain separate acceptance actions.

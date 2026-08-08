@@ -4,10 +4,10 @@ import type { UsageSink } from '@ai-workflow-studio/ai-gateway';
 import {
   GoogleDriveExcelClient,
   GoogleSheetsClient,
+  GoogleSheetsError,
   GoogleWorkspaceClient,
   InMemoryGoogleOperationStore,
   type DriveExcelFolderResult,
-  type SafeAppsScriptTemplate,
 } from '@ai-workflow-studio/google-sheets';
 import {
   NodeRegistry,
@@ -28,6 +28,7 @@ import { z } from 'zod';
 
 import { createServerAiChatGateway } from '@/lib/ai-gateway';
 import { resolveAiModelRoute } from '@/lib/ai-model-routing';
+import { deployApprovedAppsScriptForConnection } from '@/lib/apps-script-deployment';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import {
   DriveExcelCheckpointSchema,
@@ -646,17 +647,28 @@ class AppsScriptDeployExecutor extends CloudNodeExecutor {
       })
       .strict()
       .parse(config);
-    await this.countTool(this.type);
+    if (parsed.deployment !== 'api_executable') {
+      throw new GoogleSheetsError(
+        'GOOGLE_REQUEST_INVALID',
+        'Web app Apps Script deployments are not supported.',
+      );
+    }
     const parentId =
       parsed.template === 'slides-executive-report' ? appsScriptParentId(input) : undefined;
-    const result = await this.workspace.deploySafeAppsScript(
-      await this.token(parsed.connectionId, executionContext.signal),
+    const result = await deployApprovedAppsScriptForConnection(
+      googleConnectionService(),
+      this.workspace,
       {
+        connectionId: parsed.connectionId,
+        deployment: parsed.deployment,
+        normalizeGoogleError: (error) => safeGoogleNodeFailure(error, executionContext.nodeId),
+        onAuthorized: async () => await this.countTool(this.type),
         ...(parentId === undefined ? {} : { parentId }),
-        template: parsed.template as SafeAppsScriptTemplate,
+        signal: executionContext.signal,
+        template: parsed.template,
+        tenantId: this.context.actor.tenantId,
         title: parsed.title,
       },
-      executionContext.signal,
     );
     return { output: JsonValueSchema.parse({ kind: 'apps_script_deployment', ...result }) };
   }

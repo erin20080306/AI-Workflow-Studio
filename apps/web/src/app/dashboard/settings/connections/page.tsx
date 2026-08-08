@@ -34,18 +34,28 @@ export default async function ConnectionsPage({
       </h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
         <LocalizedText
-          en="Manage Google Sheets connections available to workflows. Access and refresh tokens are never displayed here."
-          zhHant="管理工作流可引用的 Google Sheets connection。這裡永遠不顯示 Access Token 或 Refresh Token。"
+          en="Manage Google Workspace connections available to workflows. Access and refresh tokens are never displayed here."
+          zhHant="管理工作流可引用的 Google Workspace connection。這裡永遠不顯示 Access Token 或 Refresh Token。"
         />
       </p>
-      {query.google === 'connected' ? (
+      {query.google === 'upgraded' ? (
+        <p
+          className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900"
+          role="status"
+        >
+          <LocalizedText
+            en="A new upgraded Google connection was created with a new ID. Existing reviewed workflows and runs still reference the older connection; create a new plan before running GAS work."
+            zhHant="已用新的 ID 建立升級版 Google 連線。既有已審閱工作流與執行仍引用舊連線；請重新建立計畫後再執行 GAS 工作。"
+          />
+        </p>
+      ) : query.google === 'connected' ? (
         <p
           className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800"
           role="status"
         >
           <LocalizedText
-            en="The Google Sheets connection was created and stored encrypted."
-            zhHant="Google Sheets 連線已建立並加密保存。"
+            en="The Google Workspace authorization was saved encrypted."
+            zhHant="Google Workspace 授權已更新並加密保存。"
           />
         </p>
       ) : query.google === 'error' ? (

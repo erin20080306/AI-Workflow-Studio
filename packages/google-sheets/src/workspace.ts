@@ -120,6 +120,7 @@ export interface ProfessionalDeckInput {
 
 export type SafeAppsScriptTemplate =
   'email-order-summary' | 'sheet-cost-summary' | 'slides-executive-report';
+export type SafeAppsScriptDeployment = 'api_executable';
 
 function baseUrl(value: string): string {
   const url = new URL(value);
@@ -177,7 +178,10 @@ function rawEmail(input: {
   return Buffer.from(message, 'utf8').toString('base64url');
 }
 
-function safeScriptTemplate(template: SafeAppsScriptTemplate): {
+function safeScriptTemplate(
+  template: SafeAppsScriptTemplate,
+  deployment: SafeAppsScriptDeployment,
+): {
   readonly files: readonly {
     readonly name: string;
     readonly source: string;
@@ -188,6 +192,7 @@ function safeScriptTemplate(template: SafeAppsScriptTemplate): {
   const commonManifest = (scopes: readonly string[]) =>
     JSON.stringify(
       {
+        ...(deployment === 'api_executable' ? { executionApi: { access: 'MYSELF' } } : {}),
         exceptionLogging: 'STACKDRIVER',
         oauthScopes: scopes,
         runtimeVersion: 'V8',
@@ -539,6 +544,7 @@ export class GoogleWorkspaceClient {
   async deploySafeAppsScript(
     accessToken: string,
     input: {
+      readonly deployment: SafeAppsScriptDeployment;
       readonly parentId?: string;
       readonly template: SafeAppsScriptTemplate;
       readonly title: string;
@@ -552,13 +558,14 @@ export class GoogleWorkspaceClient {
   }> {
     const parsed = z
       .object({
+        deployment: z.literal('api_executable'),
         parentId: GoogleIdSchema.optional(),
         template: z.enum(['email-order-summary', 'sheet-cost-summary', 'slides-executive-report']),
         title: z.string().trim().min(1).max(200),
       })
       .strict()
       .parse(input);
-    const template = safeScriptTemplate(parsed.template);
+    const template = safeScriptTemplate(parsed.template, parsed.deployment);
     const project = await this.request({
       accessToken,
       body: {

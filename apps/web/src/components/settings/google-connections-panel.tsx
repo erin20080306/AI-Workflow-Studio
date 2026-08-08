@@ -36,6 +36,10 @@ const copy = {
     oauthMissing: 'Server OAuth 尚未設定',
     privacy: '只載入 ID、名稱與修改時間',
     production: '正式模式必須由已驗證的 Tenant membership 取得連線。',
+    reauthorizationHelp:
+      '這個舊連線缺少目前 GAS 工作流程所需權限，且未保存可驗證原 Google 帳號的穩定識別。升級會建立新的連線 ID；既有工作流與執行仍引用舊連線，必須重新建立計畫。',
+    reauthorizationRequired: '需要建立升級連線',
+    reauthorize: '建立升級版 Google 連線',
     revoke: '撤銷',
     security: [
       'Refresh Token 僅以 AES-256-GCM 密文保存在伺服器端。',
@@ -65,6 +69,10 @@ const copy = {
     oauthMissing: 'Server OAuth is not configured',
     privacy: 'Only ID, name, and modified time are loaded',
     production: 'Live connections require a verified tenant membership.',
+    reauthorizationHelp:
+      'This older connection lacks current GAS access and has no stored stable Google principal to verify the same account. Upgrade creates a new connection ID; existing workflows and runs remain bound to the old connection and require a new plan.',
+    reauthorizationRequired: 'Upgraded connection required',
+    reauthorize: 'Create upgraded Google connection',
     revoke: 'Revoke',
     security: [
       'Refresh tokens are stored server-side only as AES-256-GCM ciphertext.',
@@ -194,6 +202,8 @@ export function GoogleConnectionsPanel({
           ) : null}
           {connections.map((connection) => {
             const connectionSpreadsheets = spreadsheets[connection.id] ?? [];
+            const requiresReauthorization =
+              connection.status !== 'revoked' && connection.requiresReauthorization;
             return (
               <article
                 className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
@@ -205,7 +215,9 @@ export function GoogleConnectionsPanel({
                       <span
                         className={`size-2.5 rounded-full ${
                           connection.status === 'active'
-                            ? 'bg-emerald-500'
+                            ? requiresReauthorization
+                              ? 'bg-amber-500'
+                              : 'bg-emerald-500'
                             : connection.status === 'revoked'
                               ? 'bg-slate-400'
                               : 'bg-amber-500'
@@ -213,7 +225,7 @@ export function GoogleConnectionsPanel({
                       />
                       <h3 className="text-sm font-semibold text-slate-900">{connection.name}</h3>
                       <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                        {connection.status}
+                        {requiresReauthorization ? text.reauthorizationRequired : connection.status}
                       </span>
                     </div>
                     <p className="mt-2 text-xs text-slate-500">
@@ -225,8 +237,21 @@ export function GoogleConnectionsPanel({
                             ),
                           )}
                     </p>
+                    {requiresReauthorization ? (
+                      <p className="mt-3 max-w-2xl rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-5 text-amber-900">
+                        {text.reauthorizationHelp}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {configured && requiresReauthorization && connection.status === 'active' ? (
+                      <a
+                        className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-700"
+                        href={`/api/connections/google/start?connectionId=${encodeURIComponent(connection.id)}`}
+                      >
+                        {text.reauthorize}
+                      </a>
+                    ) : null}
                     <button
                       className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
                       disabled={working === connection.id || connection.status === 'revoked'}

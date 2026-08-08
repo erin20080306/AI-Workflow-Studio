@@ -3,26 +3,52 @@ import { randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
 
 import { googleApiError } from '@/lib/google-api';
-import { googleOAuthClient } from '@/lib/google-connections';
+import { googleConnectionService, googleOAuthClient } from '@/lib/google-connections';
+import {
+  assertGoogleConnectionUpgradeStartRole,
+  createGoogleOAuthState,
+  createGoogleReauthorizationBinding,
+  GOOGLE_OAUTH_CALLBACK_PATH,
+  GOOGLE_OAUTH_COOKIES,
+  GOOGLE_OAUTH_COOKIE_MAX_AGE_SECONDS,
+  parseGoogleReauthorizationTarget,
+} from '@/lib/google-oauth-reauthorization';
 import { getWebActor } from '@/lib/agent-server';
 
-const CALLBACK_PATH = '/api/connections/google/callback';
-
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   try {
-    await getWebActor();
-    const state = randomBytes(32).toString('base64url');
+    const actor = await getWebActor();
+    const reauthorizationTarget = parseGoogleReauthorizationTarget(request.url);
+    if (reauthorizationTarget !== undefined) {
+      assertGoogleConnectionUpgradeStartRole(actor.role);
+      await googleConnectionService().assertUpgradeTarget(actor, reauthorizationTarget);
+    }
+    const state = createGoogleOAuthState(
+      randomBytes(32).toString('base64url'),
+      reauthorizationTarget !== undefined,
+    );
     const pkce = createGooglePkcePair();
     const cookieStore = await cookies();
     const cookieOptions = {
       httpOnly: true,
-      maxAge: 600,
-      path: CALLBACK_PATH,
+      maxAge: GOOGLE_OAUTH_COOKIE_MAX_AGE_SECONDS,
+      path: GOOGLE_OAUTH_CALLBACK_PATH,
       sameSite: 'lax' as const,
       secure: process.env.NODE_ENV === 'production',
     };
-    cookieStore.set('aiws_google_oauth_state', state, cookieOptions);
-    cookieStore.set('aiws_google_oauth_verifier', pkce.verifier, cookieOptions);
+    cookieStore.delete({
+      name: GOOGLE_OAUTH_COOKIES.reauthorization,
+      path: GOOGLE_OAUTH_CALLBACK_PATH,
+    });
+    cookieStore.set(GOOGLE_OAUTH_COOKIES.state, state, cookieOptions);
+    cookieStore.set(GOOGLE_OAUTH_COOKIES.verifier, pkce.verifier, cookieOptions);
+    if (reauthorizationTarget !== undefined) {
+      cookieStore.set(
+        GOOGLE_OAUTH_COOKIES.reauthorization,
+        createGoogleReauthorizationBinding(state, reauthorizationTarget),
+        cookieOptions,
+      );
+    }
     return Response.redirect(googleOAuthClient().authorizationUrl(state, pkce.challenge), 302);
   } catch (error) {
     return googleApiError(error);

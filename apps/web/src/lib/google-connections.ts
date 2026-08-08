@@ -1,5 +1,6 @@
 import 'server-only';
 
+import type { WebActor } from '@ai-workflow-studio/agent-protocol';
 import {
   GoogleConnectionService,
   GoogleOAuthClient,
@@ -19,6 +20,7 @@ import { z } from 'zod';
 
 import { getWebActor } from './agent-server';
 import { getEnvironment } from './env';
+import { assertGoogleConnectionUpgradeRole } from './google-oauth-reauthorization';
 import { createSupabaseAdminClient } from './supabase/server';
 
 export const MOCK_GOOGLE_CONNECTION_ID = '10000000-0000-4000-8000-000000000911';
@@ -26,6 +28,7 @@ const MOCK_GOOGLE_CONNECTION: GoogleConnectionView = {
   id: MOCK_GOOGLE_CONNECTION_ID,
   lastHealthCheckAt: '2026-07-26T08:00:00.000Z',
   name: '營運報表（Mock）',
+  requiresReauthorization: false,
   scopes: [
     'https://www.googleapis.com/auth/drive.metadata.readonly',
     'https://www.googleapis.com/auth/spreadsheets',
@@ -412,6 +415,20 @@ export async function createGoogleConnectionFromCode(
     `Google Workspace ${new Date().toISOString().slice(0, 10)}`,
     tokens,
   );
+}
+
+export async function createUpgradedGoogleConnectionFromCode(
+  actor: WebActor,
+  connectionId: string,
+  code: string,
+  verifier: string,
+  signal?: AbortSignal,
+): Promise<GoogleConnectionView> {
+  assertGoogleConnectionUpgradeRole(actor.role);
+  const service = googleConnectionService();
+  await service.assertUpgradeTarget(actor, connectionId);
+  const tokens = await googleOAuthClient().exchangeCode(code, verifier, signal);
+  return await service.createUpgrade(actor, connectionId, tokens);
 }
 
 export async function revokeGoogleConnection(

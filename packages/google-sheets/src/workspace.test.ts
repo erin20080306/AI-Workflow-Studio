@@ -166,6 +166,7 @@ describe('GoogleWorkspaceClient', () => {
     ).resolves.toEqual({ presentationId: 'presentation_12345678' });
     await expect(
       client.deploySafeAppsScript(ACCESS_TOKEN, {
+        deployment: 'api_executable',
         template: 'sheet-cost-summary',
         title: 'Approved cost summary',
       }),
@@ -179,6 +180,36 @@ describe('GoogleWorkspaceClient', () => {
     const scriptContent = calls.find((call) => call.url.endsWith('/content'));
     expect(scriptContent?.body).toContain('refreshApprovedCostSummary');
     expect(scriptContent?.body).not.toContain('eval(');
+    const contentPayload = JSON.parse(scriptContent?.body ?? '{}') as {
+      readonly files?: readonly { readonly name?: unknown; readonly source?: unknown }[];
+    };
+    const manifestSource = contentPayload.files?.find((file) => file.name === 'appsscript')?.source;
+    expect(typeof manifestSource).toBe('string');
+    const manifest = JSON.parse(
+      typeof manifestSource === 'string' ? manifestSource : '{}',
+    ) as unknown;
+    expect(manifest).toMatchObject({ executionApi: { access: 'MYSELF' } });
+    expect(JSON.stringify(manifest)).not.toContain('ANYONE');
+    expect(JSON.stringify(manifest)).not.toContain('webapp');
     expect(calls.every((call) => call.method === 'POST' || call.method === 'PUT')).toBe(true);
+  });
+
+  it('rejects an unsupported web app deployment before creating a script project', async () => {
+    let requests = 0;
+    const client = new GoogleWorkspaceClient({
+      appsScriptBaseUrl: 'https://script.example.test/v1',
+      fetchTransport: async () => {
+        requests += 1;
+        return response({});
+      },
+    });
+    const unsupported = {
+      deployment: 'web_app',
+      template: 'sheet-cost-summary',
+      title: 'Unsupported public deployment',
+    } as unknown as Parameters<GoogleWorkspaceClient['deploySafeAppsScript']>[1];
+
+    await expect(client.deploySafeAppsScript(ACCESS_TOKEN, unsupported)).rejects.toThrow();
+    expect(requests).toBe(0);
   });
 });

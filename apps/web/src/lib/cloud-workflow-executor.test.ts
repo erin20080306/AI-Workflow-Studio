@@ -1,11 +1,88 @@
-import { GoogleSheetsError } from '@ai-workflow-studio/google-sheets';
-import { describe, expect, it } from 'vitest';
+import {
+  GOOGLE_APPS_SCRIPT_DEPLOYMENT_SCOPES,
+  GoogleSheetsError,
+} from '@ai-workflow-studio/google-sheets';
+import { describe, expect, it, vi } from 'vitest';
 
+import { deployApprovedAppsScriptForConnection } from './apps-script-deployment';
 import { safeGoogleNodeFailure } from './cloud-workflow-errors';
 import { buildCloudAiSummaryInstructions } from './cloud-workflow-input';
 import { appsScriptParentId, buildProfessionalSlides } from './cloud-workflow-output';
 
 describe('cloud Slides and approved GAS planning', () => {
+  it('checks both deployment scopes before obtaining a token or issuing the first GAS write', async () => {
+    const accessToken = vi.fn(async () => 'access-token-that-must-not-be-used');
+    const assertScopes = vi.fn(async () => {
+      throw new GoogleSheetsError('GOOGLE_AUTHORIZATION_INVALID', 'Reconnect required.');
+    });
+    const deploySafeAppsScript = vi.fn(async () => ({
+      deploymentId: 'deployment_12345678',
+      requiredScopes: [],
+      scriptId: 'script_12345678',
+      versionNumber: 1,
+    }));
+    const onAuthorized = vi.fn(async () => undefined);
+    const normalizeGoogleError = vi.fn((error: unknown) => error);
+
+    await expect(
+      deployApprovedAppsScriptForConnection(
+        { accessToken, assertScopes },
+        { deploySafeAppsScript },
+        {
+          connectionId: '10000000-0000-4000-8000-000000000903',
+          deployment: 'api_executable',
+          normalizeGoogleError,
+          onAuthorized,
+          template: 'slides-executive-report',
+          tenantId: '10000000-0000-4000-8000-000000000901',
+          title: 'Approved executive report',
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'GOOGLE_AUTHORIZATION_INVALID' });
+    expect(assertScopes).toHaveBeenCalledWith(
+      '10000000-0000-4000-8000-000000000901',
+      '10000000-0000-4000-8000-000000000903',
+      GOOGLE_APPS_SCRIPT_DEPLOYMENT_SCOPES,
+    );
+    expect(onAuthorized).not.toHaveBeenCalled();
+    expect(accessToken).not.toHaveBeenCalled();
+    expect(deploySafeAppsScript).not.toHaveBeenCalled();
+  });
+
+  it('does not normalize usage-control failures as Google provider failures', async () => {
+    const usageFailure = new Error('USAGE_LIMIT_EXCEEDED');
+    const normalizeGoogleError = vi.fn((error: unknown) => error);
+    const deploySafeAppsScript = vi.fn(async () => ({
+      deploymentId: 'deployment_12345678',
+      requiredScopes: [],
+      scriptId: 'script_12345678',
+      versionNumber: 1,
+    }));
+
+    await expect(
+      deployApprovedAppsScriptForConnection(
+        {
+          accessToken: vi.fn(async () => 'access-token-that-must-not-be-used'),
+          assertScopes: vi.fn(async () => undefined),
+        },
+        { deploySafeAppsScript },
+        {
+          connectionId: '10000000-0000-4000-8000-000000000903',
+          deployment: 'api_executable',
+          normalizeGoogleError,
+          onAuthorized: vi.fn(async () => {
+            throw usageFailure;
+          }),
+          template: 'slides-executive-report',
+          tenantId: '10000000-0000-4000-8000-000000000901',
+          title: 'Approved executive report',
+        },
+      ),
+    ).rejects.toBe(usageFailure);
+    expect(normalizeGoogleError).not.toHaveBeenCalled();
+    expect(deploySafeAppsScript).not.toHaveBeenCalled();
+  });
+
   it('creates exactly the requested slide count and keeps references bounded', () => {
     const slides = buildProfessionalSlides(
       '摘要重點一包含足夠文字\n摘要重點二包含足夠文字\nhttps://example.com/chart.png',

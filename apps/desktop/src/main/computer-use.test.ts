@@ -14,6 +14,7 @@ import {
   type VisibleExcelDriver,
 } from './computer-use';
 import {
+  MACOS_DRIVE_SAVE_DIALOG_SCRIPT,
   MACOS_VISIBLE_DRIVE_SCRIPT,
   VisibleDriveError,
   type VisibleDriveDriver,
@@ -188,6 +189,70 @@ describe('DesktopComputerUseController', () => {
     expect(audits.some((event) => event.code === 'COMPUTER_USE_USER_TAKEOVER')).toBe(true);
   });
 
+  it('keeps the visible-operation slot claimed until a taken-over driver actually settles', async () => {
+    let actionStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      actionStarted = resolve;
+    });
+    let allowSettlement: (() => void) | undefined;
+    const settlementAllowed = new Promise<void>((resolve) => {
+      allowSettlement = resolve;
+    });
+    let activeOperations = 0;
+    let maximumActiveOperations = 0;
+    let operationCount = 0;
+    const driver: VisibleExcelDriver = {
+      async perform(_input, signal) {
+        operationCount += 1;
+        const operationNumber = operationCount;
+        activeOperations += 1;
+        maximumActiveOperations = Math.max(maximumActiveOperations, activeOperations);
+        try {
+          if (operationNumber === 1) {
+            actionStarted?.();
+            await settlementAllowed;
+            if (signal.aborted) throw new ComputerUseError('COMPUTER_USE_INTERRUPTED');
+          }
+          return { activeWorkbookName: 'report.xlsx' };
+        } finally {
+          activeOperations -= 1;
+        }
+      },
+    };
+    const { controller } = setup({ driver });
+    controller.setEnabled(true);
+    const firstOperation = controller.operateExcel(
+      { actions: ['verify_active_workbook'], workbookPath: WORKBOOK_PATH },
+      new AbortController().signal,
+    );
+    await started;
+
+    controller.takeOver();
+    expect(controller.getSnapshot()).toMatchObject({
+      status: 'user_takeover',
+      takeoverAvailable: false,
+    });
+    await expect(
+      controller.operateExcel(
+        { actions: ['verify_active_workbook'], workbookPath: WORKBOOK_PATH },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ code: 'COMPUTER_USE_OPERATION_IN_PROGRESS' });
+    expect(operationCount).toBe(1);
+    expect(activeOperations).toBe(1);
+
+    allowSettlement?.();
+    await expect(firstOperation).rejects.toMatchObject({ code: 'COMPUTER_USE_INTERRUPTED' });
+    await expect(
+      controller.operateExcel(
+        { actions: ['verify_active_workbook'], workbookPath: WORKBOOK_PATH },
+        new AbortController().signal,
+      ),
+    ).resolves.toBeUndefined();
+    expect(operationCount).toBe(2);
+    expect(maximumActiveOperations).toBe(1);
+  });
+
   it('runs only the fixed Drive actions and does not log the Drive folder ID or local path', async () => {
     const folderId = '1DriveFolderVisibleDownload123';
     const downloadDirectory = '/approved/downloads';
@@ -297,7 +362,12 @@ it.runIf(process.platform === 'darwin')(
       MACOS_VISIBLE_DRIVE_SCRIPT.indexOf('key code 0 using {command down}'),
     );
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('keystroke "a"');
-    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("count>1?'selected':'single'");
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain(
+      "return Number.isSafeInteger(count)&&count>0?String(count):'invalid'",
+    );
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain(
+      'return "requested:" & trustedWindowId & ":" & selectionCountText',
+    );
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("querySelectorAll('button,[role=button]')");
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('if(e.length!==1)return');
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('elementFromPoint');
@@ -314,6 +384,30 @@ it.runIf(process.platform === 'darwin')(
       "querySelectorAll('[aria-label=下載],[aria-label=Download]",
     );
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('e[0].click()');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("location.pathname==='/drive/folders/");
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('repeat with chromeWindow in windows');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'if sheetCount is not 1 or (count of sheets of front window) is not 1',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'The approved Google Drive folder changed before Save.',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('entire contents of saveSheet');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('saveAsNameTextField');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('OKButton');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('CancelButton');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('where popup');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('save-panel');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('PathTextField');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('key code 5 using {command down, shift down}');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'set proposedName to filePrefix & downloadExtension',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'selectedDirectoryName is not approvedDirectoryName',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).not.toContain('set the clipboard');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).not.toContain('do shell script');
     const directory = await mkdtemp(join(tmpdir(), 'aiws-drive-script-'));
     const sourcePath = join(directory, 'visible-drive.applescript');
     const compiledPath = join(directory, 'visible-drive.scpt');
@@ -322,6 +416,20 @@ it.runIf(process.platform === 'darwin')(
       execFile(
         '/usr/bin/osacompile',
         ['-o', compiledPath, sourcePath],
+        { maxBuffer: 8_192, timeout: 10_000 },
+        (error) => {
+          if (error === null) resolve();
+          else reject(error);
+        },
+      );
+    });
+    const saveDialogSourcePath = join(directory, 'drive-save-dialog.applescript');
+    const saveDialogCompiledPath = join(directory, 'drive-save-dialog.scpt');
+    await writeFile(saveDialogSourcePath, MACOS_DRIVE_SAVE_DIALOG_SCRIPT, 'utf8');
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        '/usr/bin/osacompile',
+        ['-o', saveDialogCompiledPath, saveDialogSourcePath],
         { maxBuffer: 8_192, timeout: 10_000 },
         (error) => {
           if (error === null) resolve();

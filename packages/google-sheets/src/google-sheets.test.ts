@@ -5,12 +5,19 @@ import { GoogleTokenCipher } from './cipher';
 import { GoogleSheetsClient, InMemoryGoogleOperationStore, mergeSyncRows } from './client';
 import { GoogleConnectionService, InMemoryGoogleConnectionRepository } from './connection';
 import { GoogleSheetsError } from './errors';
-import { GOOGLE_WORKSPACE_SCOPES, GoogleOAuthClient, createGooglePkcePair } from './oauth';
+import {
+  GOOGLE_APPS_SCRIPT_DEPLOYMENT_SCOPES,
+  GOOGLE_WORKSPACE_SCOPES,
+  GoogleOAuthClient,
+  createGooglePkcePair,
+} from './oauth';
 import type { GoogleFetch } from './types';
 
 const TENANT_ID = '10000000-0000-4000-8000-000000000901';
 const USER_ID = '10000000-0000-4000-8000-000000000902';
 const CONNECTION_ID = '10000000-0000-4000-8000-000000000903';
+const UPGRADED_CONNECTION_ID = '10000000-0000-4000-8000-000000000904';
+const ADMIN_USER_ID = '10000000-0000-4000-8000-000000000905';
 const SPREADSHEET_ID = '1SpreadsheetFixture_1234567890';
 const ACCESS_TOKEN = 'access-token-fixture-1234567890';
 const REFRESH_TOKEN = 'refresh-token-fixture-1234567890';
@@ -89,6 +96,7 @@ describe('Google OAuth web-server flow', () => {
     expect(url.searchParams.get('code_challenge')).toBe(pkce.challenge);
     expect(url.searchParams.get('state')).toBe(state);
     expect(url.searchParams.get('scope')?.split(' ')).toEqual(GOOGLE_WORKSPACE_SCOPES);
+    expect(GOOGLE_WORKSPACE_SCOPES).toContain('https://www.googleapis.com/auth/script.deployments');
     expect(url.toString()).not.toContain('google-client-secret-fixture-value');
   });
 
@@ -338,6 +346,322 @@ describe('Google Sheets REST client', () => {
 });
 
 describe('Google connection service', () => {
+  it('marks legacy grants for reauthorization and rejects GAS deployment before token use', async () => {
+    const repository = new InMemoryGoogleConnectionRepository();
+    const cipher = tokenCipher();
+    const legacyScopes = GOOGLE_WORKSPACE_SCOPES.filter(
+      (scope) => scope !== 'https://www.googleapis.com/auth/script.deployments',
+    );
+    const now = '2026-07-26T08:00:00.000Z';
+    await repository.create({
+      createdAt: now,
+      createdBy: USER_ID,
+      encryptedAccessToken: cipher.encrypt(ACCESS_TOKEN, {
+        connectionId: CONNECTION_ID,
+        kind: 'access',
+        tenantId: TENANT_ID,
+      }),
+      encryptedRefreshToken: cipher.encrypt(REFRESH_TOKEN, {
+        connectionId: CONNECTION_ID,
+        kind: 'refresh',
+        tenantId: TENANT_ID,
+      }),
+      id: CONNECTION_ID,
+      name: 'Legacy Workspace grant',
+      scopes: legacyScopes,
+      status: 'active',
+      tenantId: TENANT_ID,
+      tokenExpiresAt: '2026-07-26T10:00:00.000Z',
+      updatedAt: now,
+    });
+    const service = new GoogleConnectionService({
+      cipher,
+      client: new GoogleSheetsClient({
+        fetchTransport: async () => jsonResponse({ files: [] }),
+        operationStore: new InMemoryGoogleOperationStore(),
+      }),
+      now: () => new Date(now),
+      oauth: oauthClient(async () => jsonResponse({})),
+      repository,
+    });
+
+    await expect(service.list(TENANT_ID)).resolves.toEqual([
+      expect.objectContaining({ requiresReauthorization: true, status: 'active' }),
+    ]);
+    await expect(
+      service.assertScopes(TENANT_ID, CONNECTION_ID, GOOGLE_APPS_SCRIPT_DEPLOYMENT_SCOPES),
+    ).rejects.toMatchObject({ code: 'GOOGLE_AUTHORIZATION_INVALID' });
+    await expect(
+      service.create(
+        TENANT_ID,
+        USER_ID,
+        'Incomplete Workspace grant',
+        {
+          accessToken: ACCESS_TOKEN,
+          expiresAt: '2026-07-26T10:00:00.000Z',
+          refreshToken: REFRESH_TOKEN,
+          scopes: legacyScopes,
+        },
+        '10000000-0000-4000-8000-000000000904',
+      ),
+    ).rejects.toMatchObject({ code: 'GOOGLE_AUTHORIZATION_INVALID' });
+  });
+
+  it('creates an upgraded connection with a new ID and leaves the reviewed legacy reference unchanged', async () => {
+    const repository = new InMemoryGoogleConnectionRepository();
+    const cipher = tokenCipher();
+    const legacyScopes = GOOGLE_WORKSPACE_SCOPES.filter(
+      (scope) => scope !== 'https://www.googleapis.com/auth/script.deployments',
+    );
+    const createdAt = '2026-07-25T08:00:00.000Z';
+    const updatedAt = '2026-07-26T08:00:00.000Z';
+    await repository.create({
+      createdAt,
+      createdBy: USER_ID,
+      encryptedAccessToken: cipher.encrypt(ACCESS_TOKEN, {
+        connectionId: CONNECTION_ID,
+        kind: 'access',
+        tenantId: TENANT_ID,
+      }),
+      encryptedRefreshToken: cipher.encrypt(REFRESH_TOKEN, {
+        connectionId: CONNECTION_ID,
+        kind: 'refresh',
+        tenantId: TENANT_ID,
+      }),
+      id: CONNECTION_ID,
+      lastErrorCode: 'GOOGLE_AUTHORIZATION_INVALID',
+      lastHealthCheckAt: createdAt,
+      name: 'Legacy Workspace grant',
+      scopes: legacyScopes,
+      status: 'active',
+      tenantId: TENANT_ID,
+      tokenExpiresAt: '2026-07-26T07:00:00.000Z',
+      updatedAt: createdAt,
+    });
+    const service = new GoogleConnectionService({
+      cipher,
+      client: new GoogleSheetsClient({
+        fetchTransport: async () => jsonResponse({ files: [] }),
+        operationStore: new InMemoryGoogleOperationStore(),
+      }),
+      now: () => new Date(updatedAt),
+      oauth: oauthClient(async () => jsonResponse({})),
+      repository,
+    });
+    const legacyBefore = await repository.get(TENANT_ID, CONNECTION_ID);
+    const owner = { role: 'owner' as const, tenantId: TENANT_ID, userId: USER_ID };
+
+    await expect(service.assertUpgradeTarget(owner, CONNECTION_ID)).resolves.toBeUndefined();
+    const view = await service.createUpgrade(
+      owner,
+      CONNECTION_ID,
+      {
+        accessToken: 'upgraded-access-token-1234567890',
+        expiresAt: '2026-07-26T10:00:00.000Z',
+        refreshToken: 'upgraded-refresh-token-1234567890',
+        scopes: GOOGLE_WORKSPACE_SCOPES,
+      },
+      UPGRADED_CONNECTION_ID,
+    );
+
+    expect(view).toEqual({
+      id: UPGRADED_CONNECTION_ID,
+      name: 'Legacy Workspace grant (upgraded)',
+      requiresReauthorization: false,
+      scopes: [...GOOGLE_WORKSPACE_SCOPES],
+      status: 'active',
+    });
+    await expect(repository.get(TENANT_ID, CONNECTION_ID)).resolves.toEqual(legacyBefore);
+    const records = await repository.list(TENANT_ID);
+    expect(records).toHaveLength(2);
+    const record = await repository.get(TENANT_ID, UPGRADED_CONNECTION_ID);
+    expect(record).toMatchObject({
+      createdAt: updatedAt,
+      createdBy: USER_ID,
+      id: UPGRADED_CONNECTION_ID,
+      name: 'Legacy Workspace grant (upgraded)',
+      status: 'active',
+      tenantId: TENANT_ID,
+      updatedAt,
+    });
+    expect(
+      cipher.decrypt(record?.encryptedAccessToken ?? new Uint8Array(), {
+        connectionId: UPGRADED_CONNECTION_ID,
+        kind: 'access',
+        tenantId: TENANT_ID,
+      }),
+    ).toBe('upgraded-access-token-1234567890');
+    expect(
+      cipher.decrypt(record?.encryptedRefreshToken ?? new Uint8Array(), {
+        connectionId: UPGRADED_CONNECTION_ID,
+        kind: 'refresh',
+        tenantId: TENANT_ID,
+      }),
+    ).toBe('upgraded-refresh-token-1234567890');
+    await expect(service.assertUpgradeTarget(owner, UPGRADED_CONNECTION_ID)).rejects.toMatchObject({
+      code: 'GOOGLE_AUTHORIZATION_INVALID',
+    });
+  });
+
+  it('allows only tenant owners and administrators to upgrade a connection', async () => {
+    const repository = new InMemoryGoogleConnectionRepository();
+    const cipher = tokenCipher();
+    const now = '2026-07-26T08:00:00.000Z';
+    const legacyScopes = GOOGLE_WORKSPACE_SCOPES.filter(
+      (scope) => scope !== 'https://www.googleapis.com/auth/script.deployments',
+    );
+    await repository.create({
+      createdAt: now,
+      createdBy: USER_ID,
+      id: CONNECTION_ID,
+      name: 'Tenant-owned connection',
+      scopes: legacyScopes,
+      status: 'active',
+      tenantId: TENANT_ID,
+      updatedAt: now,
+    });
+    const service = new GoogleConnectionService({
+      cipher,
+      client: new GoogleSheetsClient({
+        fetchTransport: async () => jsonResponse({ files: [] }),
+        operationStore: new InMemoryGoogleOperationStore(),
+      }),
+      now: () => new Date(now),
+      oauth: oauthClient(async () => jsonResponse({})),
+      repository,
+    });
+    const admin = { role: 'admin' as const, tenantId: TENANT_ID, userId: ADMIN_USER_ID };
+
+    await expect(service.assertUpgradeTarget(admin, CONNECTION_ID)).resolves.toBeUndefined();
+    for (const role of ['editor', 'viewer'] as const) {
+      await expect(
+        service.assertUpgradeTarget(
+          { role, tenantId: TENANT_ID, userId: ADMIN_USER_ID },
+          CONNECTION_ID,
+        ),
+      ).rejects.toMatchObject({ code: 'GOOGLE_AUTHORIZATION_INVALID' });
+    }
+    await service.createUpgrade(
+      admin,
+      CONNECTION_ID,
+      {
+        accessToken: 'admin-upgraded-access-token-1234567890',
+        expiresAt: '2026-07-26T10:00:00.000Z',
+        refreshToken: 'admin-upgraded-refresh-token-1234567890',
+        scopes: GOOGLE_WORKSPACE_SCOPES,
+      },
+      UPGRADED_CONNECTION_ID,
+    );
+    await expect(repository.get(TENANT_ID, UPGRADED_CONNECTION_ID)).resolves.toMatchObject({
+      createdBy: ADMIN_USER_ID,
+      id: UPGRADED_CONNECTION_ID,
+    });
+  });
+
+  it('rejects cross-tenant, unknown, and revoked upgrade targets', async () => {
+    const repository = new InMemoryGoogleConnectionRepository();
+    const cipher = tokenCipher();
+    const now = '2026-07-26T08:00:00.000Z';
+    await repository.create({
+      createdAt: now,
+      createdBy: USER_ID,
+      id: CONNECTION_ID,
+      name: 'Tenant-owned connection',
+      scopes: GOOGLE_WORKSPACE_SCOPES,
+      status: 'active',
+      tenantId: TENANT_ID,
+      updatedAt: now,
+    });
+    const service = new GoogleConnectionService({
+      cipher,
+      client: new GoogleSheetsClient({
+        fetchTransport: async () => jsonResponse({ files: [] }),
+        operationStore: new InMemoryGoogleOperationStore(),
+      }),
+      now: () => new Date(now),
+      oauth: oauthClient(async () => jsonResponse({})),
+      repository,
+    });
+    const otherTenantId = '10000000-0000-4000-8000-000000000999';
+    const unknownConnectionId = '10000000-0000-4000-8000-000000000998';
+    const owner = { role: 'owner' as const, tenantId: TENANT_ID, userId: USER_ID };
+    const otherTenantOwner = {
+      role: 'owner' as const,
+      tenantId: otherTenantId,
+      userId: ADMIN_USER_ID,
+    };
+
+    await expect(
+      service.assertUpgradeTarget(otherTenantOwner, CONNECTION_ID),
+    ).rejects.toMatchObject({ code: 'GOOGLE_AUTHORIZATION_INVALID' });
+    await expect(service.assertUpgradeTarget(owner, unknownConnectionId)).rejects.toMatchObject({
+      code: 'GOOGLE_AUTHORIZATION_INVALID',
+    });
+    await service.revoke(TENANT_ID, CONNECTION_ID);
+    await expect(service.assertUpgradeTarget(owner, CONNECTION_ID)).rejects.toMatchObject({
+      code: 'GOOGLE_AUTHORIZATION_INVALID',
+    });
+    await expect(
+      service.createUpgrade(
+        owner,
+        CONNECTION_ID,
+        {
+          accessToken: ACCESS_TOKEN,
+          expiresAt: '2026-07-26T10:00:00.000Z',
+          refreshToken: REFRESH_TOKEN,
+          scopes: GOOGLE_WORKSPACE_SCOPES,
+        },
+        UPGRADED_CONNECTION_ID,
+      ),
+    ).rejects.toMatchObject({ code: 'GOOGLE_AUTHORIZATION_INVALID' });
+    await expect(repository.list(TENANT_ID)).resolves.toHaveLength(1);
+  });
+
+  it('does not create an upgrade when Google omits the refresh token', async () => {
+    const repository = new InMemoryGoogleConnectionRepository();
+    const cipher = tokenCipher();
+    const legacyScopes = GOOGLE_WORKSPACE_SCOPES.filter(
+      (scope) => scope !== 'https://www.googleapis.com/auth/script.deployments',
+    );
+    const now = '2026-07-26T08:00:00.000Z';
+    await repository.create({
+      createdAt: now,
+      createdBy: USER_ID,
+      id: CONNECTION_ID,
+      name: 'Legacy Workspace grant',
+      scopes: legacyScopes,
+      status: 'active',
+      tenantId: TENANT_ID,
+      updatedAt: now,
+    });
+    const service = new GoogleConnectionService({
+      cipher,
+      client: new GoogleSheetsClient({
+        fetchTransport: async () => jsonResponse({ files: [] }),
+        operationStore: new InMemoryGoogleOperationStore(),
+      }),
+      now: () => new Date(now),
+      oauth: oauthClient(async () => jsonResponse({})),
+      repository,
+    });
+    const owner = { role: 'owner' as const, tenantId: TENANT_ID, userId: USER_ID };
+
+    await expect(
+      service.createUpgrade(
+        owner,
+        CONNECTION_ID,
+        {
+          accessToken: 'upgraded-access-token-1234567890',
+          expiresAt: '2026-07-26T10:00:00.000Z',
+          scopes: GOOGLE_WORKSPACE_SCOPES,
+        },
+        UPGRADED_CONNECTION_ID,
+      ),
+    ).rejects.toMatchObject({ code: 'GOOGLE_AUTHORIZATION_INVALID' });
+    await expect(repository.list(TENANT_ID)).resolves.toHaveLength(1);
+    await expect(repository.get(TENANT_ID, UPGRADED_CONNECTION_ID)).resolves.toBeUndefined();
+  });
+
   it('stores only encrypted credentials, refreshes expiry, reports health, and clears on revoke', async () => {
     const repository = new InMemoryGoogleConnectionRepository();
     const cipher = tokenCipher();

@@ -1,6 +1,6 @@
 {
   "name": "ai-workflow-studio",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "A safe natural-language automation platform for local spreadsheets and connected services.",
   "license": "UNLICENSED",

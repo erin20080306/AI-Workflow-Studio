@@ -103,7 +103,8 @@ export class DesktopComputerUseController {
       permission: this.options.permission.check(false),
       platform: platformLabel(this.options.platform),
       status: this.status,
-      takeoverAvailable: this.activeAbortController !== undefined,
+      takeoverAvailable:
+        this.activeAbortController !== undefined && !this.activeAbortController.signal.aborted,
     };
   }
 
@@ -128,9 +129,8 @@ export class DesktopComputerUseController {
   }
 
   takeOver(): void {
-    if (this.activeAbortController !== undefined) {
+    if (this.activeAbortController !== undefined && !this.activeAbortController.signal.aborted) {
       this.activeAbortController.abort();
-      this.activeAbortController = undefined;
       this.currentAction = undefined;
       this.status = 'user_takeover';
       this.options.audit({
@@ -163,8 +163,7 @@ export class DesktopComputerUseController {
     const parsed = VisibleExcelInputSchema.parse(input);
     const expectedName = basename(parsed.workbookPath);
     const workbookPathHash = createHash('sha256').update(parsed.workbookPath).digest('hex');
-    const localAbortController = new AbortController();
-    this.activeAbortController = localAbortController;
+    const localAbortController = this.claimVisibleOperation();
     const signal = AbortSignal.any([parentSignal, localAbortController.signal]);
 
     try {
@@ -227,8 +226,7 @@ export class DesktopComputerUseController {
       this.options.onSnapshot();
       throw error;
     } finally {
-      this.activeAbortController = undefined;
-      this.options.onSnapshot();
+      this.releaseVisibleOperation(localAbortController);
     }
   }
 
@@ -253,8 +251,7 @@ export class DesktopComputerUseController {
           : 'COMPUTER_USE_PERMISSION_REQUIRED',
       );
     }
-    const localAbortController = new AbortController();
-    this.activeAbortController = localAbortController;
+    const localAbortController = this.claimVisibleOperation();
     const signal = AbortSignal.any([parentSignal, localAbortController.signal]);
     const folderIdHash = createHash('sha256').update(input.folderId).digest('hex');
 
@@ -311,9 +308,23 @@ export class DesktopComputerUseController {
       this.options.onSnapshot();
       throw new ComputerUseError(failureCode);
     } finally {
-      this.activeAbortController = undefined;
-      this.options.onSnapshot();
+      this.releaseVisibleOperation(localAbortController);
     }
+  }
+
+  private claimVisibleOperation(): AbortController {
+    if (this.activeAbortController !== undefined) {
+      throw new ComputerUseError('COMPUTER_USE_OPERATION_IN_PROGRESS');
+    }
+    const controller = new AbortController();
+    this.activeAbortController = controller;
+    return controller;
+  }
+
+  private releaseVisibleOperation(controller: AbortController): void {
+    if (this.activeAbortController !== controller) return;
+    this.activeAbortController = undefined;
+    this.options.onSnapshot();
   }
 
   private async updateStatus(

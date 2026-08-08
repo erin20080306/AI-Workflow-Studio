@@ -53,14 +53,32 @@ The current scopes are:
 - `https://www.googleapis.com/auth/gmail.send`
 - `https://www.googleapis.com/auth/presentations`
 - `https://www.googleapis.com/auth/script.projects`
+- `https://www.googleapis.com/auth/script.deployments`
 
 Drive content access is read-only and is used to discover and download selected
 folder workbooks. Existing connections must be explicitly re-authorized after
-this scope is added. External writes use the explicit `drive.file` scope only
-for files the application creates or opens with the user. The implementation
+the required scope set changes; a legacy connection without
+`script.deployments` is marked for reconnection and cannot begin an Apps Script
+project write. Legacy records do not contain a stable Google principal such as
+the provider `sub`, so the platform cannot safely prove that a later OAuth grant
+belongs to the same Google account. Only a Tenant owner or administrator may
+start and complete the HMAC-bound upgrade flow, and success creates a new
+connection with a new `connectionId`; it never replaces credentials behind an
+already reviewed reference. Existing Workflows and Runs remain bound to the old
+connection, cannot be retried as upgraded, and require a fresh plan. External
+writes use the explicit `drive.file` scope only for files the application
+creates or opens with the user. The implementation
 follows Google's
 [web-server OAuth guidance](https://developers.google.com/identity/protocols/oauth2/web-server)
 and [OAuth security practices](https://developers.google.com/identity/protocols/oauth2/resources/best-practices).
+
+Allowlisted Apps Script templates are deployed only as API executables with
+manifest access restricted to `MYSELF`. `web_app` deployment requests fail
+before project creation. The connector checks both `script.projects` and
+`script.deployments` before the first Apps Script API write, matching Google's
+[deployment creation authorization](https://developers.google.com/apps-script/api/reference/rest/v1/projects.deployments/create)
+and [API executable manifest](https://developers.google.com/apps-script/manifest/web-app-api-executable)
+requirements.
 
 ## Drive Excel folder operations
 

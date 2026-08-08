@@ -47,6 +47,8 @@ const copy = {
     error:
       'AI could not create a validated workflow right now. Nothing was saved or executed. Please try again.',
     googleRequired: 'Connect Google Workspace before creating this cloud workflow.',
+    googleReauthorizationRequired:
+      'Create a new upgraded Google connection, then create a fresh plan; existing runs remain bound to the older connection.',
     desktopRequired:
       'Pair an online Desktop Agent and approve a folder before creating this workflow.',
     example: 'Organize orders every day and create a summary.',
@@ -82,6 +84,8 @@ const copy = {
     draft: '已驗證的工作流草稿',
     error: 'AI 目前無法建立通過驗證的工作流；沒有儲存或執行任何內容，請稍後再試。',
     googleRequired: '請先連線 Google Workspace，才能建立這個雲端工作流。',
+    googleReauthorizationRequired:
+      '請建立新的升級版 Google 連線，再重新建立計畫；既有執行仍綁定舊連線。',
     desktopRequired: '請先配對在線 Desktop Agent 並核准資料夾，才能建立這個工作流。',
     example: '每天整理訂單並建立摘要',
     folderCount: (count: number) => `${count} 個已核准資料夾別名`,
@@ -152,7 +156,11 @@ export function WorkflowComposer({
   );
   const [prompt, setPrompt] = useState('');
   const [promptError, setPromptError] = useState<
-    'desktop_required' | 'google_required' | 'invalid' | 'unavailable'
+    | 'desktop_required'
+    | 'google_reauthorization_required'
+    | 'google_required'
+    | 'invalid'
+    | 'unavailable'
   >();
   const [provider, setProvider] = useState<AiProviderSelection>('auto');
   const [tier, setTier] = useState<AiModelTierSelection>('auto');
@@ -248,6 +256,12 @@ export function WorkflowComposer({
           setPromptError('google_required');
           return;
         }
+        if (error.success && error.data.error.code === 'AI_GOOGLE_REAUTHORIZATION_REQUIRED') {
+          setWorkflow(undefined);
+          setPlannedModel(undefined);
+          setPromptError('google_reauthorization_required');
+          return;
+        }
         if (error.success && error.data.error.code === 'AI_DESKTOP_REQUIRED') {
           setWorkflow(undefined);
           setPlannedModel(undefined);
@@ -319,11 +333,13 @@ export function WorkflowComposer({
               <p className="mt-2 text-xs font-medium text-rose-700" id="prompt-error" role="alert">
                 {promptError === 'invalid'
                   ? text.minLength
-                  : promptError === 'google_required'
-                    ? text.googleRequired
-                    : promptError === 'desktop_required'
-                      ? text.desktopRequired
-                      : text.error}
+                  : promptError === 'google_reauthorization_required'
+                    ? text.googleReauthorizationRequired
+                    : promptError === 'google_required'
+                      ? text.googleRequired
+                      : promptError === 'desktop_required'
+                        ? text.desktopRequired
+                        : text.error}
               </p>
             )}
 

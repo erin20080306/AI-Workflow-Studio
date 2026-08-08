@@ -5,6 +5,9 @@ import { assistantPromptErrorForCode } from './assistant-prompt-error';
 describe('assistantPromptErrorForCode', () => {
   it('routes Drive prerequisites to explicit authorization guidance', () => {
     expect(assistantPromptErrorForCode('AI_GOOGLE_CONNECTION_REQUIRED')).toBe('google');
+    expect(assistantPromptErrorForCode('AI_GOOGLE_REAUTHORIZATION_REQUIRED')).toBe(
+      'google_reauthorization',
+    );
     expect(assistantPromptErrorForCode('AI_DESKTOP_REQUIRED')).toBe('desktop');
   });
 

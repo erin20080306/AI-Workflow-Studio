@@ -4,13 +4,22 @@ import { z } from 'zod';
 import { GoogleTokenCipher } from './cipher';
 import { GoogleSheetsClient } from './client';
 import { GoogleSheetsError } from './errors';
-import { GOOGLE_WORKSPACE_SCOPES, GoogleOAuthClient } from './oauth';
+import { GoogleOAuthClient, hasRequiredGoogleWorkspaceScopes } from './oauth';
 import type { GoogleOAuthTokens, GoogleSheetSummary, GoogleSpreadsheetSummary } from './types';
 
 const UuidSchema = z.string().uuid();
 const NameSchema = z.string().trim().min(1).max(120);
+const UpgradeActorSchema = z
+  .object({
+    role: z.enum(['owner', 'admin', 'editor', 'viewer']),
+    tenantId: UuidSchema,
+    userId: UuidSchema,
+  })
+  .strict();
+const UPGRADED_NAME_SUFFIX = ' (upgraded)';
 
 export type GoogleConnectionStatus = 'active' | 'error' | 'expired' | 'revoked';
+export type GoogleConnectionUpgradeActor = z.infer<typeof UpgradeActorSchema>;
 
 export interface GoogleConnectionRecord {
   readonly createdAt: string;
@@ -33,6 +42,7 @@ export interface GoogleConnectionView {
   readonly lastErrorCode?: string;
   readonly lastHealthCheckAt?: string;
   readonly name: string;
+  readonly requiresReauthorization: boolean;
   readonly scopes: readonly string[];
   readonly status: GoogleConnectionStatus;
 }
@@ -71,6 +81,7 @@ function toView(record: GoogleConnectionRecord): GoogleConnectionView {
       ? {}
       : { lastHealthCheckAt: record.lastHealthCheckAt }),
     name: record.name,
+    requiresReauthorization: !hasRequiredGoogleWorkspaceScopes(record.scopes),
     scopes: record.scopes,
     status: record.status,
   };
@@ -207,10 +218,7 @@ export class GoogleConnectionService {
     const createdBy = UuidSchema.parse(createdByInput);
     const connectionId = UuidSchema.parse(connectionIdInput);
     const name = NameSchema.parse(nameInput);
-    if (
-      tokens.refreshToken === undefined ||
-      !GOOGLE_WORKSPACE_SCOPES.every((scope) => tokens.scopes.includes(scope))
-    ) {
+    if (tokens.refreshToken === undefined || !hasRequiredGoogleWorkspaceScopes(tokens.scopes)) {
       throw new GoogleSheetsError(
         'GOOGLE_AUTHORIZATION_INVALID',
         'The Google authorization is missing required offline scopes.',
@@ -247,6 +255,39 @@ export class GoogleConnectionService {
     return (await this.repository.list(tenantId)).map(toView);
   }
 
+  async assertUpgradeTarget(
+    actorInput: GoogleConnectionUpgradeActor,
+    connectionIdInput: string,
+  ): Promise<void> {
+    const actor = UpgradeActorSchema.parse(actorInput);
+    this.assertUpgradeRole(actor);
+    const connectionId = UuidSchema.parse(connectionIdInput);
+    await this.requireActiveUpgradeTarget(actor.tenantId, connectionId);
+  }
+
+  async createUpgrade(
+    actorInput: GoogleConnectionUpgradeActor,
+    connectionIdInput: string,
+    tokens: GoogleOAuthTokens,
+    upgradedConnectionIdInput = randomUUID(),
+  ): Promise<GoogleConnectionView> {
+    const actor = UpgradeActorSchema.parse(actorInput);
+    this.assertUpgradeRole(actor);
+    const connectionId = UuidSchema.parse(connectionIdInput);
+    const legacyConnection = await this.requireActiveUpgradeTarget(actor.tenantId, connectionId);
+    const upgradedName = `${legacyConnection.name.slice(
+      0,
+      120 - UPGRADED_NAME_SUFFIX.length,
+    )}${UPGRADED_NAME_SUFFIX}`;
+    return await this.create(
+      actor.tenantId,
+      actor.userId,
+      upgradedName,
+      tokens,
+      upgradedConnectionIdInput,
+    );
+  }
+
   async assertScopes(
     tenantId: string,
     connectionId: string,
@@ -257,7 +298,7 @@ export class GoogleConnectionService {
     if (missing.length > 0) {
       throw new GoogleSheetsError(
         'GOOGLE_AUTHORIZATION_INVALID',
-        'The Google connection must be reconnected to authorize the requested Drive capability.',
+        'Create a new upgraded Google connection and a fresh plan for the requested Google Workspace capability.',
       );
     }
   }
@@ -392,6 +433,33 @@ export class GoogleConnectionService {
       throw new GoogleSheetsError(
         'GOOGLE_CONNECTION_REVOKED',
         'The Google Sheets connection is unavailable.',
+      );
+    }
+    return connection;
+  }
+
+  private assertUpgradeRole(actor: GoogleConnectionUpgradeActor): void {
+    if (actor.role !== 'owner' && actor.role !== 'admin') {
+      throw new GoogleSheetsError(
+        'GOOGLE_AUTHORIZATION_INVALID',
+        'Only a tenant owner or administrator can upgrade a Google connection.',
+      );
+    }
+  }
+
+  private async requireActiveUpgradeTarget(
+    tenantId: string,
+    connectionId: string,
+  ): Promise<GoogleConnectionRecord> {
+    const connection = await this.repository.get(tenantId, connectionId);
+    if (
+      connection === undefined ||
+      connection.status !== 'active' ||
+      hasRequiredGoogleWorkspaceScopes(connection.scopes)
+    ) {
+      throw new GoogleSheetsError(
+        'GOOGLE_AUTHORIZATION_INVALID',
+        'The Google connection is not eligible for upgrade.',
       );
     }
     return connection;

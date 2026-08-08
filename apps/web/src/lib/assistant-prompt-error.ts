@@ -2,6 +2,7 @@ export type AssistantPromptError =
   | 'authentication'
   | 'desktop'
   | 'google'
+  | 'google_reauthorization'
   | 'model'
   | 'rate'
   | 'short'
@@ -9,6 +10,7 @@ export type AssistantPromptError =
   | 'unavailable';
 
 export function assistantPromptErrorForCode(code: string): Exclude<AssistantPromptError, 'short'> {
+  if (code === 'AI_GOOGLE_REAUTHORIZATION_REQUIRED') return 'google_reauthorization';
   if (code === 'AI_GOOGLE_CONNECTION_REQUIRED') return 'google';
   if (code === 'AI_DESKTOP_REQUIRED') return 'desktop';
   if (code === 'AI_PROVIDER_AUTHENTICATION_FAILED') return 'authentication';

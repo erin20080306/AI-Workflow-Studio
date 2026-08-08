@@ -28,10 +28,12 @@ export {
   type GoogleDriveExcelClientOptions,
 } from './drive-excel';
 export {
+  GOOGLE_APPS_SCRIPT_DEPLOYMENT_SCOPES,
   GOOGLE_SHEETS_SCOPES,
   GOOGLE_WORKSPACE_SCOPES,
   GoogleOAuthClient,
   createGooglePkcePair,
+  hasRequiredGoogleWorkspaceScopes,
   type GoogleOAuthClientOptions,
   type GooglePkcePair,
 } from './oauth';
@@ -54,5 +56,6 @@ export {
   type GoogleWorkspaceClientOptions,
   type ProfessionalDeckInput,
   type ProfessionalSlide,
+  type SafeAppsScriptDeployment,
   type SafeAppsScriptTemplate,
 } from './workspace';

@@ -31,6 +31,7 @@ import { listAssistantExecutionTargets } from '@/lib/assistant-execution-targets
 import { plannerAccessDecision } from '@/lib/control-plane-access';
 import { getEnvironment } from '@/lib/env';
 import { listGoogleConnections } from '@/lib/google-connections';
+import { selectPlanningGoogleConnections } from '@/lib/google-planning-connections';
 import { reserveAssistantUsage, type AssistantUsageReservation } from '@/lib/usage-control-server';
 import {
   selectAutomaticFolderAliasId,
@@ -166,10 +167,15 @@ export async function POST(request: Request): Promise<Response> {
     await listAssistantExecutionTargets(workspace),
     validatedPlannerRequest.context.executionTarget,
   );
-  const googleConnectionIds = await listGoogleConnections()
-    .then((connections) => connections.map((connection) => connection.id))
-    .catch(() => [] as readonly string[]);
   const intent = detectWorkflowIntent(validatedPlannerRequest.prompt);
+  const needsAppsScript = intent.requiredNodeTypes.includes('apps_script.deploy_template');
+  const googleConnections = await listGoogleConnections().catch(() => []);
+  const googlePlanningConnections = selectPlanningGoogleConnections(
+    googleConnections,
+    needsAppsScript,
+  );
+  const googleConnectionIds = googlePlanningConnections.connectionIds;
+  const requiresGoogleReauthorization = googlePlanningConnections.requiresReauthorization;
   const trustedExecutionTarget = intent.needsDesktop
     ? serverPlanningContext.executionTarget
     : ({ type: 'cloud' } as const);
@@ -191,8 +197,12 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(
       {
         error: {
-          code: 'AI_GOOGLE_CONNECTION_REQUIRED',
-          message: 'Connect an approved Google Workspace account before planning this workflow.',
+          code: requiresGoogleReauthorization
+            ? 'AI_GOOGLE_REAUTHORIZATION_REQUIRED'
+            : 'AI_GOOGLE_CONNECTION_REQUIRED',
+          message: requiresGoogleReauthorization
+            ? 'Create a new upgraded Google Workspace connection, then create a fresh plan. Existing reviewed runs remain bound to the legacy connection and cannot be retried as upgraded.'
+            : 'Connect an approved Google Workspace account before planning this workflow.',
         },
       },
       { headers: { 'cache-control': 'no-store' }, status: 409 },

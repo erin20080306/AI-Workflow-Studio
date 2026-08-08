@@ -152,7 +152,7 @@ const copy = {
     desktopAgent: 'Desktop Agent',
     desktopOffline: 'Offline · jobs will wait',
     desktopOnline: 'Online',
-    desktopUpdateRequired: 'Update required · install Desktop Agent 0.2.0+',
+    desktopUpdateRequired: 'Update required · install Desktop Agent 0.2.2+',
     emptyAsk: 'Ask a question, refine an idea, or explore a safe automation approach.',
     emptyImage: 'Describe the image you want. It will be generated inside this conversation.',
     downloadsAmbiguous: 'More than one exact Downloads alias is approved. Choose one in Devices.',
@@ -167,6 +167,8 @@ const copy = {
       'Pair an online Desktop Agent and approve Downloads with read and write access before running this request.',
     errorGoogle:
       'Connect an approved Google Workspace account before creating Drive, Slides, or Apps Script work.',
+    errorGoogleReauthorization:
+      'Create a new upgraded Google connection, then make a fresh plan. Existing reviewed runs stay bound to the older connection and cannot be retried as upgraded.',
     errorModel:
       'This model is not available to the provider account. Choose Auto or another model.',
     errorRate: 'The provider quota is currently limited. Choose Auto or try again later.',
@@ -229,6 +231,7 @@ const copy = {
     sources: 'Sources',
     setupDesktop: 'Open Devices',
     setupGoogle: 'Connect Google Workspace',
+    setupGoogleReauthorization: 'Create upgraded Google connection',
     stage: 'Outcome-first automation',
     steps: 'steps',
     stop: 'Stop generating',
@@ -262,7 +265,7 @@ const copy = {
     desktopAgent: '桌面 Agent',
     desktopOffline: '離線 · 工作會等待連線',
     desktopOnline: '在線',
-    desktopUpdateRequired: '需要更新 · 請安裝 Desktop Agent 0.2.0 以上版本',
+    desktopUpdateRequired: '需要更新 · 請安裝 Desktop Agent 0.2.2 以上版本',
     emptyAsk: '提出問題、釐清想法，或一起探索安全的自動化做法。',
     emptyImage: '描述你想要的圖片，產生結果會直接顯示在這個對話中。',
     downloadsAmbiguous: '目前核准了多個名稱完全相符的下載項目，請到裝置設定只保留一個。',
@@ -274,6 +277,8 @@ const copy = {
     errorDesktop:
       '請先配對在線的 Desktop Agent，並授權 Downloads／下載項目資料夾的讀取與寫入權限。',
     errorGoogle: '請先連接已核准的 Google Workspace，才能操作 Drive、Slides 與 Apps Script。',
+    errorGoogleReauthorization:
+      '請建立新的升級版 Google 連線，再重新建立計畫。既有已審閱執行仍綁定舊連線，不能直接重試成升級版本。',
     errorModel: 'Provider 帳戶目前沒有此模型，請改用「自動」或其他模型。',
     errorRate: 'Provider 配額目前受限，請改用「自動」或稍後重試。',
     errorTemporary: 'Provider 目前無法連線，請改用「自動」或稍後重試。',
@@ -332,6 +337,7 @@ const copy = {
     sources: '參考來源',
     setupDesktop: '開啟裝置設定',
     setupGoogle: '連接 Google Workspace',
+    setupGoogleReauthorization: '建立升級版 Google 連線',
     stage: '以成果為起點',
     steps: '個步驟',
     stop: '停止產生',
@@ -1333,28 +1339,32 @@ export function AssistantWorkspace({
                       ? text.error
                       : promptError === 'google'
                         ? text.errorGoogle
-                        : promptError === 'desktop'
-                          ? text.errorDesktop
-                          : promptError === 'authentication'
-                            ? text.errorAuthentication
-                            : promptError === 'rate'
-                              ? text.errorRate
-                              : promptError === 'model'
-                                ? text.errorModel
-                                : promptError === 'temporary'
-                                  ? text.errorTemporary
-                                  : mode === 'ask'
-                                    ? text.promptHelpAsk
-                                    : mode === 'image'
-                                      ? text.promptHelpImage
-                                      : text.promptHelpPlan}
+                        : promptError === 'google_reauthorization'
+                          ? text.errorGoogleReauthorization
+                          : promptError === 'desktop'
+                            ? text.errorDesktop
+                            : promptError === 'authentication'
+                              ? text.errorAuthentication
+                              : promptError === 'rate'
+                                ? text.errorRate
+                                : promptError === 'model'
+                                  ? text.errorModel
+                                  : promptError === 'temporary'
+                                    ? text.errorTemporary
+                                    : mode === 'ask'
+                                      ? text.promptHelpAsk
+                                      : mode === 'image'
+                                        ? text.promptHelpImage
+                                        : text.promptHelpPlan}
               </p>
-              {promptError === 'google' ? (
+              {promptError === 'google' || promptError === 'google_reauthorization' ? (
                 <Link
                   className="text-[10px] font-semibold text-indigo-700 underline decoration-indigo-300 underline-offset-2"
                   href="/dashboard/settings/connections"
                 >
-                  {text.setupGoogle}
+                  {promptError === 'google_reauthorization'
+                    ? text.setupGoogleReauthorization
+                    : text.setupGoogle}
                 </Link>
               ) : promptError === 'desktop' ? (
                 <Link

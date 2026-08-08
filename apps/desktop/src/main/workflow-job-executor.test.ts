@@ -147,6 +147,195 @@ describe('DesktopWorkflowJobExecutor', () => {
     );
   });
 
+  it('rejects a later visible Drive execution until the timed-out driver actually settles', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'aiws-visible-drive-timeout-'));
+    temporaryDirectories.push(directory);
+    const grants = new FolderGrantStore(join(directory, '.agent', 'folder-grants.json'));
+    const grant = await grants.authorize(directory, DEVICE_ID, {
+      read: true,
+      watch: false,
+      write: true,
+    });
+    const spreadsheet = new DesktopSpreadsheetExecutor(
+      grants,
+      new ProcessingLedger(join(directory, '.agent', 'processing-ledger.json')),
+    );
+    const reporterAbortController = new AbortController();
+    const reporter: AgentJobReporter = {
+      ...createReporter([]),
+      signal: reporterAbortController.signal,
+    };
+    let activeDownloads = 0;
+    let maximumActiveDownloads = 0;
+    let downloadCallCount = 0;
+    let markFirstDownloadStarted: (() => void) | undefined;
+    const firstDownloadStarted = new Promise<void>((resolve) => {
+      markFirstDownloadStarted = resolve;
+    });
+    let markFirstDownloadAborted: (() => void) | undefined;
+    const firstDownloadAborted = new Promise<void>((resolve) => {
+      markFirstDownloadAborted = resolve;
+    });
+    let allowFirstDownloadSettlement: (() => void) | undefined;
+    const firstDownloadSettlementAllowed = new Promise<void>((resolve) => {
+      allowFirstDownloadSettlement = resolve;
+    });
+    let markFirstDownloadSettled: (() => void) | undefined;
+    const firstDownloadSettled = new Promise<void>((resolve) => {
+      markFirstDownloadSettled = resolve;
+    });
+    let observeControllerSlotRelease = false;
+    let markControllerSlotReleased: (() => void) | undefined;
+    const controllerSlotReleased = new Promise<void>((resolve) => {
+      markControllerSlotReleased = resolve;
+    });
+    const receivedSignals: AbortSignal[] = [];
+    const computerUse = new DesktopComputerUseController({
+      audit: () => undefined,
+      driveDriver: {
+        async download(_input, signal) {
+          downloadCallCount += 1;
+          const downloadNumber = downloadCallCount;
+          activeDownloads += 1;
+          maximumActiveDownloads = Math.max(maximumActiveDownloads, activeDownloads);
+          receivedSignals.push(signal);
+          try {
+            if (downloadNumber === 1) {
+              markFirstDownloadStarted?.();
+              await new Promise<void>((resolve) => {
+                const resolveForAbort = () => {
+                  markFirstDownloadAborted?.();
+                  resolve();
+                };
+                if (signal.aborted) {
+                  resolveForAbort();
+                  return;
+                }
+                signal.addEventListener('abort', resolveForAbort, { once: true });
+              });
+              await firstDownloadSettlementAllowed;
+              throw new Error('Visible Drive context settled after abort.');
+            }
+            return { inputHashes: [], paths: [] };
+          } finally {
+            activeDownloads -= 1;
+            if (downloadNumber === 1) markFirstDownloadSettled?.();
+          }
+        },
+      },
+      driver: {
+        async perform(input) {
+          return { activeWorkbookName: input.workbookPath.split('/').at(-1) ?? '' };
+        },
+      },
+      onSnapshot: () => {
+        if (
+          observeControllerSlotRelease &&
+          activeDownloads === 0 &&
+          !computerUse.getSnapshot().takeoverAvailable
+        ) {
+          markControllerSlotReleased?.();
+        }
+      },
+      openPath: async () => '',
+      permission: { check: () => 'granted' },
+      platform: 'darwin',
+    });
+    computerUse.setEnabled(true);
+    const executor = new DesktopWorkflowJobExecutor(spreadsheet, computerUse);
+    const job: AgentJob = {
+      attempt: 1,
+      availableAt: '2026-08-02T03:00:00.000Z',
+      deviceId: DEVICE_ID,
+      id: '10000000-0000-4000-8000-000000005043',
+      idempotencyKey: 'visible-drive-timeout-1',
+      maxAttempts: 3,
+      status: 'claimed',
+      tenantId: TENANT_ID,
+      workflow: {
+        description: 'Abort a timed-out visible Drive download.',
+        edges: [],
+        executionTarget: { deviceId: DEVICE_ID, type: 'desktop' },
+        name: 'Visible Drive timeout',
+        nodes: [
+          {
+            config: {
+              browser: 'chrome',
+              downloadTimeoutSeconds: 600,
+              folderAliasId: grant.folderAliasId,
+              folderId: '1DriveFolderVisibleTimeout123',
+              maxFileSizeBytes: 50_000_000,
+              maxFiles: 500,
+            },
+            id: 'visible_download',
+            type: 'google_drive.visible_download_folder',
+            version: 1,
+          },
+        ],
+        schemaVersion: 1,
+        trigger: { config: {}, type: 'manual.trigger' },
+      },
+      workflowRunId: '10000000-0000-4000-8000-000000005044',
+    };
+
+    vi.useFakeTimers();
+    try {
+      const firstExecution = executor.execute(job, reporter).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      await firstDownloadStarted;
+      observeControllerSlotRelease = true;
+      expect(activeDownloads).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(600_000);
+      const firstError = await firstExecution;
+      await firstDownloadAborted;
+
+      expect(firstError).toMatchObject({ code: 'NODE_EXECUTION_TIMEOUT' });
+      expect(receivedSignals[0]?.aborted).toBe(true);
+      expect(activeDownloads).toBe(1);
+
+      await expect(
+        executor.execute(
+          {
+            ...job,
+            id: '10000000-0000-4000-8000-000000005045',
+            idempotencyKey: 'visible-drive-timeout-2',
+            workflowRunId: '10000000-0000-4000-8000-000000005046',
+          },
+          reporter,
+        ),
+      ).rejects.toMatchObject({ code: 'COMPUTER_USE_OPERATION_IN_PROGRESS' });
+      expect(downloadCallCount).toBe(1);
+      expect(activeDownloads).toBe(1);
+      expect(maximumActiveDownloads).toBe(1);
+
+      allowFirstDownloadSettlement?.();
+      await firstDownloadSettled;
+      await controllerSlotReleased;
+
+      await expect(
+        executor.execute(
+          {
+            ...job,
+            id: '10000000-0000-4000-8000-000000005047',
+            idempotencyKey: 'visible-drive-timeout-3',
+            workflowRunId: '10000000-0000-4000-8000-000000005048',
+          },
+          reporter,
+        ),
+      ).resolves.toMatchObject({ status: 'succeeded', stepCount: 1 });
+      expect(downloadCallCount).toBe(2);
+      expect(maximumActiveDownloads).toBe(1);
+    } finally {
+      allowFirstDownloadSettlement?.();
+      reporterAbortController.abort();
+      if (downloadCallCount > 0) await firstDownloadSettled;
+      vi.useRealTimers();
+    }
+  });
+
   it('downloads Drive workbooks into an approved folder, consolidates them, and opens the result', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'aiws-drive-desktop-job-'));
     temporaryDirectories.push(directory);
@@ -872,7 +1061,11 @@ describe('DesktopWorkflowJobExecutor', () => {
     });
     const executor = new DesktopWorkflowJobExecutor(spreadsheet);
     const steps: StepResult[] = [];
-    const reporter = createReporter(steps);
+    const reporterAbortController = new AbortController();
+    const reporter: AgentJobReporter = {
+      ...createReporter(steps),
+      signal: reporterAbortController.signal,
+    };
 
     await expect(
       executor.execute(
@@ -924,8 +1117,13 @@ describe('DesktopWorkflowJobExecutor', () => {
     expect(readSpy).toHaveBeenCalledTimes(2);
     expect(readSpy.mock.calls[0]?.[2]).toMatchObject({ maxRows: 100_000, maxSheets: 200 });
     expect(readSpy.mock.calls[1]?.[2]).toMatchObject({ maxRows: 40_000, maxSheets: 200 });
-    expect(readSpy.mock.calls[0]?.[3]?.signal).toBe(reporter.signal);
-    expect(readSpy.mock.calls[1]?.[3]?.signal).toBe(reporter.signal);
+    const firstReadSignal = readSpy.mock.calls[0]?.[3]?.signal;
+    const secondReadSignal = readSpy.mock.calls[1]?.[3]?.signal;
+    expect(firstReadSignal).not.toBe(reporter.signal);
+    expect(secondReadSignal).not.toBe(reporter.signal);
+    reporterAbortController.abort();
+    expect(firstReadSignal?.aborted).toBe(true);
+    expect(secondReadSignal?.aborted).toBe(true);
     const readSteps = steps.filter((step) => step.nodeId === 'read_files');
     expect(readSteps.at(-1)).toMatchObject({
       error: { code: 'NODE_EXECUTION_FAILED' },

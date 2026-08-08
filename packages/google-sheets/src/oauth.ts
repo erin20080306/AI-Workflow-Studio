@@ -19,6 +19,10 @@ export const GOOGLE_SHEETS_SCOPES = [
   'https://www.googleapis.com/auth/drive.metadata.readonly',
   'https://www.googleapis.com/auth/spreadsheets',
 ] as const;
+export const GOOGLE_APPS_SCRIPT_DEPLOYMENT_SCOPES = [
+  'https://www.googleapis.com/auth/script.projects',
+  'https://www.googleapis.com/auth/script.deployments',
+] as const;
 export const GOOGLE_WORKSPACE_SCOPES = [
   ...GOOGLE_SHEETS_SCOPES,
   'https://www.googleapis.com/auth/drive.file',
@@ -27,8 +31,12 @@ export const GOOGLE_WORKSPACE_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/presentations',
-  'https://www.googleapis.com/auth/script.projects',
+  ...GOOGLE_APPS_SCRIPT_DEPLOYMENT_SCOPES,
 ] as const;
+
+export function hasRequiredGoogleWorkspaceScopes(scopes: readonly string[]): boolean {
+  return GOOGLE_WORKSPACE_SCOPES.every((scope) => scopes.includes(scope));
+}
 
 export interface GoogleOAuthClientOptions {
   readonly authorizationUrl?: string;
