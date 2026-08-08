@@ -4261,3 +4261,23 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
   opened, and no Google Slides or Apps Script project was created during these
   automated gates. Production deployment, Google re-consent, packaged-Agent
   replacement, and the real-folder canary remain separate acceptance actions.
+
+### Production rollout after visible Drive and GAS hardening
+
+- GitHub commit `0ea69d5` was pushed to `codex/ai-workflow-platform`. Vercel
+  production deployment `dpl_AdNBeFBeiubhm9WT8b3bYPLzk2eS` reached `READY`
+  and received the canonical site, apex, wildcard Sites, and existing Vercel
+  aliases.
+- The locally packaged, ad-hoc-signed Desktop Agent `0.2.2` replaced the
+  installed `0.2.1` test application through a graceful quit. The previous app
+  was moved to Trash as a recoverable backup, the new bundle passed strict deep
+  signature verification, and it was launched normally without a remote
+  debugging listener.
+- The new Agent reported version `0.2.2` and an idle Computer Use state. Because
+  ad-hoc rebuilds do not preserve a stable Developer ID identity, macOS treated
+  this build as a new Accessibility subject. The stale Accessibility decision
+  was reset and the correct System Settings pane was opened; explicit local
+  re-approval and executor startup remain pending.
+- Google Workspace upgrade consent, a fresh GAS plan, the small real-Drive
+  canary, and the full large-folder Run remain outstanding. No customer workbook
+  or external Google artifact was created during rollout.
