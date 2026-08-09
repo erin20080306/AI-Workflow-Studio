@@ -16,6 +16,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   assertNoActiveBaselinePartial,
+  MACOS_DRIVE_SAVE_DIALOG_SCRIPT,
+  MACOS_VISIBLE_DRIVE_SCRIPT,
   shouldRecordDialogMonitorFailure,
   stageDownloadedWorkbooks,
   snapshotDownloadDirectory,
@@ -116,6 +118,105 @@ afterEach(async () => {
 });
 
 describe('visible Drive download tracking', () => {
+  it('waits for Chrome activation before clicking the trusted selection coordinate', () => {
+    const selectionStart = MACOS_VISIBLE_DRIVE_SCRIPT.indexOf(
+      'if semanticAction is "select_items" then',
+    );
+    const selectionEnd = MACOS_VISIBLE_DRIVE_SCRIPT.indexOf(
+      'if semanticAction is "download_items" then',
+    );
+    const selectionBlock = MACOS_VISIBLE_DRIVE_SCRIPT.slice(selectionStart, selectionEnd);
+    const frontmost = selectionBlock.indexOf('set frontmost to true');
+    const activationDelay = selectionBlock.indexOf('delay 1', frontmost);
+    const trustedClick = selectionBlock.indexOf('click at {clickX, clickY}', activationDelay);
+    const postClickDelay = selectionBlock.indexOf('delay 1', trustedClick);
+    const selectAll = selectionBlock.indexOf('key code 0 using {command down}', postClickDelay);
+
+    expect(selectionStart).toBeGreaterThanOrEqual(0);
+    expect(selectionEnd).toBeGreaterThan(selectionStart);
+    expect(frontmost).toBeGreaterThanOrEqual(0);
+    expect(activationDelay).toBeGreaterThan(frontmost);
+    expect(trustedClick).toBeGreaterThan(activationDelay);
+    expect(postClickDelay).toBeGreaterThan(trustedClick);
+    expect(selectAll).toBeGreaterThan(postClickDelay);
+  });
+
+  it('waits for Chrome activation before clicking the trusted Download coordinate', () => {
+    const downloadStart = MACOS_VISIBLE_DRIVE_SCRIPT.indexOf(
+      'if semanticAction is "download_items" then',
+    );
+    const downloadEnd = MACOS_VISIBLE_DRIVE_SCRIPT.indexOf(
+      'error "Unsupported visible Drive action."',
+    );
+    const downloadBlock = MACOS_VISIBLE_DRIVE_SCRIPT.slice(downloadStart, downloadEnd);
+    const frontmost = downloadBlock.indexOf('set frontmost to true');
+    const activationDelay = downloadBlock.indexOf('delay 1', frontmost);
+    const trustedClick = downloadBlock.indexOf('click at {clickX, clickY}', activationDelay);
+    const postClickDelay = downloadBlock.indexOf('delay 1', trustedClick);
+    const dialogCheck = downloadBlock.indexOf('set dialogState to execute', postClickDelay);
+
+    expect(downloadStart).toBeGreaterThanOrEqual(0);
+    expect(downloadEnd).toBeGreaterThan(downloadStart);
+    expect(frontmost).toBeGreaterThanOrEqual(0);
+    expect(activationDelay).toBeGreaterThan(frontmost);
+    expect(trustedClick).toBeGreaterThan(activationDelay);
+    expect(postClickDelay).toBeGreaterThan(trustedClick);
+    expect(dialogCheck).toBeGreaterThan(postClickDelay);
+  });
+
+  it('keeps the validated Chrome window ID as text without weakening front-window trust', () => {
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain(
+      'set trustedWindowId to id of front window as text',
+    );
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain(
+      'if (id of front window as text) is not trustedWindowId then error "The approved Chrome window changed during Download."',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'set trustedWindowId to item 2 of argv as text',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).not.toContain(
+      'set trustedWindowId to item 2 of argv as integer',
+    );
+    expect(
+      MACOS_DRIVE_SAVE_DIALOG_SCRIPT.match(
+        /\(id of front window as text\) is not trustedWindowId/gu,
+      ),
+    ).toHaveLength(3);
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      "location.origin==='https://drive.google.com'&&location.pathname==='/drive/folders/",
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'if (count of sheets of front window) is not 1 then error "The Chrome Save sheet is not attached to the approved Drive window."',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('set saveSheet to sheet 1 of front window');
+  });
+
+  it('tolerates an absent Save-sheet AXSubrole without weakening the dialog allowlist', () => {
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('set saveSheetSubrole to "AXUnknown"');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'set observedSaveSheetSubrole to value of attribute "AXSubrole" of saveSheet',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain('on error errorMessage number errorNumber');
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'if observedSaveSheetSubrole is not missing value then set saveSheetSubrole to observedSaveSheetSubrole as text',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'if errorNumber is not -1728 then error errorMessage number errorNumber',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'if saveSheetRole is not "AXSheet" then error "The Chrome Save sheet role is invalid."',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'if saveSheetSubrole is not "AXDialog" and saveSheetSubrole is not "AXSystemDialog" and saveSheetSubrole is not "AXStandardWindow" and saveSheetSubrole is not "AXUnknown" then error "The Chrome Save sheet subrole is invalid."',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'if saveSheetIdentifier is not "save-panel" then error "The Chrome Save sheet identifier is invalid."',
+    );
+    expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
+      'if (count of filenameFields) is not 1 or (count of saveButtons) is not 1 or (count of cancelButtons) is not 1 or (count of wherePopups) is not 1 then error "The Chrome sheet is not a unique Save dialog."',
+    );
+  });
+
   it('blocks a recently active baseline partial before click but allows an old stale partial', async () => {
     const directory = await temporaryDirectory();
     const stalePartial = join(directory, 'stale.zip.crdownload');

@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 50 — Visible Computer Use (in progress; pairing recovery, Drive selection, long-run lease, and authorization guidance hardened; real-app acceptance pending)
+Phase 51 — Visible Drive click hardening (in progress; code and automated gates complete, real Drive canary pending)
 
 ## Repository baseline
 
@@ -4281,3 +4281,29 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
 - Google Workspace upgrade consent, a fresh GAS plan, the small real-Drive
   canary, and the full large-folder Run remain outstanding. No customer workbook
   or external Google artifact was created during rollout.
+
+## Phase 51 — Visible Drive click hardening
+
+Status: in progress
+
+- Raised the root and Desktop Agent versions to `0.2.4` and raised the Web
+  compatibility floor to `0.2.4`. The packaged macOS arm64 Agent was built,
+  ad-hoc signed, installed, and verified against the packaged `app.asar`.
+- Hardened the visible Drive action so Chrome is brought to the foreground and
+  allowed to settle before the trusted coordinate click. Chrome window IDs are
+  compared as text, preserving the exact front-window and Drive-folder trust
+  checks. The native Save-panel compatibility path tolerates Chrome's missing
+  `AXSubrole` attribute only when macOS reports the attribute as absent.
+- The completed automated gates are: `pnpm format:check`, `pnpm lint`,
+  `pnpm typecheck`, `pnpm test` (489 tests, one gated real-OS test skipped),
+  `pnpm build:web`, `pnpm build:desktop`, `pnpm security:scan-client`,
+  `pnpm audit --prod`, and 10 Chromium E2E scenarios in a clean server run.
+- The first post-reauthorization canary confirmed `permission=granted` and
+  reached the real Chrome Drive folder with one item selected. Its download
+  verification did not observe a new local workbook, so the run was cancelled
+  before Excel, Slides, or GAS nodes. This is an open acceptance issue; no
+  customer workbook or external artifact was read or created.
+- The remaining acceptance work is to diagnose the missing local download,
+  rerun the single-workbook canary, then separately validate the large Drive
+  folder and the complete Excel/report/Slides/GAS chain. This phase is not
+  considered production-accepted until those runs succeed.

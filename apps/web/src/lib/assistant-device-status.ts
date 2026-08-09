@@ -1,6 +1,6 @@
 const ASSISTANT_DEVICE_FRESHNESS_MS = 90_000;
 const ALLOWED_CLOCK_SKEW_MS = 30_000;
-export const MINIMUM_ASSISTANT_AGENT_VERSION = '0.2.2';
+export const MINIMUM_ASSISTANT_AGENT_VERSION = '0.2.4';
 
 interface SemanticVersion {
   readonly major: number;

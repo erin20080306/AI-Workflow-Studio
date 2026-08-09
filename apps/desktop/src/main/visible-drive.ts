@@ -207,6 +207,7 @@ export const MACOS_VISIBLE_DRIVE_SCRIPT = `on run argv
     tell application "System Events"
       tell process "Google Chrome"
         set frontmost to true
+        delay 1
         click at {clickX, clickY}
         delay 1
         key code 0 using {command down}
@@ -233,7 +234,7 @@ export const MACOS_VISIBLE_DRIVE_SCRIPT = `on run argv
     tell application "Google Chrome"
       set selectionCountText to execute active tab of front window javascript "(function(){var text=(document.body&&document.body.innerText)||'';var match=text.match(/已選取\\\\s*([\\\\d,]+)\\\\s*個項目/)||text.match(/([\\\\d,]+)\\\\s+items?\\\\s+selected/i);var raw=match&&match[1];var count=raw?Number(raw.replace(/,/g,'')):0;return Number.isSafeInteger(count)&&count>0?String(count):'invalid';})()"
       set downloadPoint to execute active tab of front window javascript "(function(){var e=Array.from(document.querySelectorAll('button,[role=button]')).filter(function(v){var l=(v.getAttribute('aria-label')||v.getAttribute('data-tooltip')||v.getAttribute('title')||'').trim();var r=v.getBoundingClientRect();if((l!=='下載'&&l!=='Download')||v.offsetParent===null||r.width<=8||r.height<=8||r.bottom<=0||r.right<=0||r.top>=window.innerHeight||r.left>=window.innerWidth)return false;var h=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return h!==null&&h.closest('button,[role=button]')===v;});if(e.length!==1)return e.length===0?'missing':'ambiguous';var r=e[0].getBoundingClientRect();var x=Math.round(window.screenX+r.left+r.width/2);var y=Math.round(window.screenY+(window.outerHeight-window.innerHeight)+r.top+r.height/2);return x+','+y;})()"
-      set trustedWindowId to id of front window
+      set trustedWindowId to id of front window as text
     end tell
     if selectionCountText is "invalid" then error "Drive did not expose a trusted selected item count before Download."
     if downloadPoint is "missing" or downloadPoint is "ambiguous" then error "The trusted Drive Download action is unavailable."
@@ -246,6 +247,7 @@ export const MACOS_VISIBLE_DRIVE_SCRIPT = `on run argv
     tell application "System Events"
       tell process "Google Chrome"
         set frontmost to true
+        delay 1
         click at {clickX, clickY}
       end tell
     end tell
@@ -262,7 +264,7 @@ export const MACOS_VISIBLE_DRIVE_SCRIPT = `on run argv
       error "The Drive Share dialog opened instead of Download."
     end if
     tell application "Google Chrome"
-      if (id of front window) is not trustedWindowId then error "The approved Chrome window changed during Download."
+      if (id of front window as text) is not trustedWindowId then error "The approved Chrome window changed during Download."
     end tell
     return "requested:" & trustedWindowId & ":" & selectionCountText
   end if
@@ -274,7 +276,7 @@ use scripting additions
 
 on run argv
   set folderId to item 1 of argv
-  set trustedWindowId to item 2 of argv as integer
+  set trustedWindowId to item 2 of argv as text
   set approvedDirectory to item 3 of argv
   set filePrefix to item 4 of argv
   set waitSeconds to item 5 of argv as integer
@@ -286,7 +288,7 @@ on run argv
   set approvedDirectoryName to approvedDirectoryString's lastPathComponent() as text
   tell application "Google Chrome"
     if (count of windows) is 0 then error "The trusted Chrome window is unavailable."
-    if (id of front window) is not trustedWindowId then error "The approved Chrome window changed."
+    if (id of front window as text) is not trustedWindowId then error "The approved Chrome window changed."
     set checkScript to "(function(){return location.origin==='https://drive.google.com'&&location.pathname==='/drive/folders/" & folderId & "'?'ready':'mismatch';})()"
     set pageState to execute active tab of front window javascript checkScript
     if pageState is not "ready" then error "The approved Google Drive folder changed."
@@ -311,7 +313,7 @@ on run argv
     end tell
     if trustedSheetDetected then
       tell application "Google Chrome"
-        if (id of front window) is not trustedWindowId then error "The approved Chrome window changed before Save."
+        if (id of front window as text) is not trustedWindowId then error "The approved Chrome window changed before Save."
         set checkScript to "(function(){return location.origin==='https://drive.google.com'&&location.pathname==='/drive/folders/" & folderId & "'?'ready':'mismatch';})()"
         set pageState to execute active tab of front window javascript checkScript
         if pageState is not "ready" then error "The approved Google Drive folder changed before Save."
@@ -326,7 +328,13 @@ on run argv
           set frontmost to true
           set saveSheet to sheet 1 of front window
           set saveSheetRole to value of attribute "AXRole" of saveSheet as text
-          set saveSheetSubrole to value of attribute "AXSubrole" of saveSheet as text
+          set saveSheetSubrole to "AXUnknown"
+          try
+            set observedSaveSheetSubrole to value of attribute "AXSubrole" of saveSheet
+            if observedSaveSheetSubrole is not missing value then set saveSheetSubrole to observedSaveSheetSubrole as text
+          on error errorMessage number errorNumber
+            if errorNumber is not -1728 then error errorMessage number errorNumber
+          end try
           set saveSheetIdentifier to value of attribute "AXIdentifier" of saveSheet as text
           if saveSheetRole is not "AXSheet" then error "The Chrome Save sheet role is invalid."
           if saveSheetSubrole is not "AXDialog" and saveSheetSubrole is not "AXSystemDialog" and saveSheetSubrole is not "AXStandardWindow" and saveSheetSubrole is not "AXUnknown" then error "The Chrome Save sheet subrole is invalid."
@@ -392,7 +400,7 @@ on run argv
           set selectedDirectoryName to value of wherePopup as text
           if selectedDirectoryName is not approvedDirectoryName then error "The Chrome Save location is outside the approved directory."
           tell application "Google Chrome"
-            if (id of front window) is not trustedWindowId then error "The approved Chrome window changed before confirmation."
+            if (id of front window as text) is not trustedWindowId then error "The approved Chrome window changed before confirmation."
             set checkScript to "(function(){return location.origin==='https://drive.google.com'&&location.pathname==='/drive/folders/" & folderId & "'?'ready':'mismatch';})()"
             set pageState to execute active tab of front window javascript checkScript
             if pageState is not "ready" then error "The approved Google Drive folder changed before confirmation."

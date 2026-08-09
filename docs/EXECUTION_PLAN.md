@@ -691,3 +691,19 @@ systems, including a visible Excel consolidation with state checks, interruption
 and resume behavior, denied-permission behavior, user takeover, high-impact
 approval, and an audit trail that matches every visible action. API-only work or
 opening a completed file does not satisfy this phase.
+
+## Phase 51 — Visible Drive click hardening
+
+Status: in progress
+
+Deliver the reviewed human-like Drive path for the paired Desktop Agent: focus
+the exact Chrome window, select the approved Drive items, click the visible
+Download action after foreground activation settles, and verify the resulting
+local workbook before Excel processing. Preserve the existing Save-panel,
+approved-folder, URL, window-identity, abort, and bounded-staging checks.
+
+Acceptance for this phase requires the full repository quality gate, a packaged
+`0.2.4` Agent, a permission-granted single-workbook canary that reaches local
+Excel merge/report and the approved cloud summary/Slides/GAS continuation, and
+a separate large-folder acceptance. A canary that reaches the Drive page but
+does not produce a local workbook is not accepted.
