@@ -539,6 +539,18 @@ export const WebsiteImageGenerationInputSchema = z
   })
   .strict();
 
+export const WebsiteStorefrontImagesInputSchema = z
+  .object({
+    locale: z.enum(['en', 'zh-Hant']).default('zh-Hant'),
+    maxImages: z.number().int().min(1).max(12).default(12),
+    provider: WebsiteImageProviderSelectionSchema.default('auto'),
+    tier: z.enum(['auto', 'economy', 'standard', 'advanced', 'flagship']).default('auto'),
+    versionName: WebsiteVersionNameSchema,
+  })
+  .strict();
+
+export type WebsiteStorefrontImagesInput = z.infer<typeof WebsiteStorefrontImagesInputSchema>;
+
 export const WebsiteGeneratedAssetSchema = z
   .object({
     alt: safeText(1, 180),

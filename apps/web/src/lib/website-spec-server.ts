@@ -10,6 +10,7 @@ import {
   WebsiteSpecGenerationSchema,
   WebsiteSpecRestoreInputSchema,
   WebsiteSpecSchema,
+  WebsiteStorefrontImagesInputSchema,
   WebsiteThemeSchema,
   completeWebsiteBrief,
   createWebsiteSpecForBriefSchema,
@@ -24,6 +25,7 @@ import {
   type WebsiteSpecGeneration,
   type WebsiteSpecGenerationInput,
   type WebsiteSpecRestoreInput,
+  type WebsiteStorefrontImagesInput,
 } from '@ai-workflow-studio/website-schema';
 import { z } from 'zod';
 
@@ -55,6 +57,10 @@ import {
   assertWebsiteImageRequestCost,
   resolveWebsiteImageRoute,
 } from '@/lib/website-image-routing';
+import {
+  buildProductImagePrompt,
+  collectStorefrontImageTargets,
+} from '@/lib/website-storefront-images';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 import {
   createSafeWebsiteEdit,
@@ -931,6 +937,71 @@ export async function generateWebsiteAsset(
       // Reservations expire automatically; never mask the generation outcome.
     }
   }
+}
+
+/**
+ * Auto-fill a photo for every product that lacks one, in one pass. Reuses the
+ * vetted single-image path per product (each attach is its own version) and
+ * stops early when the image budget or a provider becomes unavailable, so a
+ * store gets as many product photos as the plan allows.
+ */
+export async function autoGenerateStorefrontImages(
+  context: WorkspaceContext,
+  projectId: string,
+  inputValue: WebsiteStorefrontImagesInput,
+  signal?: AbortSignal,
+): Promise<{ readonly generated: number; readonly generation: WebsiteSpecGeneration | undefined }> {
+  const input = WebsiteStorefrontImagesInputSchema.parse(inputValue);
+  const project = await getWebsiteProject(context, projectId);
+  assertCanGenerate(context, project);
+  const current = await getWebsiteSpecGeneration(context, project.id);
+  if (current === undefined) {
+    throw new WebsiteStudioError(
+      'WEBSITE_STATE_CONFLICT',
+      'Generate the initial website specification before adding product images.',
+    );
+  }
+  const remainingAssetSlots = Math.max(0, 30 - current.spec.assets.length);
+  const targets = collectStorefrontImageTargets(current.spec).slice(
+    0,
+    Math.min(input.maxImages, remainingAssetSlots),
+  );
+
+  let generated = 0;
+  let generation: WebsiteSpecGeneration | undefined;
+  for (const target of targets) {
+    try {
+      const result = await generateWebsiteAsset(
+        context,
+        projectId,
+        {
+          alt: target.name,
+          itemIndex: target.itemIndex,
+          locale: input.locale,
+          pageSlug: target.pageSlug,
+          prompt: buildProductImagePrompt(current.spec, target.name, input.locale),
+          provider: input.provider,
+          sectionId: target.sectionId,
+          tier: input.tier,
+          versionName: input.versionName,
+        },
+        signal,
+      );
+      generation = result.generation;
+      generated += 1;
+    } catch (error) {
+      // Budget exhaustion or an unavailable provider stops the batch cleanly;
+      // whatever was generated so far is already persisted.
+      if (
+        error instanceof WebsiteStudioError &&
+        (error.code === 'WEBSITE_FORBIDDEN' || error.code === 'WEBSITE_PROVIDER_UNAVAILABLE')
+      ) {
+        break;
+      }
+      throw error;
+    }
+  }
+  return { generated, generation };
 }
 
 export async function restoreWebsiteSpec(

@@ -36,6 +36,10 @@ const ImageGenerationResponseSchema = z.object({
   asset: WebsiteGeneratedAssetSchema,
   generation: WebsiteSpecClientGenerationSchema,
 });
+const AutoImagesResponseSchema = z.object({
+  generated: z.number().int().min(0),
+  generation: WebsiteSpecClientGenerationSchema.optional(),
+});
 const VersionsResponseSchema = z.object({
   versions: z.array(WebsiteSpecClientGenerationSchema),
 });
@@ -90,6 +94,8 @@ const copy = {
     imageAlt: 'Accessible alternative text',
     imageClaude:
       'Claude can refine the visual direction in the natural-language editor; actual pixels are rendered by OpenAI or Gemini.',
+    autoFillImages: 'Auto-fill all product photos',
+    autoFillingImages: 'Generating product photos…',
     imageGenerate: 'Generate and attach image',
     imageGenerating: 'Generating, validating, and storing a private image…',
     imageHelp:
@@ -152,6 +158,8 @@ const copy = {
     history: '版本紀錄',
     imageAlt: '無障礙替代文字',
     imageClaude: 'Claude 可在自然語言編輯器協助優化視覺方向；真正圖片由 OpenAI 或 Gemini 產生。',
+    autoFillImages: '為所有商品自動配圖',
+    autoFillingImages: '正在為商品產生照片…',
     imageGenerate: '產生並套用圖片',
     imageGenerating: '正在產生、驗證並私密儲存圖片…',
     imageHelp:
@@ -375,6 +383,31 @@ export function WebsiteSpecEditor({
     }
   }
 
+  async function autoFillProductImages(): Promise<void> {
+    if (busy || versionName.trim().length === 0) return;
+    setBusy(true);
+    setImageBusy(true);
+    setMessage(undefined);
+    try {
+      const response = await fetch(`/api/websites/${projectId}/images/auto`, {
+        body: JSON.stringify({ locale, provider: imageProvider, tier: imageTier, versionName }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const body: unknown = await response.json();
+      if (!response.ok) throw new Error('auto image generation failed');
+      const parsed = AutoImagesResponseSchema.parse(body);
+      if (parsed.generation !== undefined) {
+        acceptGeneration(parsed.generation, generation.version);
+      }
+    } catch {
+      setMessage(text.failed);
+    } finally {
+      setImageBusy(false);
+      setBusy(false);
+    }
+  }
+
   async function restoreVersion(
     targetVersion: number,
     mode: 'history' | 'redo' | 'undo',
@@ -429,6 +462,8 @@ export function WebsiteSpecEditor({
             label: item.caption ?? `#${index + 1}`,
           }))
         : [];
+  const hasProductGrid =
+    currentPage?.sections.some((item) => item.type === 'product-grid') ?? false;
   const isItemImageSection = section?.type === 'product-grid' || section?.type === 'gallery';
   const imageCompatible =
     section?.type === 'hero' ||
@@ -854,6 +889,17 @@ export function WebsiteSpecEditor({
         >
           <SparkIcon className="size-4" /> {imageBusy ? text.imageGenerating : text.imageGenerate}
         </button>
+        {hasProductGrid ? (
+          <button
+            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white px-4 py-3 text-sm font-semibold text-violet-700 disabled:opacity-40"
+            disabled={busy}
+            onClick={() => void autoFillProductImages()}
+            type="button"
+          >
+            <SparkIcon className="size-4" />{' '}
+            {imageBusy ? text.autoFillingImages : text.autoFillImages}
+          </button>
+        ) : null}
         {lastAsset !== undefined ? (
           <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
             <p className="font-semibold">{text.imageLast}</p>

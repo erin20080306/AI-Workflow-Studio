@@ -126,6 +126,7 @@ export {
   WebsiteSpecRestoreInputSchema,
   WebsiteSpecSchema,
   WebsiteSpecVersionSourceSchema,
+  WebsiteStorefrontImagesInputSchema,
   WebsiteThemeSchema,
   WebsiteVersionNameSchema,
   compareWebsiteSpecs,
@@ -146,4 +147,5 @@ export {
   type WebsiteSpecGenerationInput,
   type WebsiteSpecRestoreInput,
   type WebsiteSpecVersionSource,
+  type WebsiteStorefrontImagesInput,
 } from './spec';
