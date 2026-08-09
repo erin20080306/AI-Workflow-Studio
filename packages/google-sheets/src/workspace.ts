@@ -402,8 +402,8 @@ export class GoogleWorkspaceClient {
   /**
    * Build a chart entirely inside the user's own Google account: write the
    * series into a new Sheet, add a chart to it, and return the ids so a deck
-   * can embed a static image of that chart. No third-party service and no
-   * external image hosting are involved.
+   * can embed a linked, native chart object in Slides. No third-party service
+   * and no external image hosting are involved.
    */
   private async createDataChart(
     accessToken: string,
@@ -703,7 +703,9 @@ export class GoogleWorkspaceClient {
               },
               transform: { scaleX: 1, scaleY: 1, translateX: 36, translateY: 96, unit: 'PT' },
             },
-            linkingMode: 'NOT_LINKED_IMAGE',
+            // Keep the chart as a native Slides object backed by the user's
+            // own AIWS chart spreadsheet instead of flattening it to a PNG.
+            linkingMode: 'LINKED',
             objectId: `${chartSlideId}_chart`,
             spreadsheetId: chartEmbed.spreadsheetId,
           },

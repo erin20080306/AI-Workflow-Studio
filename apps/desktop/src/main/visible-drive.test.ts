@@ -175,7 +175,7 @@ describe('visible Drive download tracking', () => {
       'if (id of front window as text) is not trustedWindowId then error "The approved Chrome window changed during Download."',
     );
     expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(
-      'set trustedWindowId to item 2 of argv as text',
+      'set trustedWindowId to (item 2 of argv) as text',
     );
     expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).not.toContain(
       'set trustedWindowId to item 2 of argv as integer',

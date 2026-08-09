@@ -17,8 +17,8 @@ chart path (`deriveChartSeries`, `createDataChart`, `createProfessionalDeck`).
    spreadsheet titled `AIWS chart — <title>` with a `Data` sheet, then adds a
    native `pieChart`/`basicChart`, returning `{ spreadsheetId, chartId }`.
 3. `createProfessionalDeck` embeds it with `createSheetsChart`
-   (`NOT_LINKED_IMAGE`) so the deck shows a real chart rendered inside the
-   user's own Google account — no third-party image service.
+   (`LINKED`) so the deck contains a native chart object backed by the user's
+   own Google Sheet — no third-party image service.
 
 ## Prerequisites
 
@@ -58,8 +58,8 @@ chart path (`deriveChartSeries`, `createDataChart`, `createProfessionalDeck`).
 - **`GOOGLE_AUTHORIZATION_INVALID` / missing scope**: the connection lacks
   Sheets or Slides scope — reconnect and re-consent.
 - **Chart shows as a static image**: verify the embed used `createSheetsChart`
-  with `NOT_LINKED_IMAGE`; a linked-image fallback would indicate the chartId or
-  spreadsheetId was not threaded through.
+  with `LINKED`; `NOT_LINKED_IMAGE` is disallowed because it inserts an
+  unlinked image rather than an editable chart object.
 
 ## Desktop path
 

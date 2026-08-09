@@ -241,10 +241,10 @@ use scripting additions
 
 on run argv
   set folderId to item 1 of argv
-  set trustedWindowId to item 2 of argv as text
+  set trustedWindowId to (item 2 of argv) as text
   set approvedDirectory to item 3 of argv
   set filePrefix to item 4 of argv
-  set waitSeconds to item 5 of argv as integer
+  set waitSeconds to (item 5 of argv) as integer
   if approvedDirectory does not start with "/" then error "The approved download directory is invalid."
   if filePrefix does not start with "AIWS-" then error "The approved download filename is invalid."
   if waitSeconds < 1 or waitSeconds > 600 then error "The download dialog wait is invalid."

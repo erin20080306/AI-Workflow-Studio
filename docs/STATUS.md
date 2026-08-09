@@ -4335,3 +4335,15 @@ Status: in progress
   tabs; the existing `flatten` behavior remains the default for older plans.
   Planner intent coverage and a desktop end-to-end fixture verify the tab
   count, duplicate-name suffixing, index, summary, and non-overwriting output.
+- The live chart acceptance path now uses Slides `createSheetsChart` with
+  `LINKED`, keeping the chart as a native, refreshable Slides object backed by
+  the account-owned `AIWS chart — …` spreadsheet. `NOT_LINKED_IMAGE` is not an
+  accepted fallback because Google inserts it as a static image.
+- The cloud batch tick now selects only unfinished Drive source steps and
+  inspects more candidates before applying its active-run limit, preventing
+  historical completed steps from starving a current continuation.
+- A live large-folder validation reached its first durable checkpoint at
+  40 / 268 workbooks and 2,664 rows. The next continuation did not arrive
+  during the observation window, so the real-folder acceptance remains open
+  until the production scheduler resumes the next batch and the downstream
+  report/Slides checks complete.

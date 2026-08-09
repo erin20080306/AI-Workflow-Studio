@@ -238,12 +238,12 @@ describe('GoogleWorkspaceClient', () => {
     );
     expect(chartBatch?.body).toContain('addChart');
     expect(chartBatch?.body).toContain('COLUMN');
-    // The deck embeds that chart by id as a static image — no external URL.
+    // The deck embeds that chart by id as a linked native chart — no external URL.
     const slideBatch = calls.find((call) => call.url.includes('/presentations/'));
     expect(slideBatch?.body).toContain('createSheetsChart');
     expect(slideBatch?.body).toContain('spreadsheet_5678');
     expect(slideBatch?.body).toContain('"chartId":42');
-    expect(slideBatch?.body).toContain('NOT_LINKED_IMAGE');
+    expect(slideBatch?.body).toContain('LINKED');
     expect(calls.every((call) => !call.url.includes('quickchart'))).toBe(true);
   });
 

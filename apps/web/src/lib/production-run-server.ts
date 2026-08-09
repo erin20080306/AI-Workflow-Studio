@@ -1963,13 +1963,17 @@ export async function resumeProductionCloudRuns(
   }
   const parsedLimit = z.number().int().min(1).max(5).parse(limit);
   const admin = createSupabaseAdminClient();
+  // Only unfinished source steps are candidates. Keeping `succeeded` here
+  // allows historical completed runs to starve the oldest active continuation
+  // because the query is ordered by updated_at and capped before the run state
+  // is checked below.
   const candidates = await admin
     .from('workflow_run_steps')
     .select('tenant_id, workflow_run_id')
     .eq('node_type', 'google_drive.read_excel_folder')
-    .in('status', ['running', 'succeeded'])
+    .eq('status', 'running')
     .order('updated_at')
-    .limit(parsedLimit);
+    .limit(Math.min(parsedLimit * 20, 100));
   if (candidates.error !== null) {
     throw new RunOrchestrationError(
       'RUN_STATE_CONFLICT',
@@ -1982,6 +1986,7 @@ export async function resumeProductionCloudRuns(
   let continuedCount = 0;
   let failedCount = 0;
   for (const candidate of rows) {
+    if (continuedCount + failedCount >= parsedLimit) break;
     try {
       const runResult = await admin
         .from('workflow_runs')

@@ -59,10 +59,11 @@ off-account and violates the platform's no-external-URL / local-first posture.
   `addChart` (BASIC chart, type from series.kind) → returns `{ chartId }`.
 - In `createProfessionalDeck`, when a slide carries a chart reference, emit a
   Slides `createSheetsChart` request:
-  `{ createSheetsChart: { spreadsheetId, chartId, linkingMode: 'NOT_LINKED_IMAGE',
+  `{ createSheetsChart: { spreadsheetId, chartId, linkingMode: 'LINKED',
  elementProperties: { pageObjectId, size, transform }, objectId } }`.
-  `NOT_LINKED_IMAGE` embeds a static image of the chart (no live link back to
-  the sheet), which is the safest default.
+  `LINKED` embeds a native chart object that remains connected to the source
+  spreadsheet and can be refreshed from Sheets. `NOT_LINKED_IMAGE` is not used
+  because it would insert a static image.
 
 ### 3. Wire the slides builder
 
@@ -92,7 +93,7 @@ off-account and violates the platform's no-external-URL / local-first posture.
 Implemented at the code + unit-test level:
 
 - `e6358d1` — native Google chart in `createProfessionalDeck` (Sheet →
-  `addChart` → Slides `createSheetsChart`, `NOT_LINKED_IMAGE`), Sheets base URL,
+  `addChart` → Slides `createSheetsChart`, `LINKED`), Sheets base URL,
   mocked-transport test.
 - `df1a158` — `deriveChartSeries` aggregates a numeric column by a categorical
   column from the cloud Drive-Excel data (bounded to 12 categories); the
