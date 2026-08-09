@@ -60,7 +60,7 @@ off-account and violates the platform's no-external-URL / local-first posture.
 - In `createProfessionalDeck`, when a slide carries a chart reference, emit a
   Slides `createSheetsChart` request:
   `{ createSheetsChart: { spreadsheetId, chartId, linkingMode: 'NOT_LINKED_IMAGE',
-   elementProperties: { pageObjectId, size, transform }, objectId } }`.
+ elementProperties: { pageObjectId, size, transform }, objectId } }`.
   `NOT_LINKED_IMAGE` embeds a static image of the chart (no live link back to
   the sheet), which is the safest default.
 
