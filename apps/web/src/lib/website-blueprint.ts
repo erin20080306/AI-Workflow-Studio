@@ -54,6 +54,27 @@ const BlueprintQuestionSchema = z
   })
   .strip();
 
+const BlueprintProductSchema = z
+  .object({
+    availabilityLabel: blueprintText(1, 40).optional(),
+    badge: blueprintText(1, 24).optional(),
+    name: blueprintText(2, 100),
+    priceLabel: blueprintText(1, 40),
+    sku: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,39}$/)
+      .optional(),
+    variant: blueprintText(1, 60).optional(),
+  })
+  .strip();
+
+const BlueprintMediaSchema = z
+  .object({
+    caption: blueprintText(2, 80),
+  })
+  .strip();
+
 const WebsiteBlueprintSectionSchema = z
   .object({
     attribution: blueprintText(2, 120).optional(),
@@ -63,8 +84,10 @@ const WebsiteBlueprintSectionSchema = z
     layout: z
       .enum(['centered', 'editorial', 'image-left', 'image-right', 'split', 'text'])
       .optional(),
+    media: z.array(BlueprintMediaSchema).max(8).optional(),
     metrics: z.array(BlueprintMetricSchema).max(6).optional(),
     plans: z.array(BlueprintPlanSchema).max(4).optional(),
+    products: z.array(BlueprintProductSchema).max(12).optional(),
     questions: z.array(BlueprintQuestionSchema).max(12).optional(),
     quote: blueprintText(10, 600).optional(),
     role: blueprintText(2, 120).optional(),
@@ -78,6 +101,8 @@ const WebsiteBlueprintSectionSchema = z
       'testimonial',
       'pricing',
       'faq',
+      'product-grid',
+      'gallery',
     ]),
   })
   .strip();
@@ -146,6 +171,14 @@ function boundedText(value: string, min: number, max: number, filler: string): s
   let text = value.trim().slice(0, max);
   while (text.length < min) text = `${text} ${filler}`.trim().slice(0, max);
   return text;
+}
+
+/** Extract a numeric price from a display label (e.g. "NT$1,680 起" → 1680) for cart math. */
+function parsePriceAmount(priceLabel: string): number | undefined {
+  const match = /\d[\d,]*(?:\.\d+)?/u.exec(priceLabel);
+  if (match === null) return undefined;
+  const amount = Number(match[0].replaceAll(',', ''));
+  return Number.isFinite(amount) && amount >= 0 && amount <= 1_000_000_000 ? amount : undefined;
 }
 
 function sectionId(
@@ -320,6 +353,71 @@ function compileSection(
               ],
         title,
         type: 'faq',
+      };
+    }
+    case 'product-grid': {
+      const source = section.products ?? [];
+      const products = (
+        source.length >= 2
+          ? source
+          : [
+              ...source,
+              {
+                name: boundedText(title || primaryActionLabel, 2, 100, primaryActionLabel),
+                priceLabel: '—',
+              },
+              {
+                name: boundedText(eyebrow || primaryActionLabel, 2, 100, primaryActionLabel),
+                priceLabel: '—',
+              },
+            ]
+      )
+        .slice(0, 12)
+        .map((product) => {
+          const price = parsePriceAmount(product.priceLabel);
+          return {
+            ...(product.availabilityLabel === undefined
+              ? {}
+              : { availabilityLabel: product.availabilityLabel }),
+            ...(product.badge === undefined ? {} : { badge: product.badge }),
+            name: boundedText(product.name, 2, 100, primaryActionLabel),
+            ...(price === undefined ? {} : { price }),
+            priceLabel: boundedText(product.priceLabel, 1, 40, '—'),
+            ...(product.sku === undefined ? {} : { sku: product.sku }),
+            ...(product.variant === undefined ? {} : { variant: product.variant }),
+          };
+        });
+      return {
+        ...(body.length >= 5 ? { body } : {}),
+        columns: products.length >= 4 ? '4' : products.length === 2 ? '2' : '3',
+        ...(eyebrow.length === 0 ? {} : { eyebrow }),
+        id,
+        items: products,
+        title,
+        type: 'product-grid',
+      };
+    }
+    case 'gallery': {
+      const source = section.media ?? [];
+      const media = (
+        source.length >= 2
+          ? source
+          : [
+              ...source,
+              { caption: boundedText(title || primaryActionLabel, 2, 80, primaryActionLabel) },
+              { caption: boundedText(eyebrow || primaryActionLabel, 2, 80, primaryActionLabel) },
+            ]
+      )
+        .slice(0, 8)
+        .map((item) => ({ caption: boundedText(item.caption, 1, 80, primaryActionLabel) }));
+      return {
+        ...(body.length >= 5 ? { body } : {}),
+        ...(eyebrow.length === 0 ? {} : { eyebrow }),
+        id,
+        items: media,
+        layout: 'grid',
+        title,
+        type: 'gallery',
       };
     }
   }

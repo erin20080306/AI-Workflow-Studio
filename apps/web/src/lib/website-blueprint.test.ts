@@ -236,6 +236,92 @@ describe('website blueprint compiler', () => {
     expect(stats?.items).toHaveLength(2);
   });
 
+  it('compiles a product-grid into commerce cards and parses a numeric price for the cart', () => {
+    const parsed = WebsiteBlueprintSchema.parse({
+      ...blueprint,
+      pages: [
+        {
+          ...blueprint.pages[0],
+          sections: [
+            blueprint.pages[0]!.sections[0],
+            {
+              body: '每一件都經得起日復一日的穿著。',
+              eyebrow: '本週選品',
+              products: [
+                {
+                  availabilityLabel: '現貨 18',
+                  badge: '新品',
+                  name: '雲感落肩襯衫',
+                  priceLabel: 'NT$1,680',
+                  sku: 'AN-101',
+                  variant: '霧白 / M',
+                },
+                { name: '有機棉針織衫', priceLabel: '請洽詢' },
+              ],
+              title: '本週新品',
+              type: 'product-grid',
+            },
+          ],
+          slug: 'home',
+        },
+      ],
+    });
+    const spec = compileWebsiteBlueprint(project, brief, 'zh-Hant', parsed);
+    expect(WebsiteSpecSchema.parse(spec)).toEqual(spec);
+    const grid = spec.pages[0]?.sections.find((section) => section.type === 'product-grid') as
+      | {
+          columns: string;
+          items: {
+            badge?: string;
+            name: string;
+            price?: number;
+            priceLabel: string;
+            sku?: string;
+            variant?: string;
+          }[];
+        }
+      | undefined;
+    expect(grid?.columns).toBe('2');
+    expect(grid?.items[0]).toMatchObject({
+      badge: '新品',
+      name: '雲感落肩襯衫',
+      price: 1680,
+      priceLabel: 'NT$1,680',
+      sku: 'AN-101',
+      variant: '霧白 / M',
+    });
+    // A non-numeric price label carries no cart amount.
+    expect(grid?.items[1]).not.toHaveProperty('price');
+  });
+
+  it('compiles a gallery into captioned media items', () => {
+    const parsed = WebsiteBlueprintSchema.parse({
+      ...blueprint,
+      pages: [
+        {
+          ...blueprint.pages[0],
+          sections: [
+            blueprint.pages[0]!.sections[0],
+            {
+              body: '從街拍到日常，感受材質的重量。',
+              eyebrow: 'Lookbook',
+              media: [{ caption: '晨光 / 城市' }, { caption: '靜物 / 材質' }],
+              title: '本季形象',
+              type: 'gallery',
+            },
+          ],
+          slug: 'home',
+        },
+      ],
+    });
+    const spec = compileWebsiteBlueprint(project, brief, 'zh-Hant', parsed);
+    expect(WebsiteSpecSchema.parse(spec)).toEqual(spec);
+    const gallery = spec.pages[0]?.sections.find((section) => section.type === 'gallery') as
+      { items: { caption?: string }[]; layout: string } | undefined;
+    expect(gallery?.layout).toBe('grid');
+    expect(gallery?.items.map((item) => item.caption)).toEqual(['晨光 / 城市', '靜物 / 材質']);
+  });
+
   it('pads a stats section with too few metrics so it still satisfies the spec', () => {
     const parsed = WebsiteBlueprintSchema.parse({
       ...blueprint,

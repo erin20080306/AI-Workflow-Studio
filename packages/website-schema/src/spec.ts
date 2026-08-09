@@ -207,6 +207,48 @@ const ContentSectionSchema = SectionBaseSchema.extend({
   type: z.literal('content'),
 }).strict();
 
+const ProductItemSchema = z
+  .object({
+    assetId: IdentifierSchema.optional(),
+    availabilityLabel: safeText(1, 40).optional(),
+    badge: safeText(1, 24).optional(),
+    currency: safeText(1, 8).optional(),
+    name: safeText(2, 100),
+    price: z.number().nonnegative().max(1_000_000_000).optional(),
+    priceLabel: safeText(1, 40),
+    sku: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,39}$/)
+      .optional(),
+    variant: safeText(1, 60).optional(),
+  })
+  .strict();
+
+const ProductGridSectionSchema = SectionBaseSchema.extend({
+  body: safeText(5, 400).optional(),
+  columns: z.enum(['2', '3', '4']),
+  eyebrow: safeText(1, 80).optional(),
+  items: z.array(ProductItemSchema).min(2).max(12),
+  title: safeText(3, 120),
+  type: z.literal('product-grid'),
+}).strict();
+
+const GalleryItemSchema = z
+  .object({
+    assetId: IdentifierSchema.optional(),
+    caption: safeText(1, 80).optional(),
+  })
+  .strict();
+
+const GallerySectionSchema = SectionBaseSchema.extend({
+  body: safeText(5, 400).optional(),
+  eyebrow: safeText(1, 80).optional(),
+  items: z.array(GalleryItemSchema).min(2).max(8),
+  layout: z.enum(['grid', 'wide']),
+  title: safeText(3, 120),
+  type: z.literal('gallery'),
+}).strict();
+
 const FooterSectionSchema = SectionBaseSchema.extend({
   copyright: safeText(2, 160),
   links: z.array(WebsiteActionSchema).max(12),
@@ -222,6 +264,8 @@ export const WebsiteSectionSchema = z.discriminatedUnion('type', [
   FaqSectionSchema,
   CtaSectionSchema,
   ContentSectionSchema,
+  ProductGridSectionSchema,
+  GallerySectionSchema,
   FooterSectionSchema,
 ]);
 
@@ -291,6 +335,17 @@ export const WebsiteSpecSchema = z
             code: 'custom',
             message: 'Website section asset references must exist.',
             path: ['pages', pageIndex, 'sections', sectionIndex, 'assetId'],
+          });
+        }
+        if (section.type === 'product-grid' || section.type === 'gallery') {
+          section.items.forEach((item, itemIndex) => {
+            if (item.assetId !== undefined && !assetIds.has(item.assetId)) {
+              context.addIssue({
+                code: 'custom',
+                message: 'Website section asset references must exist.',
+                path: ['pages', pageIndex, 'sections', sectionIndex, 'items', itemIndex, 'assetId'],
+              });
+            }
           });
         }
       });

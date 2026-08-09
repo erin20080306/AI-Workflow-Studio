@@ -33,7 +33,9 @@ main{overflow:hidden}.section{padding:var(--space) clamp(24px,7vw,110px)}.sectio
 .stats{background:var(--text);color:var(--bg)}.stat-grid{display:grid;gap:28px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.stat-value{font-family:var(--display);font-size:clamp(38px,5vw,52px);font-weight:800;letter-spacing:-.03em}.stat-label{color:color-mix(in srgb,var(--bg) 66%,transparent);font-size:13px;font-weight:650;letter-spacing:.04em;margin-top:6px}.testimonial-grid{align-items:center;display:grid;gap:36px;grid-template-columns:minmax(220px,.42fr) minmax(0,1fr)}.testimonial-grid .asset{aspect-ratio:1;min-height:240px}.quote{background:var(--surface-2);border-radius:var(--radius);font-family:var(--display);font-size:clamp(24px,3vw,38px);font-weight:600;letter-spacing:-.02em;line-height:1.3;padding:clamp(30px,6vw,72px)}.attribution{color:var(--muted);font-size:14px;font-weight:600;margin-top:26px}.price{font-family:var(--display);font-size:34px;font-weight:800;letter-spacing:-.03em}.card.highlighted{border-color:var(--accent);box-shadow:0 24px 56px color-mix(in srgb,var(--accent) 15%,transparent)}.features{color:var(--muted);list-style:none;margin:16px 0 0;padding:0}.features li{padding:7px 0 7px 26px;position:relative}.features li:before{color:var(--accent-2);content:"✓";font-weight:800;left:0;position:absolute}.faq-item{border-bottom:1px solid var(--line);padding:26px 0}.faq-item h3{font-family:var(--display);font-size:19px;font-weight:700;margin:0 0 10px}.faq-item p{color:var(--muted);margin:0}.cta{background:var(--text);border-radius:var(--radius);color:var(--bg);overflow:hidden;padding:clamp(40px,7vw,84px);position:relative;text-align:center}.cta .section-title{color:var(--bg)}.cta .section-body{color:color-mix(in srgb,var(--bg) 68%,transparent);margin-left:auto;margin-right:auto}.cta .actions{justify-content:center}.cta .action{background:var(--bg);border-color:var(--bg);color:var(--text)}.cta .action.secondary{background:transparent;color:var(--bg);border-color:color-mix(in srgb,var(--bg) 30%,transparent)}
 .content-grid{align-items:center;display:grid;gap:clamp(32px,5vw,64px);grid-template-columns:repeat(2,minmax(0,1fr))}.content-grid.image-right .asset{order:2}.content-grid.text{display:block;max-width:72ch}.site-footer{background:var(--surface);border-top:1px solid var(--line);padding:44px clamp(24px,7vw,110px)}.footer-inner{align-items:center;display:flex;gap:24px;justify-content:space-between;margin:0 auto;max-width:var(--maxw)}.copyright{color:var(--muted);font-size:13px}.footer-links{display:flex;flex-wrap:wrap;gap:4px}
 .managed-content{background:var(--surface)}.managed-list{display:grid;gap:18px;margin-top:28px}.managed-entry{border-left:3px solid var(--accent);padding:8px 0 8px 24px}.managed-entry h3{font-family:var(--display);font-size:25px;font-weight:700;letter-spacing:var(--tracking);margin:0 0 8px}.managed-entry p{color:var(--muted);margin:0;white-space:pre-line}.contact-panel,.data-panel{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);display:grid;gap:18px;grid-template-columns:repeat(2,minmax(0,1fr));margin-top:28px;padding:clamp(24px,5vw,48px)}.contact-panel label,.data-panel label{color:var(--muted);display:grid;font-size:13px;font-weight:700;gap:7px}.contact-panel .wide,.data-panel .wide{grid-column:1/-1}.contact-panel input,.contact-panel textarea,.data-panel input,.data-panel textarea,.data-panel select{background:var(--surface);border:1px solid var(--line);border-radius:12px;color:var(--text);font:inherit;padding:12px 14px}.contact-panel textarea,.data-panel textarea{min-height:150px;resize:vertical}.contact-panel button,.data-panel button{background:var(--accent);border:0;border-radius:var(--radius);color:var(--on-accent);cursor:pointer;font-weight:750;justify-self:start;padding:14px 26px}.contact-honeypot{clip:rect(0 0 0 0);clip-path:inset(50%);height:1px;overflow:hidden;position:absolute;white-space:nowrap;width:1px}.data-role{background:color-mix(in srgb,var(--accent) 12%,var(--surface));border-radius:999px;color:var(--accent);display:inline-block;font-size:11px;font-weight:800;margin-top:8px;padding:5px 10px}.checkbox-field{align-items:center!important;display:flex!important;flex-direction:row-reverse;justify-content:flex-end}.checkbox-field input{width:auto}
-@media(max-width:800px){.site-header{align-items:flex-start;flex-direction:column;gap:10px;padding:16px 22px}.nav{max-width:100%;overflow:hidden}.nav-item{padding:6px 8px}.section{padding:64px 22px}.hero{min-height:auto}.hero-grid,.content-grid,.testimonial-grid{grid-template-columns:1fr}.columns-3,.columns-4{grid-template-columns:repeat(2,minmax(0,1fr))}.footer-inner{align-items:flex-start;flex-direction:column}}@media(max-width:520px){.columns-2,.columns-3,.columns-4{grid-template-columns:1fr}.hero .section-title{font-size:clamp(38px,12vw,52px)}.section-title{font-size:34px}.section-body{font-size:16px}.card{padding:24px}.asset{min-height:220px}.site-header{position:relative}}
+.product-grid{gap:24px}.product-card{display:flex;flex-direction:column;overflow:hidden;padding:0}.product-media{aspect-ratio:4/5;background:linear-gradient(150deg,var(--surface-2),color-mix(in srgb,var(--accent) 16%,var(--surface)));position:relative}.product-media .asset{aspect-ratio:4/5;border:0;border-radius:0;height:100%;margin:0;min-height:0;width:100%}.product-badge{background:var(--text);border-radius:999px;color:var(--bg);font-size:11px;font-weight:750;left:14px;letter-spacing:.08em;padding:5px 11px;position:absolute;top:14px;z-index:2}.product-info{display:flex;flex-direction:column;gap:4px;padding:20px 22px 24px}.product-sku{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}.product-card h3{font-family:var(--display);font-size:18px;font-weight:700;letter-spacing:var(--tracking);margin:6px 0 0}.product-meta{color:var(--muted);font-size:13px;margin:0}.product-price{font-family:var(--display);font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:10px}
+.gallery{display:grid;gap:16px;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:44px}.gallery-wide{grid-template-columns:repeat(2,minmax(0,1fr))}.gallery-item{margin:0}.gallery-item .asset{aspect-ratio:1;min-height:0;width:100%}.gallery-wide .gallery-item .asset{aspect-ratio:4/3}.gallery-caption{color:var(--muted);font-size:12px;font-weight:600;margin-top:10px}
+@media(max-width:800px){.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.site-header{align-items:flex-start;flex-direction:column;gap:10px;padding:16px 22px}.nav{max-width:100%;overflow:hidden}.nav-item{padding:6px 8px}.section{padding:64px 22px}.hero{min-height:auto}.hero-grid,.content-grid,.testimonial-grid{grid-template-columns:1fr}.columns-3,.columns-4{grid-template-columns:repeat(2,minmax(0,1fr))}.footer-inner{align-items:flex-start;flex-direction:column}}@media(max-width:520px){.columns-2,.columns-3,.columns-4,.gallery,.gallery-wide{grid-template-columns:1fr}.hero .section-title{font-size:clamp(38px,12vw,52px)}.section-title{font-size:34px}.section-body{font-size:16px}.card{padding:24px}.asset{min-height:220px}.site-header{position:relative}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto}}
 `;
 
@@ -116,6 +118,8 @@ function sectionHasContact(section: WebsiteSection): boolean {
     case 'content':
     case 'faq':
     case 'feature-grid':
+    case 'gallery':
+    case 'product-grid':
     case 'stats':
     case 'testimonial':
       return false;
@@ -385,6 +389,53 @@ function sectionMarkup(
       }<div><h2 class="section-title">${escapeHtml(
         section.title,
       )}</h2><p class="section-body">${escapeHtml(section.body)}</p></div></div></section>`;
+    case 'product-grid':
+      return `<section class="section" id="${id}"><div class="section-inner"><div class="feature-head">${
+        section.eyebrow === undefined
+          ? ''
+          : `<div class="eyebrow">${escapeHtml(section.eyebrow)}</div>`
+      }<h2 class="section-title">${escapeHtml(section.title)}</h2>${
+        section.body === undefined ? '' : `<p class="section-body">${escapeHtml(section.body)}</p>`
+      }</div><div class="grid product-grid columns-${section.columns}">${section.items
+        .map((item) => {
+          const media =
+            item.assetId === undefined ? '' : assetMarkup(item.assetId, spec, assetUrls);
+          const badge =
+            item.badge === undefined
+              ? ''
+              : `<span class="product-badge">${escapeHtml(item.badge)}</span>`;
+          const meta = [item.variant, item.availabilityLabel]
+            .filter((value): value is string => value !== undefined)
+            .map((value) => escapeHtml(value))
+            .join(' · ');
+          const sku =
+            item.sku === undefined
+              ? ''
+              : `<span class="product-sku">${escapeHtml(item.sku)}</span>`;
+          return `<article class="card product-card"><div class="product-media">${media}${badge}</div><div class="product-info">${sku}<h3>${escapeHtml(
+            item.name,
+          )}</h3>${meta.length === 0 ? '' : `<p class="product-meta">${meta}</p>`}<div class="product-price">${escapeHtml(
+            item.priceLabel,
+          )}</div></div></article>`;
+        })
+        .join('')}</div></div></section>`;
+    case 'gallery':
+      return `<section class="section" id="${id}"><div class="section-inner"><div class="feature-head">${
+        section.eyebrow === undefined
+          ? ''
+          : `<div class="eyebrow">${escapeHtml(section.eyebrow)}</div>`
+      }<h2 class="section-title">${escapeHtml(section.title)}</h2>${
+        section.body === undefined ? '' : `<p class="section-body">${escapeHtml(section.body)}</p>`
+      }</div><div class="gallery gallery-${section.layout}">${section.items
+        .map(
+          (item) =>
+            `<figure class="gallery-item">${assetMarkup(item.assetId, spec, assetUrls)}${
+              item.caption === undefined
+                ? ''
+                : `<figcaption class="gallery-caption">${escapeHtml(item.caption)}</figcaption>`
+            }</figure>`,
+        )
+        .join('')}</div></div></section>`;
     case 'footer':
       return `<footer class="site-footer" id="${id}"><div class="footer-inner"><div class="copyright">${escapeHtml(
         section.copyright,

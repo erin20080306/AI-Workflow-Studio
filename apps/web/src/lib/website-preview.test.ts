@@ -82,6 +82,55 @@ describe('website preview', () => {
     expect(html).not.toContain('<form');
   });
 
+  it('renders commerce product-grid and gallery sections as static markup', () => {
+    const commerce = WebsiteSpecSchema.parse({
+      ...spec,
+      pages: [
+        {
+          ...spec.pages[0],
+          sections: [
+            {
+              columns: '3',
+              eyebrow: 'This week',
+              id: 'products-main',
+              items: [
+                {
+                  availabilityLabel: 'In stock 18',
+                  badge: 'New',
+                  name: 'Drop-shoulder shirt',
+                  price: 1680,
+                  priceLabel: 'NT$1,680',
+                  sku: 'AN-101',
+                  variant: 'Mist / M',
+                },
+                { name: 'Cotton knit', priceLabel: 'NT$1,280' },
+              ],
+              title: 'New arrivals',
+              type: 'product-grid',
+            },
+            {
+              id: 'gallery-main',
+              items: [{ caption: 'Morning' }, { caption: 'Material' }],
+              layout: 'grid',
+              title: 'Lookbook',
+              type: 'gallery',
+            },
+            spec.pages[0]!.sections[1],
+          ],
+        },
+      ],
+    });
+    const html = renderWebsitePreviewDocument(commerce, 'home');
+    expect(html).toContain('class="card product-card"');
+    expect(html).toContain('product-badge">New');
+    expect(html).toContain('product-sku">AN-101');
+    expect(html).toContain('Drop-shoulder shirt');
+    expect(html).toContain('product-price">NT$1,680');
+    expect(html).toContain('class="gallery gallery-grid"');
+    expect(html).toContain('gallery-caption">Morning');
+    expect(html).not.toContain('<script');
+  });
+
   it('renders published navigation, managed content, and a same-origin contact form', () => {
     const html = renderWebsitePublishedDocument(
       spec,
