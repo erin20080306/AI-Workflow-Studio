@@ -89,6 +89,19 @@ off-account and violates the platform's no-external-URL / local-first posture.
 
 ## Status
 
-Not started. The structured-section slides improvement (commit `4e78010`)
-already fixes the main "crude deck" problem; charts are an additive enhancement
-gated on the privacy decision above and a live Google verification pass.
+Implemented at the code + unit-test level:
+
+- `e6358d1` — native Google chart in `createProfessionalDeck` (Sheet →
+  `addChart` → Slides `createSheetsChart`, `NOT_LINKED_IMAGE`), Sheets base URL,
+  mocked-transport test.
+- `df1a158` — `deriveChartSeries` aggregates a numeric column by a categorical
+  column from the cloud Drive-Excel data (bounded to 12 categories); the
+  `ai.summarize` and `report.compose` nodes carry the series forward and the
+  slides node passes it to the deck. Uses only data the cloud node already
+  holds, so the desktop→cloud privacy boundary is unchanged.
+
+Remaining: a live-Google end-to-end acceptance run (real credentials) to
+confirm the deck opens with a rendered chart — the same gated verification the
+bundled-LibreOffice work needs. The chart currently ships only in the **cloud**
+Drive-Excel flow, where full rows are available; the desktop path would need a
+privacy-reviewed aggregate before it could chart.
