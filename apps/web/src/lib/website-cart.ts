@@ -42,7 +42,9 @@ qty.appendChild(dec);qty.appendChild(num);qty.appendChild(inc);row.appendChild(q
 var rm=document.createElement('button');rm.type='button';rm.className='cart-remove';rm.textContent=labels.remove;
 rm.addEventListener('click',function(){remove(item.id)});row.appendChild(rm);
 list.appendChild(row)})(cart[i])}
-var sub=root.querySelector('[data-cart-subtotal]');if(sub)sub.textContent=money(subtotal())}
+var sub=root.querySelector('[data-cart-subtotal]');if(sub)sub.textContent=money(subtotal());
+var orderField=root.querySelector('[data-cart-order-message]');
+if(orderField){var lines=[root.getAttribute('data-cart-order-title')||'Order'];for(var j=0;j<cart.length;j++){var it=cart[j];lines.push('- '+it.name+(it.variant?(' ('+it.variant+')'):'')+' x'+it.qty+(it.price?(' = '+money(it.price*it.qty)):''))}lines.push((root.getAttribute('data-cart-subtotal-label')||'Subtotal')+': '+money(subtotal()));orderField.value=lines.join('\\n').slice(0,1990)}}
 function add(p){var e=find(p.id);if(e){e.qty++}else{cart.push({id:p.id,name:p.name,price:p.price,currency:p.currency,variant:p.variant,qty:1})}write(cart);render();open()}
 function change(id,d){var e=find(id);if(!e)return;e.qty+=d;if(e.qty<=0){remove(id);return}write(cart);render()}
 function remove(id){cart=cart.filter(function(x){return x.id!==id});write(cart);render()}
@@ -57,8 +59,10 @@ for(var t=0;t<togglers.length;t++)togglers[t].addEventListener('click',open);
 var closers=root.querySelectorAll('[data-cart-close]');
 for(var c=0;c<closers.length;c++)closers[c].addEventListener('click',close);
 document.addEventListener('keydown',function(e){if(e.key==='Escape')close()});
+var checkoutForm=root.querySelector('[data-cart-checkout-form]');
+if(checkoutForm)checkoutForm.addEventListener('submit',function(e){if(cart.length===0){e.preventDefault();return}render()});
 render()})();`;
 
 // SHA-256 of WEBSITE_CART_SCRIPT, in CSP source-expression form. Guarded by a
 // test so it cannot drift from the script above.
-export const WEBSITE_CART_SCRIPT_SHA256 = 'sha256-EFxf1nyyk3zsZQedf7Bs+McfWJ/2LsbmHYhw4UBb5us=';
+export const WEBSITE_CART_SCRIPT_SHA256 = 'sha256-uJZc8m1oSm/OnXQVKwAeZep/85QFrwu2algs3bEdnfo=';
