@@ -30,16 +30,55 @@ const BlueprintFeatureSchema = z
   })
   .strip();
 
+const BlueprintMetricSchema = z
+  .object({
+    label: blueprintText(1, 80),
+    value: blueprintText(1, 40),
+  })
+  .strip();
+
+const BlueprintPlanSchema = z
+  .object({
+    description: blueprintText(5, 240),
+    features: z.array(blueprintText(1, 100)).min(1).max(10),
+    highlighted: z.boolean().optional(),
+    name: blueprintText(1, 60),
+    priceLabel: blueprintText(1, 60),
+  })
+  .strip();
+
+const BlueprintQuestionSchema = z
+  .object({
+    answer: blueprintText(5, 600),
+    question: blueprintText(3, 160),
+  })
+  .strip();
+
 const WebsiteBlueprintSectionSchema = z
   .object({
+    attribution: blueprintText(2, 120).optional(),
     body: blueprintText(0, 1_500),
     eyebrow: blueprintText(1, 80).optional(),
     items: z.array(BlueprintFeatureSchema).max(6).optional(),
     layout: z
       .enum(['centered', 'editorial', 'image-left', 'image-right', 'split', 'text'])
       .optional(),
+    metrics: z.array(BlueprintMetricSchema).max(6).optional(),
+    plans: z.array(BlueprintPlanSchema).max(4).optional(),
+    questions: z.array(BlueprintQuestionSchema).max(12).optional(),
+    quote: blueprintText(10, 600).optional(),
+    role: blueprintText(2, 120).optional(),
     title: blueprintText(0, 140),
-    type: z.enum(['cta', 'feature-grid', 'hero', 'content']),
+    type: z.enum([
+      'cta',
+      'feature-grid',
+      'hero',
+      'content',
+      'stats',
+      'testimonial',
+      'pricing',
+      'faq',
+    ]),
   })
   .strip();
 
@@ -101,6 +140,13 @@ export const WebsiteBlueprintOutputSchema = z.preprocess(
 );
 
 const FEATURE_ICONS = ['spark', 'check', 'users', 'workflow', 'shield', 'clock'] as const;
+
+/** Pad/clamp text so it satisfies a spec section's min/max length bounds. */
+function boundedText(value: string, min: number, max: number, filler: string): string {
+  let text = value.trim().slice(0, max);
+  while (text.length < min) text = `${text} ${filler}`.trim().slice(0, max);
+  return text;
+}
 
 function sectionId(
   pageSlug: string,
@@ -185,6 +231,97 @@ function compileSection(
         title,
         type: 'content',
       };
+    case 'stats': {
+      const metrics = section.metrics ?? [];
+      const filled =
+        metrics.length >= 2
+          ? metrics
+          : [
+              ...metrics,
+              {
+                label: boundedText(title || primaryActionLabel, 1, 80, primaryActionLabel),
+                value: '100%',
+              },
+              {
+                label: boundedText(eyebrow || primaryActionLabel, 1, 80, primaryActionLabel),
+                value: '24/7',
+              },
+            ];
+      return {
+        id,
+        items: filled.slice(0, 6).map((metric) => ({
+          label: boundedText(metric.label, 1, 80, primaryActionLabel),
+          value: boundedText(metric.value, 1, 40, '—'),
+        })),
+        type: 'stats',
+      };
+    }
+    case 'testimonial':
+      return {
+        attribution: boundedText(
+          section.attribution ?? eyebrow ?? title,
+          2,
+          120,
+          primaryActionLabel,
+        ),
+        id,
+        quote: boundedText(section.quote ?? body ?? title, 10, 600, primaryActionLabel),
+        ...(section.role !== undefined && section.role.length >= 2 ? { role: section.role } : {}),
+        type: 'testimonial',
+      };
+    case 'pricing': {
+      const contactAction = {
+        label: primaryActionLabel,
+        target: { channel: 'form' as const, kind: 'contact' as const },
+      };
+      const plans = (section.plans ?? []).slice(0, 4).map((plan) => ({
+        action: contactAction,
+        description: boundedText(plan.description, 5, 240, primaryActionLabel),
+        features: plan.features.slice(0, 10),
+        highlighted: plan.highlighted ?? false,
+        name: boundedText(plan.name, 1, 60, primaryActionLabel),
+        priceLabel: boundedText(plan.priceLabel, 1, 60, '—'),
+      }));
+      return {
+        ...(body.length >= 5 ? { body } : {}),
+        id,
+        plans:
+          plans.length >= 1
+            ? plans
+            : [
+                {
+                  action: contactAction,
+                  description: boundedText(body || title, 5, 240, primaryActionLabel),
+                  features: [boundedText(title || primaryActionLabel, 1, 100, primaryActionLabel)],
+                  highlighted: true,
+                  name: boundedText(title || primaryActionLabel, 1, 60, primaryActionLabel),
+                  priceLabel: '—',
+                },
+              ],
+        title,
+        type: 'pricing',
+      };
+    }
+    case 'faq': {
+      const questions = (section.questions ?? []).slice(0, 12);
+      return {
+        id,
+        items:
+          questions.length >= 1
+            ? questions.map((entry) => ({
+                answer: boundedText(entry.answer, 5, 600, primaryActionLabel),
+                question: boundedText(entry.question, 3, 160, primaryActionLabel),
+              }))
+            : [
+                {
+                  answer: boundedText(body || title, 5, 600, primaryActionLabel),
+                  question: boundedText(title || primaryActionLabel, 3, 160, primaryActionLabel),
+                },
+              ],
+        title,
+        type: 'faq',
+      };
+    }
   }
 }
 

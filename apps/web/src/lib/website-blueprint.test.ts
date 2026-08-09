@@ -173,4 +173,92 @@ describe('website blueprint compiler', () => {
       type: 'cta',
     });
   });
+
+  it('compiles the richer stats, testimonial, pricing, and faq sections into a valid spec', () => {
+    const parsed = WebsiteBlueprintSchema.parse({
+      ...blueprint,
+      pages: [
+        {
+          ...blueprint.pages[0],
+          sections: [
+            blueprint.pages[0]!.sections[0],
+            {
+              body: '',
+              metrics: [
+                { label: '學員滿意度', value: '98%' },
+                { label: '累積開課', value: '1,200+' },
+              ],
+              title: '值得信賴的成果',
+              type: 'stats',
+            },
+            {
+              attribution: '陳小姐',
+              body: '',
+              quote: '第一次上課就完全放鬆，老師的引導很細膩。',
+              role: '上班族學員',
+              title: '學員回饋',
+              type: 'testimonial',
+            },
+            {
+              body: '',
+              plans: [
+                {
+                  description: '適合想先體驗的初學者。',
+                  features: ['單堂體驗', '專人引導'],
+                  highlighted: true,
+                  name: '體驗方案',
+                  priceLabel: 'NT$300',
+                },
+              ],
+              title: '方案價格',
+              type: 'pricing',
+            },
+            {
+              body: '',
+              questions: [
+                { answer: '完全不需要，我們會從最基礎開始。', question: '沒有經驗可以上嗎？' },
+              ],
+              title: '常見問題',
+              type: 'faq',
+            },
+          ],
+          slug: 'home',
+        },
+      ],
+    });
+    const spec = compileWebsiteBlueprint(project, brief, 'zh-Hant', parsed);
+    expect(WebsiteSpecSchema.parse(spec)).toEqual(spec);
+    const types = spec.pages[0]?.sections.map((section) => section.type);
+    expect(types).toEqual(['hero', 'stats', 'testimonial', 'pricing', 'faq', 'footer']);
+    const stats = spec.pages[0]?.sections.find((section) => section.type === 'stats') as
+      { items: { label: string; value: string }[] } | undefined;
+    expect(stats?.items[0]).toEqual({ label: '學員滿意度', value: '98%' });
+    expect(stats?.items).toHaveLength(2);
+  });
+
+  it('pads a stats section with too few metrics so it still satisfies the spec', () => {
+    const parsed = WebsiteBlueprintSchema.parse({
+      ...blueprint,
+      pages: [
+        {
+          ...blueprint.pages[0],
+          sections: [
+            blueprint.pages[0]!.sections[0],
+            {
+              body: '',
+              metrics: [{ label: '滿意度', value: '99%' }],
+              title: '成果',
+              type: 'stats',
+            },
+          ],
+          slug: 'home',
+        },
+      ],
+    });
+    const spec = compileWebsiteBlueprint(project, brief, 'zh-Hant', parsed);
+    const stats = spec.pages[0]?.sections.find((section) => section.type === 'stats');
+    expect(stats?.type).toBe('stats');
+    expect((stats as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(2);
+    expect(WebsiteSpecSchema.parse(spec)).toEqual(spec);
+  });
 });
