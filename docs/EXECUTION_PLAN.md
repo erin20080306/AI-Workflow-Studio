@@ -696,14 +696,19 @@ opening a completed file does not satisfy this phase.
 
 Status: in progress
 
-Deliver the reviewed human-like Drive path for the paired Desktop Agent: focus
-the exact Chrome window, select the approved Drive items, click the visible
-Download action after foreground activation settles, and verify the resulting
-local workbook before Excel processing. Preserve the existing Save-panel,
-approved-folder, URL, window-identity, abort, and bounded-staging checks.
+Deliver a stable Drive-to-Desktop handoff for the paired Desktop Agent. The
+default path must use the approved Google connection and claim-bound Drive
+transfer, then perform the bounded local Excel merge and verification.
+Keep the reviewed human-like Chrome path as an explicit opt-in fallback only:
+focus the exact Chrome window, select the approved Drive items, click the
+visible Download action after foreground activation settles, and verify the
+resulting local workbook before Excel processing. Preserve the existing
+Save-panel, approved-folder, URL, window-identity, abort, and bounded-staging
+checks for that fallback.
 
-Acceptance for this phase requires the full repository quality gate, a packaged
-`0.2.4` Agent, a permission-granted single-workbook canary that reaches local
-Excel merge/report and the approved cloud summary/Slides/GAS continuation, and
-a separate large-folder acceptance. A canary that reaches the Drive page but
-does not produce a local workbook is not accepted.
+Acceptance for this phase requires the full repository quality gate, a
+claim-bound single-workbook API-transfer canary that reaches local Excel
+merge/report and the approved cloud summary/Slides/GAS continuation, and a
+separate large-folder acceptance. The explicit visible fallback remains a
+separate opt-in acceptance path. A canary that reaches the Drive page but does
+not produce a local workbook is not accepted.

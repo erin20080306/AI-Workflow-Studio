@@ -7,7 +7,7 @@ import {
 } from '@ai-workflow-studio/workflow-schema';
 
 import type { PlannerRequest } from './types';
-import { detectWorkflowIntent } from './workflow-intent';
+import { detectWorkflowIntent, requestsVisibleDriveOperation } from './workflow-intent';
 
 const ALLOWED_NODE_TYPES = NODE_CATALOG.map((node) => node.type).join(', ');
 
@@ -181,31 +181,48 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
   const needsReport = requested.has('report.compose') || needsSlides || needsAppsScript;
   const needsSummary = requested.has('ai.summarize') || needsReport;
   const needsCloudContinuation = needsSummary;
+  const useVisibleDrive = requestsVisibleDriveOperation(request.prompt);
   if (
     request.context.executionTarget.type !== 'desktop' ||
     folderAliasId === undefined ||
     folderId === undefined ||
     !requested.has('google_drive.read_excel_folder') ||
     [...requested].some((type) => !supportedRequestedTypes.has(type)) ||
+    (!useVisibleDrive && connectionId === undefined) ||
     (needsCloudContinuation && connectionId === undefined)
   ) {
     return undefined;
   }
   const outputName = requestedWorkbookNames(request.prompt).at(-1) ?? 'AI-Excel-本機匯總.xlsx';
+  const downloadNode = useVisibleDrive
+    ? {
+        config: {
+          browser: 'chrome' as const,
+          downloadTimeoutSeconds: 600,
+          folderAliasId,
+          folderId,
+          maxFileSizeBytes: 50_000_000,
+          maxFiles: 500,
+        },
+        id: 'download_drive_workbooks',
+        type: 'google_drive.visible_download_folder' as const,
+        version: 1,
+      }
+    : {
+        config: {
+          connectionId,
+          folderAliasId,
+          folderId,
+          includeSubfolders: requestedDriveSubfolderTraversal(request.prompt),
+          maxFileSizeBytes: 20_000_000,
+          maxFiles: 500,
+        },
+        id: 'download_drive_workbooks',
+        type: 'google_drive.download_excel_folder' as const,
+        version: 1,
+      };
   const nodes: unknown[] = [
-    {
-      config: {
-        browser: 'chrome',
-        downloadTimeoutSeconds: 600,
-        folderAliasId,
-        folderId,
-        maxFileSizeBytes: 50_000_000,
-        maxFiles: 500,
-      },
-      id: 'download_drive_workbooks',
-      type: 'google_drive.visible_download_folder',
-      version: 1,
-    },
+    downloadNode,
     {
       config: {
         headerMode: 'auto',
@@ -329,18 +346,24 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
   }
   return AIPlannerOutputSchema.parse({
     assumptions: [
-      'Google Drive visibly downloads only supported .xls, .xlsx, or bounded Drive ZIP content into the selected approved Desktop folder.',
+      useVisibleDrive
+        ? 'Google Drive visibly downloads only supported .xls, .xlsx, or bounded Drive ZIP content into the selected approved Desktop folder.'
+        : 'The platform uses the approved Google Drive connection to transfer only supported .xls, .xlsx, or bounded Drive workbook content into the selected approved Desktop workspace; Chrome UI automation is not required.',
       'The paired Desktop Agent performs bounded local consolidation and creates a new workbook without overwriting an existing file.',
       ...(needsCloudContinuation
         ? [
             'Only a bounded path-free statistical profile of the consolidated workbook is relayed to approved cloud report steps; the local workbook and absolute paths remain on the Desktop Agent.',
           ]
         : []),
-      'Visible download, Excel review, Slides creation, and Apps Script deployment remain approval-gated and auditable.',
+      `${useVisibleDrive ? 'Visible Drive download, ' : ''}Excel review, Slides creation, and Apps Script deployment remain approval-gated and auditable.`,
     ],
     explanation: needsCloudContinuation
-      ? 'Visibly download approved Drive workbooks, merge them in the authorized Downloads workspace, create and review a new Excel result, then relay a bounded statistical profile to the platform for the requested AI summary, report, Slides, and approved GAS template.'
-      : 'Download approved Drive workbooks to the paired computer, read and merge them locally, create a non-overwriting Excel result, and open the finished workbook for visible review.',
+      ? useVisibleDrive
+        ? 'Use the explicitly requested visible Drive flow, merge the approved workbooks in the authorized Downloads workspace, create and review a new Excel result, then relay a bounded statistical profile to the platform for the requested AI summary, report, Slides, and approved GAS template.'
+        : 'Transfer approved Drive workbooks through the Google Drive connection, merge them in the authorized local workspace, create and review a new Excel result, then relay a bounded statistical profile to the platform for the requested AI summary, report, Slides, and approved GAS template.'
+      : useVisibleDrive
+        ? 'Use the explicitly requested visible Drive flow to download approved workbooks to the paired computer, read and merge them locally, create a non-overwriting Excel result, and open the finished workbook for visible review.'
+        : 'Transfer approved Drive workbooks through the Google Drive connection, read and merge them locally, create a non-overwriting Excel result, and open the finished workbook for visible review.',
     mappingProposals: [],
     workflow: {
       description:
@@ -615,7 +638,7 @@ Planning behavior:
 - Cover every explicit source, transformation, output, and delivery step in the requirement. A validation-only draft is not sufficient when the requirement asks for Gmail, Google Sheets, Google Forms, a report, a presentation, or email delivery.
 - Gmail, Google Sheets, Google Forms, Google Slides, and Apps Script nodes must use a connectionId from googleConnectionIds. Never invent one.
 - Google Drive folder Excel requests must use google_drive.read_excel_folder and may create a non-overwriting google_drive.create_excel_report only when consolidation is requested. Set includeSubfolders to false unless the user explicitly requests subfolders, nested folders, or recursive traversal in Traditional Chinese, Simplified Chinese, or English.
-- When the trusted execution target is Desktop and an approved folder alias is available, a Drive Excel operation must use google_drive.visible_download_folder → excel.read → excel.merge → excel.create_report → excel.visible_review. The first and last nodes remain approval-gated and run only when the paired Agent has locally enabled Visible Computer Use. If the user also requests a summary, report, Slides, or GAS, continue only with ai.summarize → report.compose → google_slides.create → apps_script.deploy_template as requested; the Agent relays a bounded path-free workbook profile and the server executes only those reviewed cloud nodes. The visible download uses the user's already signed-in local Chrome session and never needs a Google API key. This is an operation flow; never add source code nodes.
+- When the trusted execution target is Desktop and an approved folder alias is available, a Drive Excel operation must use google_drive.download_excel_folder → excel.read → excel.merge → excel.create_report → excel.visible_review by default. This uses the approved Google connection for a bounded, claim-bound, auditable transfer and does not depend on Chrome windows or macOS Accessibility. Only when the user explicitly asks for visible Chrome, human-like clicking, or a visible Codex flow may the plan use google_drive.visible_download_folder; that fallback remains approval-gated and requires the paired Agent's Visible Computer Use permission. If the user also requests a summary, report, Slides, or GAS, continue only with ai.summarize → report.compose → google_slides.create → apps_script.deploy_template as requested; the Agent relays a bounded path-free workbook profile and the server executes only those reviewed cloud nodes. This is an operation flow; never add source code nodes.
 - For Gmail summaries use gmail.read → ai.summarize → report.compose. For Google Forms or Sheets summaries, read the selected source before summarizing. Add google_slides.create only when a presentation is requested. Add gmail.send only when an email recipient is explicitly supplied; default its sendMode to draft unless the user explicitly requests sending.
 - Apps Script may use only the registered apps_script.deploy_template templates. Never produce script source code in a workflow plan.
 

@@ -266,7 +266,7 @@ describe('planner prompts', () => {
       type: 'desktop',
     });
     expect(example.workflow.nodes.map((node) => node.type)).toEqual([
-      'google_drive.visible_download_folder',
+      'google_drive.download_excel_folder',
       'excel.read',
       'excel.merge',
       'excel.create_report',
@@ -280,13 +280,14 @@ describe('planner prompts', () => {
     ]);
     expect(example.workflow.nodes[0]).toMatchObject({
       config: {
-        browser: 'chrome',
-        downloadTimeoutSeconds: 600,
+        connectionId: '10000000-0000-4000-8000-000000000911',
         folderAliasId: '10000000-0000-4000-8000-000000000912',
         folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
-        maxFileSizeBytes: 50_000_000,
+        includeSubfolders: false,
+        maxFileSizeBytes: 20_000_000,
+        maxFiles: 500,
       },
-      type: 'google_drive.visible_download_folder',
+      type: 'google_drive.download_excel_folder',
     });
     expect(example.workflow.nodes.at(-1)).toMatchObject({
       config: {
@@ -298,7 +299,7 @@ describe('planner prompts', () => {
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });
 
-  it('continues a visible Downloads-folder consolidation into platform summary, Slides, and GAS', () => {
+  it('continues an API-transferred Downloads-folder consolidation into platform summary, Slides, and GAS', () => {
     const hybridRequest: PlannerRequest = {
       ...request,
       context: {
@@ -320,7 +321,7 @@ describe('planner prompts', () => {
       type: 'desktop',
     });
     expect(example.workflow.nodes.map((node) => node.type)).toEqual([
-      'google_drive.visible_download_folder',
+      'google_drive.download_excel_folder',
       'excel.read',
       'excel.merge',
       'excel.create_report',
@@ -330,6 +331,15 @@ describe('planner prompts', () => {
       'google_slides.create',
       'apps_script.deploy_template',
     ]);
+    expect(example.workflow.nodes[0]).toMatchObject({
+      config: {
+        connectionId: '10000000-0000-4000-8000-000000000911',
+        folderAliasId: '10000000-0000-4000-8000-000000000912',
+        folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
+        includeSubfolders: false,
+      },
+      type: 'google_drive.download_excel_folder',
+    });
     expect(
       example.workflow.nodes.find((node) => node.type === 'google_slides.create'),
     ).toMatchObject({

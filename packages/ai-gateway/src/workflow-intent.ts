@@ -31,6 +31,12 @@ const EXCEL_CONSOLIDATION_INTENT =
   /(?:合併|匯總|彙整|整合|整理).{0,36}(?:excel|\.xlsx?|活頁簿)|(?:excel|\.xlsx?|活頁簿).{0,36}(?:合併|匯總|彙整|整合|整理)|merge|consolidat/iu;
 const DESKTOP_OPERATION_INTENT =
   /本機|桌面|下載區|下載項目|可見\s*codex|開啟\s*(?:google\s*)?chrome|(?:電腦|电脑).{0,24}(?:合併|合并|整合|匯總|汇总|彙整)|desktop|downloads?|local\s+(?:computer|machine|excel)|microsoft\s+excel|(?:可見|實際)(?:開啟|操作)|開啟(?:結果|檔案|excel|雲端資料夾)/iu;
+const VISIBLE_DRIVE_OPERATION_INTENT =
+  /可見\s*(?:codex|chrome)|開啟\s*(?:google\s*)?chrome|真人(?:操作|模式)|像真人|人工(?:點擊|操作)|visible\s+(?:codex|chrome)|human[- ]like|click\s+(?:the\s+)?download/iu;
+
+export function requestsVisibleDriveOperation(prompt: string): boolean {
+  return VISIBLE_DRIVE_OPERATION_INTENT.test(prompt);
+}
 
 export interface WorkflowIntent {
   readonly needsDesktop: boolean;

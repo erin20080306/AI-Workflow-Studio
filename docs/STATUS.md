@@ -4303,7 +4303,14 @@ Status: in progress
   verification did not observe a new local workbook, so the run was cancelled
   before Excel, Slides, or GAS nodes. This is an open acceptance issue; no
   customer workbook or external artifact was read or created.
+- Corrected the planner route so Desktop Drive-to-Excel requests use the
+  existing claim-bound `google_drive.download_excel_folder` transfer by default.
+  This path uses the approved Google connection, keeps workbook bytes in the
+  authorized local workspace, and does not depend on Chrome windows,
+  AppleScript, or macOS Accessibility. `google_drive.visible_download_folder`
+  remains available only when the user explicitly asks for visible Chrome or
+  human-like clicking.
 - The remaining acceptance work is to diagnose the missing local download,
-  rerun the single-workbook canary, then separately validate the large Drive
-  folder and the complete Excel/report/Slides/GAS chain. This phase is not
-  considered production-accepted until those runs succeed.
+  run a single-workbook API-transfer canary, then separately validate the large
+  Drive folder and the complete Excel/report/Slides/GAS chain. This phase is
+  not considered production-accepted until those runs succeed.
