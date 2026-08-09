@@ -71,6 +71,14 @@ export type RunStepResult =
       readonly requiredScopes?: readonly string[];
       readonly scriptId: string;
       readonly versionNumber?: number;
+    }
+  | {
+      readonly files: readonly { readonly name: string; readonly source: string }[];
+      readonly kind: 'apps_script_manual';
+      readonly requiredScopes: readonly string[];
+      readonly steps: readonly string[];
+      readonly template: string;
+      readonly title: string;
     };
 
 export interface RunStepView extends StepResult {

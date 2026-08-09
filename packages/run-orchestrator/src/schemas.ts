@@ -114,6 +114,25 @@ export const RunStepResultSchema = z.discriminatedUnion('kind', [
       versionNumber: z.number().int().positive().optional(),
     })
     .strict(),
+  z
+    .object({
+      files: z
+        .array(
+          z
+            .object({
+              name: z.string().min(1).max(80),
+              source: z.string().max(20_000),
+            })
+            .strict(),
+        )
+        .max(6),
+      kind: z.literal('apps_script_manual'),
+      requiredScopes: z.array(z.string().max(2_000)).max(20),
+      steps: z.array(z.string().min(1).max(400)).max(12),
+      template: z.string().min(1).max(80),
+      title: z.string().min(1).max(200),
+    })
+    .strict(),
 ]);
 
 const RunStepViewSchema = StepResultSchema.omit({ output: true })
