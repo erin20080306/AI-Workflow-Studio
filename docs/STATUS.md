@@ -4286,8 +4286,8 @@ Status: first Excel slice implemented; packaged-Agent acceptance pending
 
 Status: in progress
 
-- Raised the root and Desktop Agent versions to `0.2.4` and raised the Web
-  compatibility floor to `0.2.4`. The packaged macOS arm64 Agent was built,
+- Raised the root and Desktop Agent versions to `0.2.5` and raised the Web
+  compatibility floor to `0.2.5`. The packaged macOS arm64 Agent was built,
   ad-hoc signed, installed, and verified against the packaged `app.asar`.
 - Hardened the visible Drive action so Chrome is brought to the foreground and
   allowed to settle before the trusted coordinate click. Chrome window IDs are
@@ -4317,12 +4317,14 @@ Status: in progress
   cloud round trip. Local staging reports a metadata-only workbook checkpoint
   every 20 files (and on completion), while retaining the existing six-file
   download concurrency, size limits, idempotent writes, and cancellation.
-- A controlled API-transfer canary reached local staging, Excel read, merge,
-  and report for one workbook. It was intentionally cancelled before cloud
-  summary, Slides, and GAS because the pre-fix manifest omitted legacy `.xls`
-  files. The corrected path is ready for a fresh canary; large-folder
-  acceptance and final Slides/GAS continuation remain outstanding.
-- The remaining acceptance work is to diagnose the missing local download,
-  run a single-workbook API-transfer canary, then separately validate the large
-  Drive folder and the complete Excel/report/Slides/GAS chain. This phase is
+- A post-fix API-transfer canary reached local staging in about ten seconds
+  with four workbooks (including legacy `.xls`), then completed local Excel
+  read and merge with four files and 317 rows. The local report step stopped
+  on the safe `FILE_OUTPUT_EXISTS` guard because an earlier canary had already
+  created the configured output name; no source workbook was overwritten.
+  Cloud summary, Slides, and GAS were therefore not started. The large-folder
+  acceptance and final cloud continuation remain outstanding.
+- The remaining acceptance work is to run the report with a fresh output name,
+  validate the cloud summary/Slides/GAS continuation, and separately validate
+  the large Drive folder. This phase is
   not considered production-accepted until those runs succeed.

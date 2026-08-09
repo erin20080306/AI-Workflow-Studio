@@ -12,7 +12,7 @@ const ONLINE_DEVICE_ID = '00000000-0000-4000-8000-000000000702';
 const FOLDER_ID = '00000000-0000-4000-8000-000000000703';
 const DOWNLOADS_FOLDER_ID = '00000000-0000-4000-8000-000000000704';
 const TEMP_FOLDER_ID = '00000000-0000-4000-8000-000000000705';
-const COMPATIBLE_AGENT = { agentCompatible: true, agentVersion: '0.2.4' } as const;
+const COMPATIBLE_AGENT = { agentCompatible: true, agentVersion: '0.2.5' } as const;
 
 describe('selectWorkflowPlanningContext', () => {
   it('uses a safe cloud target when no Desktop Agent is paired', () => {

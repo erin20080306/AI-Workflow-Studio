@@ -17,7 +17,7 @@ type View = 'activity' | 'folders' | 'overview' | 'settings';
 const DESKTOP_LOCALE_KEY = 'ai-workflow-studio-desktop-locale';
 
 const previewSnapshot: AgentSnapshot = {
-  agentVersion: '0.2.4-dev',
+  agentVersion: '0.2.5-dev',
   autoStart: false,
   computerUse: {
     enabled: false,

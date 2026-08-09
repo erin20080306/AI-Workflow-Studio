@@ -34,9 +34,9 @@ describe('effectiveAssistantDeviceStatus', () => {
 
 describe('isAssistantAgentVersionCompatible', () => {
   it('accepts the minimum stable Agent and later semantic versions', () => {
-    expect(MINIMUM_ASSISTANT_AGENT_VERSION).toBe('0.2.4');
-    expect(isAssistantAgentVersionCompatible('0.2.4')).toBe(true);
-    expect(isAssistantAgentVersionCompatible('0.2.4+macos.arm64')).toBe(true);
+    expect(MINIMUM_ASSISTANT_AGENT_VERSION).toBe('0.2.5');
+    expect(isAssistantAgentVersionCompatible('0.2.5')).toBe(true);
+    expect(isAssistantAgentVersionCompatible('0.2.5+macos.arm64')).toBe(true);
     expect(isAssistantAgentVersionCompatible('0.2.5')).toBe(true);
     expect(isAssistantAgentVersionCompatible('1.0.0')).toBe(true);
   });
@@ -44,9 +44,9 @@ describe('isAssistantAgentVersionCompatible', () => {
   it('fails closed for old, prerelease, missing, or malformed versions', () => {
     expect(isAssistantAgentVersionCompatible('0.2.1')).toBe(false);
     expect(isAssistantAgentVersionCompatible('0.2.3')).toBe(false);
-    expect(isAssistantAgentVersionCompatible('0.2.4-beta.1')).toBe(false);
+    expect(isAssistantAgentVersionCompatible('0.2.5-beta.1')).toBe(false);
     expect(isAssistantAgentVersionCompatible('0.2')).toBe(false);
-    expect(isAssistantAgentVersionCompatible('0.2.4-01')).toBe(false);
+    expect(isAssistantAgentVersionCompatible('0.2.5-01')).toBe(false);
     expect(isAssistantAgentVersionCompatible(null)).toBe(false);
     expect(isAssistantAgentVersionCompatible(undefined)).toBe(false);
   });
