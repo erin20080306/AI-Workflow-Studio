@@ -43,12 +43,13 @@ export function safeTransferredWorkbookName(input: string): string {
   let normalized = input
     .normalize('NFKC')
     .replace(/[\p{Cc}<>"/\\|?*:]/gu, '_')
-    .replace(/\.xlsx$/iu, '')
+    .replace(/\.xls[x]?$/iu, '')
     .trim()
     .replace(/[. ]+$/u, '')
     .slice(0, 180);
   if (/^(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$/iu.test(normalized)) {
     normalized = `${normalized}_`;
   }
-  return `${normalized || 'workbook'}.xlsx`;
+  const extension = /\.xls$/iu.test(input) && !/\.xlsx$/iu.test(input) ? 'xls' : 'xlsx';
+  return `${normalized || 'workbook'}.${extension}`;
 }

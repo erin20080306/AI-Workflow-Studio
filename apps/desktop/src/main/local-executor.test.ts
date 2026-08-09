@@ -42,6 +42,7 @@ describe('DesktopSpreadsheetExecutor', () => {
     ]);
     const download = async (file: (typeof files)[number]) =>
       contents.get(file.fileId) ?? new Uint8Array();
+    const stagedProgress: number[] = [];
 
     const first = await executor.stageDriveExcelFiles(
       DEVICE_ID,
@@ -49,6 +50,9 @@ describe('DesktopSpreadsheetExecutor', () => {
       grant.folderAliasId,
       files,
       download,
+      async () => {
+        stagedProgress.push(stagedProgress.length + 1);
+      },
     );
     const second = await executor.stageDriveExcelFiles(
       DEVICE_ID,
@@ -60,6 +64,7 @@ describe('DesktopSpreadsheetExecutor', () => {
 
     expect(first).toEqual(second);
     expect(first.paths).toHaveLength(2);
+    expect(stagedProgress).toHaveLength(2);
     expect(new Set(first.paths)).toHaveLength(2);
     expect(first.paths.every((path) => path.startsWith('.ai-workflow-studio/jobs/'))).toBe(true);
     await expect(readFile(join(directory, first.paths[0] ?? ''))).resolves.toEqual(

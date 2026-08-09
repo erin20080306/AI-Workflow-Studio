@@ -17,7 +17,7 @@ const TransferPayloadSchema = z
       .max(300)
       .regex(/^[A-Za-z0-9_-]+$/),
     j: z.string().uuid(),
-    m: z.enum(['google_sheet', 'xlsx']),
+    m: z.enum(['google_sheet', 'xls', 'xlsx']),
     o: z.number().int().nonnegative().optional(),
     s: z.string().regex(/^[a-f0-9]{64}$/),
   })
@@ -27,7 +27,7 @@ export interface AgentDriveTransferScope {
   readonly expiresAt: number;
   readonly fileId: string;
   readonly jobId: string;
-  readonly mimeType: 'google_sheet' | 'xlsx';
+  readonly mimeType: 'google_sheet' | 'xls' | 'xlsx';
   readonly nodeIdHash: string;
   readonly size?: number;
 }

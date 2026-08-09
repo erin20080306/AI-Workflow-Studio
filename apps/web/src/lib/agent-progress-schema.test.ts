@@ -84,6 +84,30 @@ const job = AgentJobSchema.parse({
   workflowRunId: RUN_ID,
 });
 
+const directTransferJob = AgentJobSchema.parse({
+  ...job,
+  workflow: {
+    ...job.workflow,
+    nodes: job.workflow.nodes.map((node) =>
+      node.id === 'download_workbooks'
+        ? {
+            config: {
+              connectionId: '10000000-0000-4000-8000-000000000007',
+              folderAliasId: FOLDER_ID,
+              folderId: '1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ',
+              includeSubfolders: true,
+              maxFileSizeBytes: 20_000_000,
+              maxFiles: 500,
+            },
+            id: node.id,
+            type: 'google_drive.download_excel_folder',
+            version: 1,
+          }
+        : node,
+    ),
+  },
+});
+
 const safeProfile = {
   columns: [],
   fileCount: 2,
@@ -174,6 +198,24 @@ describe('validateAgentProgressRequest', () => {
       ),
     ).toMatchObject({
       step: { output: { computerUseAction: 'drive.verify_download' }, status: 'running' },
+    });
+  });
+
+  it('accepts count-based progress while a direct Drive transfer is staging locally', () => {
+    expect(
+      validateAgentProgressRequest(directTransferJob, {
+        ...progress('download_workbooks', 'running'),
+        step: {
+          ...progress('download_workbooks', 'running').step,
+          processedFileCount: 20,
+          progress: { kind: 'workbook_batch', totalWorkbookCount: 120 },
+        },
+      }),
+    ).toMatchObject({
+      step: {
+        processedFileCount: 20,
+        progress: { kind: 'workbook_batch', totalWorkbookCount: 120 },
+      },
     });
   });
 

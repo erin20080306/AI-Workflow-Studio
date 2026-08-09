@@ -63,7 +63,9 @@ export interface DriveExcelFolderManifest {
 export interface DriveExcelDownloadResult {
   readonly bytes: Uint8Array;
   readonly fileName: string;
-  readonly mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  readonly mimeType:
+    | 'application/vnd.ms-excel'
+    | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 }
 
 export interface DriveExcelReadOptions {
@@ -683,10 +685,10 @@ export class GoogleDriveExcelClient {
       ...(parsedFile.size === undefined ? {} : { size: parsedFile.size }),
     };
     const boundedMaxBytes = z.number().int().min(1).max(MAX_RESUMABLE_BYTES).parse(maxBytes);
-    if (!isExcelFile(file) || isLegacyExcelFile(file)) {
+    if (!isExcelFile(file)) {
       throw new GoogleSheetsError(
         'GOOGLE_REQUEST_INVALID',
-        'Desktop transfer supports Google Sheets and .xlsx workbooks only.',
+        'Desktop transfer supports Google Sheets, .xls, and .xlsx workbooks only.',
       );
     }
     if (file.size !== undefined && file.size > boundedMaxBytes) {
@@ -696,6 +698,7 @@ export class GoogleDriveExcelClient {
       );
     }
     const isGoogleSheet = file.mimeType === GOOGLE_SHEET_MIME;
+    const isLegacyXls = isLegacyExcelFile(file);
     const bytes = await this.binaryRequest(
       accessToken,
       isGoogleSheet
@@ -709,13 +712,13 @@ export class GoogleDriveExcelClient {
     );
     const baseName =
       file.name
-        .replace(/\.xlsx$/iu, '')
+        .replace(/\.xls[x]?$/iu, '')
         .slice(0, 220)
         .trim() || 'workbook';
     return {
       bytes,
-      fileName: `${baseName}.xlsx`,
-      mimeType: XLSX_MIME,
+      fileName: `${baseName}.${isLegacyXls ? 'xls' : 'xlsx'}`,
+      mimeType: isLegacyXls ? XLS_MIME : XLSX_MIME,
     };
   }
 

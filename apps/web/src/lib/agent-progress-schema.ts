@@ -69,7 +69,7 @@ function parseAgentProgressRequest(job: AgentJob, input: unknown): ProgressJobRe
 
   if (
     parsed.step.progress !== undefined &&
-    (node.type !== 'excel.read' ||
+    (!['excel.read', 'google_drive.download_excel_folder'].includes(node.type) ||
       parsed.step.status !== 'running' ||
       parsed.step.processedFileCount > parsed.step.progress.totalWorkbookCount)
   ) {

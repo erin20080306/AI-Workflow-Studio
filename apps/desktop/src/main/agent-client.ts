@@ -66,7 +66,7 @@ const DriveExcelTransferFileSchema = z
       .max(300)
       .regex(/^[A-Za-z0-9_-]+$/),
     fileName: z.string().trim().min(1).max(220),
-    mimeType: z.enum(['google_sheet', 'xlsx']),
+    mimeType: z.enum(['google_sheet', 'xls', 'xlsx']),
     size: z.number().int().nonnegative().optional(),
   })
   .strict();

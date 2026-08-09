@@ -7,6 +7,7 @@ import { googleConnectionService } from '@/lib/google-connections';
 
 const DRIVE_READ_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 const GOOGLE_SHEET_MIME = 'application/vnd.google-apps.spreadsheet';
+const XLS_MIME = 'application/vnd.ms-excel';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export async function GET(
@@ -40,8 +41,13 @@ export async function GET(
       accessToken,
       {
         id: scope.fileId,
-        mimeType: scope.mimeType === 'google_sheet' ? GOOGLE_SHEET_MIME : XLSX_MIME,
-        name: 'workbook.xlsx',
+        mimeType:
+          scope.mimeType === 'google_sheet'
+            ? GOOGLE_SHEET_MIME
+            : scope.mimeType === 'xls'
+              ? XLS_MIME
+              : XLSX_MIME,
+        name: scope.mimeType === 'xls' ? 'workbook.xls' : 'workbook.xlsx',
         ...(scope.size === undefined ? {} : { size: scope.size }),
       },
       node.config.maxFileSizeBytes,

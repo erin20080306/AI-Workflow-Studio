@@ -47,8 +47,9 @@ describe('GoogleDriveExcelClient', () => {
     );
   });
 
-  it('rejects legacy and oversized workbooks before transfer', async () => {
-    const fetchTransport = vi.fn<GoogleFetch>();
+  it('transfers legacy XLS directly and rejects oversized workbooks before transfer', async () => {
+    const legacyBytes = new Uint8Array([208, 207, 17, 224]);
+    const fetchTransport = vi.fn<GoogleFetch>(async () => new Response(legacyBytes));
     const client = new GoogleDriveExcelClient({ fetchTransport });
 
     await expect(
@@ -62,7 +63,11 @@ describe('GoogleDriveExcelClient', () => {
         },
         1_000,
       ),
-    ).rejects.toMatchObject({ code: 'GOOGLE_REQUEST_INVALID' });
+    ).resolves.toMatchObject({
+      bytes: legacyBytes,
+      fileName: 'legacy.xls',
+      mimeType: 'application/vnd.ms-excel',
+    });
     await expect(
       client.downloadExcelManifestFile(
         TOKEN,
@@ -75,7 +80,7 @@ describe('GoogleDriveExcelClient', () => {
         1_000,
       ),
     ).rejects.toMatchObject({ code: 'GOOGLE_REQUEST_INVALID' });
-    expect(fetchTransport).not.toHaveBeenCalled();
+    expect(fetchTransport).toHaveBeenCalledTimes(1);
   });
 
   it('discovers a Drive spreadsheet, finds its header, and consolidates source rows', async () => {

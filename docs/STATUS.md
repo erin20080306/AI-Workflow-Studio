@@ -2,7 +2,7 @@
 
 ## Current phase
 
-Phase 51 — Visible Drive click hardening (in progress; code and automated gates complete, real Drive canary pending)
+Phase 51 — Visible Drive click hardening (in progress; direct local transfer hardening complete, large real-Drive canary pending)
 
 ## Repository baseline
 
@@ -4295,7 +4295,7 @@ Status: in progress
   checks. The native Save-panel compatibility path tolerates Chrome's missing
   `AXSubrole` attribute only when macOS reports the attribute as absent.
 - The completed automated gates are: `pnpm format:check`, `pnpm lint`,
-  `pnpm typecheck`, `pnpm test` (489 tests, one gated real-OS test skipped),
+  `pnpm typecheck`, `pnpm test` (490 tests, one gated real-OS test skipped),
   `pnpm build:web`, `pnpm build:desktop`, `pnpm security:scan-client`,
   `pnpm audit --prod`, and 10 Chromium E2E scenarios in a clean server run.
 - The first post-reauthorization canary confirmed `permission=granted` and
@@ -4310,6 +4310,18 @@ Status: in progress
   AppleScript, or macOS Accessibility. `google_drive.visible_download_folder`
   remains available only when the user explicitly asks for visible Chrome or
   human-like clicking.
+- Removed the legacy-format gap in the fast claim-bound transfer: Drive `.xls`
+  files are now included in the manifest, transferred as bounded raw bytes to
+  the approved local workspace, and parsed by the existing local XLS reader.
+  They are not uploaded to Drive for per-file conversion, avoiding the slowest
+  cloud round trip. Local staging reports a metadata-only workbook checkpoint
+  every 20 files (and on completion), while retaining the existing six-file
+  download concurrency, size limits, idempotent writes, and cancellation.
+- A controlled API-transfer canary reached local staging, Excel read, merge,
+  and report for one workbook. It was intentionally cancelled before cloud
+  summary, Slides, and GAS because the pre-fix manifest omitted legacy `.xls`
+  files. The corrected path is ready for a fresh canary; large-folder
+  acceptance and final Slides/GAS continuation remain outstanding.
 - The remaining acceptance work is to diagnose the missing local download,
   run a single-workbook API-transfer canary, then separately validate the large
   Drive folder and the complete Excel/report/Slides/GAS chain. This phase is

@@ -113,6 +113,7 @@ const CLOUD_PROFILE_NUMERIC_MIN_COHORT_SIZE = 5;
 const EXCEL_READ_AGGREGATE_MAX_SHEETS = 2_000;
 const EXCEL_READ_PROGRESS_BATCH_SIZE = 20;
 const EXCEL_READ_INITIAL_PROGRESS_DELAY_MS = 2_000;
+const DRIVE_TRANSFER_PROGRESS_BATCH_SIZE = 20;
 
 const CLOUD_PROFILE_SEMANTIC_HINTS = new Map<string, string>([
   ['amount', 'amount'],
@@ -210,6 +211,30 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
         case 'google_drive.download_excel_folder': {
           const manifest = await this.reporter.listDriveExcelFiles(context.nodeId);
           const filesById = new Map(manifest.files.map((file) => [file.fileId, file]));
+          let processedFileCount = 0;
+          let progressQueue: Promise<void> = Promise.resolve();
+          const reportTransferProgress = async (): Promise<void> => {
+            processedFileCount += 1;
+            const isComplete = processedFileCount === manifest.files.length;
+            if (!isComplete && processedFileCount % DRIVE_TRANSFER_PROGRESS_BATCH_SIZE !== 0) {
+              return;
+            }
+            const snapshot = {
+              nodeId: context.nodeId,
+              progress: {
+                kind: 'workbook_batch' as const,
+                totalWorkbookCount: manifest.files.length,
+              },
+              processedFileCount,
+              processedRowCount: 0,
+              status: 'running' as const,
+            };
+            const queued = progressQueue.then(async () => {
+              await this.reporter.reportStep(snapshot);
+            });
+            progressQueue = queued.catch(() => undefined);
+            await queued;
+          };
           const staged = await this.spreadsheet.stageDriveExcelFiles(
             this.deviceId,
             context.runId,
@@ -223,6 +248,7 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
               if (source === undefined) throw new Error('Drive transfer manifest changed.');
               return await this.reporter.downloadDriveExcelFile(context.nodeId, source);
             },
+            reportTransferProgress,
           );
           return {
             metrics: { processedFileCount: staged.paths.length },

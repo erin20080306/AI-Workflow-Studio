@@ -12,6 +12,7 @@ import { googleConnectionService } from '@/lib/google-connections';
 
 const DRIVE_READ_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 const GOOGLE_SHEET_MIME = 'application/vnd.google-apps.spreadsheet';
+const XLS_MIME = 'application/vnd.ms-excel';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export async function GET(
@@ -48,10 +49,16 @@ export async function GET(
     const nodeIdHash = driveTransferNodeHash(nodeId);
     const files = manifest.files.flatMap((file) => {
       const isGoogleSheet = file.mimeType === GOOGLE_SHEET_MIME;
+      const isXls = file.mimeType === XLS_MIME || file.name.toLowerCase().endsWith('.xls');
       const isXlsx = file.mimeType === XLSX_MIME || file.name.toLowerCase().endsWith('.xlsx');
-      if (!isGoogleSheet && !isXlsx) return [];
-      const fileName = safeTransferredWorkbookName(file.name);
-      const mimeType = isGoogleSheet ? ('google_sheet' as const) : ('xlsx' as const);
+      if (!isGoogleSheet && !isXls && !isXlsx) return [];
+      const sourceName = isXls && !/\.xls$/iu.test(file.name) ? `${file.name}.xls` : file.name;
+      const fileName = safeTransferredWorkbookName(sourceName);
+      const mimeType = isGoogleSheet
+        ? ('google_sheet' as const)
+        : isXls
+          ? ('xls' as const)
+          : ('xlsx' as const);
       return [
         {
           downloadToken: createAgentDriveTransferToken({

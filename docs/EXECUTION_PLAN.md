@@ -707,8 +707,10 @@ Save-panel, approved-folder, URL, window-identity, abort, and bounded-staging
 checks for that fallback.
 
 Acceptance for this phase requires the full repository quality gate, a
-claim-bound single-workbook API-transfer canary that reaches local Excel
-merge/report and the approved cloud summary/Slides/GAS continuation, and a
-separate large-folder acceptance. The explicit visible fallback remains a
+claim-bound API-transfer canary that reaches local Excel merge/report and the
+approved cloud summary/Slides/GAS continuation, and a separate large-folder
+acceptance. The transfer must include both `.xls` and `.xlsx` inputs, keep the
+bytes in the approved local workspace, and expose bounded metadata-only
+progress while staging many files. The explicit visible fallback remains a
 separate opt-in acceptance path. A canary that reaches the Drive page but does
 not produce a local workbook is not accepted.

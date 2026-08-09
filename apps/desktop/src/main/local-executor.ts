@@ -55,6 +55,8 @@ export interface DriveExcelStagingResult {
   readonly paths: readonly string[];
 }
 
+export type DriveExcelStagingProgress = () => Promise<void>;
+
 export interface VisibleDriveDownloadWorkspace {
   readonly downloadDirectory: string;
   readonly workDirectory: string;
@@ -144,6 +146,7 @@ export class DesktopSpreadsheetExecutor {
     folderAliasId: string,
     files: readonly DriveExcelStagingFile[],
     download: (file: DriveExcelStagingFile) => Promise<Uint8Array>,
+    onFileStaged?: DriveExcelStagingProgress,
   ): Promise<DriveExcelStagingResult> {
     if (files.length === 0 || files.length > 500) {
       throw new Error('Drive workbook staging requires between 1 and 500 files.');
@@ -212,6 +215,9 @@ export class DesktopSpreadsheetExecutor {
         } finally {
           await rm(temporary, { force: true }).catch(() => undefined);
         }
+      }
+      if (onFileStaged !== undefined) {
+        await onFileStaged();
       }
       return { inputHash, relativePath };
     });
@@ -379,14 +385,15 @@ function safeWorkbookName(input: string): string {
   let normalized = input
     .normalize('NFKC')
     .replace(/[\p{Cc}<>"/\\|?*:]/gu, '_')
-    .replace(/\.xlsx$/iu, '')
+    .replace(/\.xls[x]?$/iu, '')
     .trim()
     .replace(/[. ]+$/u, '')
     .slice(0, 180);
   if (/^(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$/iu.test(normalized)) {
     normalized = `${normalized}_`;
   }
-  return `${normalized || 'workbook'}.xlsx`;
+  const extension = /\.xls$/iu.test(input) && !/\.xlsx$/iu.test(input) ? 'xls' : 'xlsx';
+  return `${normalized || 'workbook'}.${extension}`;
 }
 
 async function existingFileHash(path: string): Promise<string | undefined> {
