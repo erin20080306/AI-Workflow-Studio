@@ -5,6 +5,7 @@ export default tseslint.config(
   {
     ignores: [
       '**/.next/**',
+      'apps/desktop/build/libreoffice/**',
       '**/coverage/**',
       '**/dist/**',
       '**/node_modules/**',

@@ -83,6 +83,15 @@ jobs:
             }
           }
 
+      - name: Stage bundled LibreOffice
+        # Only stable builds bundle LibreOffice; the prerelease config
+        # (electron-builder.dev.yml) ships with extraResources: [] and falls
+        # back to a developer's system install. macOS stages the aarch64 build
+        # to match the Apple Silicon runner/customers; Intel Macs running the
+        # universal app need Rosetta for the bundled soffice.
+        if: ${{ !contains(github.ref_name, '-') }}
+        run: node scripts/stage-libreoffice.mjs --mac-arch=aarch64
+
       - name: Build signed stable installer
         if: ${{ !contains(github.ref_name, '-') }}
         run: pnpm --filter @ai-workflow-studio/desktop exec electron-builder --${{ matrix.builderTarget }} --${{ matrix.architecture }} --publish never

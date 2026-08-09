@@ -1,0 +1,22 @@
+{
+  "//": "Pinned LibreOffice used by the bundled workbook-combine engine. Bump `version` to a release from https://download.documentfoundation.org/libreoffice/stable/ , then run `pnpm stage:libreoffice -- --print-hash` on each platform and paste the printed sha256 below. The Document Foundation publishes no .sha256 sidecar (only GPG .asc), so staging requires these pins and fails closed without them.",
+  "version": "25.8.7",
+  "baseUrl": "https://download.documentfoundation.org/libreoffice/stable",
+  "platforms": {
+    "darwin-aarch64": {
+      "file": "LibreOffice_{version}_MacOS_aarch64.dmg",
+      "path": "mac/aarch64",
+      "sha256": "e7556aa61e282f89578ebaf35afdb09c94dcf9d6ee7c137004377bee81a6e900"
+    },
+    "darwin-x86_64": {
+      "file": "LibreOffice_{version}_MacOS_x86-64.dmg",
+      "path": "mac/x86_64",
+      "sha256": "110439f207b5e420d7c8e441180c8374431761d549a1c14b584045ac56cd71c5"
+    },
+    "win32-x64": {
+      "file": "LibreOffice_{version}_Win_x86-64.msi",
+      "path": "win/x86_64",
+      "sha256": "ecdb65e76f5e91dc198b8c8dce5b5d6e1eb12fea6023553e52b591afd10b619d"
+    }
+  }
+}

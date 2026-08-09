@@ -9,3 +9,4 @@ release
 test-results
 **/next-env.d.ts
 apps/desktop/build/entitlements.mac.plist
+apps/desktop/build/libreoffice
