@@ -1,4 +1,4 @@
-import type { ProfessionalSlide } from '@ai-workflow-studio/google-sheets';
+import type { ProfessionalDeckChart, ProfessionalSlide } from '@ai-workflow-studio/google-sheets';
 import type { JsonValue } from '@ai-workflow-studio/workflow-schema';
 import { z } from 'zod';
 
@@ -7,6 +7,74 @@ const GoogleResourceIdSchema = z
   .min(8)
   .max(300)
   .regex(/^[A-Za-z0-9_-]+$/);
+
+const MAX_CHART_CATEGORIES = 12;
+
+/** A validated, ready-to-embed chart series carried between cloud nodes. */
+export const ChartSeriesSchema = z
+  .object({
+    categories: z.array(z.string().trim().min(1).max(60)).min(2).max(MAX_CHART_CATEGORIES),
+    kind: z.enum(['bar', 'column', 'line', 'pie']),
+    title: z.string().trim().min(1).max(120),
+    values: z.array(z.number().finite()).min(2).max(MAX_CHART_CATEGORIES),
+  })
+  .strict()
+  .refine((value) => value.categories.length === value.values.length);
+
+const TabularSchema = z.object({
+  columns: z.array(z.string().min(1).max(200)).min(2).max(1_000),
+  rows: z
+    .array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])))
+    .max(100_000),
+});
+
+/**
+ * Derive a bounded chart series from tabular `{ columns, rows }` data by
+ * summing the first numeric column grouped by the first categorical column.
+ * Returns undefined when the data is not chartable. Operates only on data the
+ * node already holds — it does not widen the desktop→cloud privacy boundary.
+ */
+export function deriveChartSeries(input: JsonValue): ProfessionalDeckChart | undefined {
+  const existing = ChartSeriesSchema.safeParse((input as { chartSeries?: unknown })?.chartSeries);
+  if (existing.success) return existing.data;
+
+  const parsed = TabularSchema.safeParse(input);
+  if (!parsed.success) return undefined;
+  const { columns, rows } = parsed.data;
+  if (rows.length === 0) return undefined;
+
+  const isNumeric = (column: string): boolean => {
+    let numbers = 0;
+    for (const row of rows) if (typeof row[column] === 'number') numbers += 1;
+    return numbers >= Math.max(2, Math.ceil(rows.length * 0.5));
+  };
+  const numericColumn = columns.find(isNumeric);
+  if (numericColumn === undefined) return undefined;
+  const categoryColumn = columns.find((column) => column !== numericColumn && !isNumeric(column));
+  if (categoryColumn === undefined) return undefined;
+
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    const value = row[numericColumn];
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    const label = String(row[categoryColumn] ?? '')
+      .trim()
+      .slice(0, 60);
+    if (label.length === 0) continue;
+    totals.set(label, (totals.get(label) ?? 0) + value);
+  }
+  const ranked = [...totals.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, MAX_CHART_CATEGORIES);
+  if (ranked.length < 2) return undefined;
+
+  return {
+    categories: ranked.map(([label]) => label),
+    kind: ranked.length <= 6 ? 'pie' : 'column',
+    title: numericColumn.slice(0, 120),
+    values: ranked.map(([, total]) => Math.round(total * 100) / 100),
+  };
+}
 
 const MAX_BULLETS_PER_SLIDE = 6;
 const MAX_BULLET_LENGTH = 180;

@@ -7,7 +7,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { deployApprovedAppsScriptForConnection } from './apps-script-deployment';
 import { safeGoogleNodeFailure } from './cloud-workflow-errors';
 import { buildCloudAiSummaryInstructions } from './cloud-workflow-input';
-import { appsScriptParentId, buildProfessionalSlides } from './cloud-workflow-output';
+import {
+  appsScriptParentId,
+  buildProfessionalSlides,
+  deriveChartSeries,
+} from './cloud-workflow-output';
 
 describe('cloud Slides and approved GAS planning', () => {
   it('checks both deployment scopes before obtaining a token or issuing the first GAS write', async () => {
@@ -128,6 +132,36 @@ describe('cloud Slides and approved GAS planning', () => {
     expect(slides[1]).toMatchObject({ imageUrl: 'https://example.com/chart.png' });
     expect(slides.every((slide) => (slide.references?.length ?? 0) <= 3)).toBe(true);
     expect(slides.every((slide) => slide.body.length >= 1 && slide.body.length <= 6)).toBe(true);
+  });
+
+  it('derives a chart series by summing a numeric column grouped by a category', () => {
+    const chart = deriveChartSeries({
+      columns: ['板材', '數量'],
+      rows: [
+        { 板材: '光板', 數量: 120 },
+        { 板材: '鍍鋅板', 數量: 100 },
+        { 板材: '鍍鋅板', 數量: 87 },
+        { 板材: '其他', 數量: 40 },
+      ],
+    });
+    expect(chart).toEqual({
+      categories: ['鍍鋅板', '光板', '其他'],
+      kind: 'pie',
+      title: '數量',
+      values: [187, 120, 40],
+    });
+  });
+
+  it('passes an explicit chart series through and rejects non-tabular input', () => {
+    const explicit = {
+      categories: ['A', 'B'],
+      kind: 'bar' as const,
+      title: '金額',
+      values: [10, 20],
+    };
+    expect(deriveChartSeries({ chartSeries: explicit })).toEqual(explicit);
+    expect(deriveChartSeries({ kind: 'business_report', content: '純文字' })).toBeUndefined();
+    expect(deriveChartSeries('just text')).toBeUndefined();
   });
 
   it('falls back to bounded chunking for unstructured summary text', () => {

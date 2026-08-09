@@ -42,7 +42,11 @@ import {
 } from '@/lib/cloud-drive-excel-checkpoint';
 import { safeGoogleNodeFailure } from '@/lib/cloud-workflow-errors';
 import { buildCloudAiSummaryInstructions } from '@/lib/cloud-workflow-input';
-import { appsScriptParentId, buildProfessionalSlides } from '@/lib/cloud-workflow-output';
+import {
+  appsScriptParentId,
+  buildProfessionalSlides,
+  deriveChartSeries,
+} from '@/lib/cloud-workflow-output';
 import { googleConnectionService } from '@/lib/google-connections';
 import {
   consumeMeteredAllowance,
@@ -472,8 +476,10 @@ class AiSummarizeExecutor extends CloudNodeExecutor {
       await reservation.release().catch(() => undefined);
       throw error;
     }
+    const chartSeries = deriveChartSeries(input);
     return {
       output: JsonValueSchema.parse({
+        ...(chartSeries === undefined ? {} : { chartSeries }),
         kind: 'ai_summary',
         model: route.model,
         provider: route.provider,
@@ -510,8 +516,10 @@ class ReportComposeExecutor extends CloudNodeExecutor {
       parsed.format === 'html'
         ? `<article><h1>${htmlEscape(parsed.title)}</h1><div>${htmlEscape(text).replaceAll('\n', '<br>')}</div></article>`
         : `# ${parsed.title}\n\n${text}`;
+    const chartSeries = deriveChartSeries(input);
     return {
       output: JsonValueSchema.parse({
+        ...(chartSeries === undefined ? {} : { chartSeries }),
         content,
         format: parsed.format,
         includeReferences: parsed.includeReferences,
@@ -556,9 +564,11 @@ class SlidesCreateExecutor extends CloudNodeExecutor {
       .parse(config);
     await this.countTool(this.type);
     const slides = buildProfessionalSlides(sourceText(input), parsed);
+    const chart = deriveChartSeries(input);
     const result = await this.workspace.createProfessionalDeck(
       await this.token(parsed.connectionId, executionContext.signal),
       {
+        ...(chart === undefined ? {} : { chart }),
         ...(parsed.folderId === undefined ? {} : { folderId: parsed.folderId }),
         locale: 'zh-Hant',
         slides,

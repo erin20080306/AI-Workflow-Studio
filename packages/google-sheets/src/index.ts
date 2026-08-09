@@ -54,6 +54,7 @@ export {
   type GmailMessageSummary,
   type GoogleFormResponse,
   type GoogleWorkspaceClientOptions,
+  type ProfessionalDeckChart,
   type ProfessionalDeckInput,
   type ProfessionalSlide,
   type SafeAppsScriptDeployment,
