@@ -492,7 +492,7 @@ describe('DesktopWorkflowJobExecutor', () => {
             version: 1,
           },
           {
-            config: { columnMode: 'union', includeSourceFile: true },
+            config: { columnMode: 'union', includeSourceFile: true, layout: 'flatten' },
             id: 'merge',
             type: 'excel.merge',
             version: 1,
@@ -1247,6 +1247,120 @@ describe('DesktopWorkflowJobExecutor', () => {
         }),
       ]),
     );
+  });
+
+  it('writes preserved source worksheets plus index and summary tabs', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'aiws-separate-sheet-job-'));
+    temporaryDirectories.push(directory);
+    await writeFile(join(directory, 'quote-a.csv'), 'Item\nA\n', 'utf8');
+    await writeFile(join(directory, 'quote-b.csv'), 'Item\nB\n', 'utf8');
+    const outputPath = join(directory, 'multi-tab.xlsx');
+    const grants = new FolderGrantStore(join(directory, '.agent', 'folder-grants.json'));
+    const grant = await grants.authorize(directory, DEVICE_ID, {
+      read: true,
+      watch: true,
+      write: true,
+    });
+    const spreadsheet = new DesktopSpreadsheetExecutor(
+      grants,
+      new ProcessingLedger(join(directory, '.agent', 'processing-ledger.json')),
+    );
+    vi.spyOn(spreadsheet, 'read').mockImplementation(async (_deviceId, input) => ({
+      sheets: [
+        {
+          columns: ['Item'],
+          name: input.relativePath === 'quote-a.csv' ? 'Quote A' : 'Quote B',
+          rows: [{ Item: input.relativePath === 'quote-a.csv' ? 'A' : 'B' }],
+        },
+        { columns: ['Detail'], name: 'Details', rows: [{ Detail: 'source' }] },
+      ],
+      source: {
+        fileHash: input.relativePath === 'quote-a.csv' ? 'a'.repeat(64) : 'b'.repeat(64),
+        fileSizeBytes: 1,
+        format: 'csv',
+        formulaCellCount: 0,
+      },
+    }));
+    const executor = new DesktopWorkflowJobExecutor(spreadsheet);
+    const steps: StepResult[] = [];
+    const job: AgentJob = {
+      attempt: 1,
+      availableAt: '2026-08-09T03:00:00.000Z',
+      deviceId: DEVICE_ID,
+      id: '10000000-0000-4000-8000-000000005070',
+      idempotencyKey: 'desktop-separate-sheet-1',
+      maxAttempts: 3,
+      status: 'claimed',
+      tenantId: TENANT_ID,
+      workflow: {
+        description: 'Keep every source worksheet as its own output tab.',
+        edges: [
+          { from: 'list', to: 'read' },
+          { from: 'read', to: 'merge' },
+          { from: 'merge', to: 'write' },
+        ],
+        executionTarget: { deviceId: DEVICE_ID, type: 'desktop' },
+        name: 'Separate worksheet merge',
+        nodes: [
+          {
+            config: { folderAliasId: grant.folderAliasId, pattern: '*.csv' },
+            id: 'list',
+            type: 'folder.list_files',
+            version: 1,
+          },
+          {
+            config: {
+              headerMode: 'auto',
+              headerRow: 1,
+              headerScanRows: 30,
+              maxFileSizeBytes: 1_000_000,
+              maxRows: 100,
+              maxSheets: 10,
+              sheetMode: 'all',
+            },
+            id: 'read',
+            type: 'excel.read',
+            version: 1,
+          },
+          {
+            config: { columnMode: 'union', includeSourceFile: true, layout: 'separate_sheets' },
+            id: 'merge',
+            type: 'excel.merge',
+            version: 1,
+          },
+          {
+            config: {
+              folderAliasId: grant.folderAliasId,
+              outputName: 'multi-tab.xlsx',
+              overwrite: false,
+              reportTitle: 'Multi-tab quote workbook',
+            },
+            id: 'write',
+            type: 'excel.create_report',
+            version: 1,
+          },
+        ],
+        schemaVersion: 1,
+        trigger: { config: {}, type: 'manual.trigger' },
+      },
+      workflowRunId: '10000000-0000-4000-8000-000000005071',
+    };
+
+    await expect(executor.execute(job, createReporter(steps))).resolves.toMatchObject({
+      status: 'succeeded',
+      stepCount: 4,
+    });
+    const result = await readSpreadsheet(outputPath, { maxRows: 20, maxSheets: 10 });
+    expect(result.sheets.map((sheet) => sheet.name)).toEqual([
+      '索引',
+      'Quote A',
+      'Details',
+      'Quote B',
+      'Details_2',
+      '統計摘要',
+    ]);
+    expect(result.sheets[0]?.rows).toHaveLength(4);
+    expect(result.sheets.at(-1)?.rows).toEqual([{ 來源檔案數: 2, 分頁數: 4, 資料列總數: 4 }]);
   });
 
   it('reads, deduplicates, aggregates, and writes an authorized xlsx workbook', async () => {

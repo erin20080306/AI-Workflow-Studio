@@ -257,6 +257,7 @@ export const ExcelMergeNodeSchema = node(
     .object({
       columnMode: z.enum(['strict', 'union']).default('union'),
       includeSourceFile: z.boolean().default(true),
+      layout: z.enum(['flatten', 'separate_sheets']).default('flatten'),
     })
     .strict(),
 );

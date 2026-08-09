@@ -464,6 +464,28 @@ describe('planner prompts', () => {
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });
 
+  it('preserves source worksheets when the request asks for many tabs', () => {
+    const multiSheetRequest: PlannerRequest = {
+      ...request,
+      context: {
+        ...request.context,
+        allowedFolderAliasIds: ['10000000-0000-4000-8000-000000000914'],
+        executionTarget: {
+          deviceId: '10000000-0000-4000-8000-000000000915',
+          type: 'desktop',
+        },
+        googleConnectionIds: ['10000000-0000-4000-8000-000000000916'],
+      },
+      prompt:
+        '從 https://drive.google.com/drive/folders/1Wf67U4l1VCWM6RkyFsvtYxe7YlArO1mQ 下載報價 Excel，在一個 Excel 檔案保留每個來源工作表，各自成為很多分頁，並建立摘要與簡報。',
+    };
+    const example = buildPlannerShapeExample(multiSheetRequest);
+    expect(example.workflow.nodes.find((node) => node.type === 'excel.merge')).toMatchObject({
+      config: { layout: 'separate_sheets' },
+    });
+    expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
+  });
+
   it('adds the required summary and report predecessors for a visible Slides-only request', () => {
     const visibleSlidesRequest: PlannerRequest = {
       ...request,

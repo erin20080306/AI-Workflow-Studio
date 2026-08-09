@@ -54,6 +54,18 @@ function requestedWorkbookNames(prompt: string): readonly string[] {
   ];
 }
 
+function requestedSeparateWorkbookSheets(prompt: string): boolean {
+  return (
+    /(?:一個|一份|同一個|同一份|single|one)\s*(?:excel|活頁簿|工作簿|workbook)?[^。.!?]{0,40}(?:很多|多個|多張|多頁|multiple|several)[^。.!?]{0,20}(?:分頁|工作表|sheet)/iu.test(
+      prompt,
+    ) ||
+    /(?:每個|各個|各自|分別)[^。.!?]{0,30}(?:分頁|工作表|sheet)/iu.test(prompt) ||
+    /(?:保留|維持)[^。.!?]{0,20}(?:原始|各自|獨立)[^。.!?]{0,20}(?:分頁|工作表|sheet)/iu.test(
+      prompt,
+    )
+  );
+}
+
 function requestedColumn(prompt: string, suffix: RegExp): string | undefined {
   const match = new RegExp(
     `(?:依|by|按)\\s*[「"']?([\\p{L}\\p{N}][\\p{L}\\p{N} _-]{0,60}?)[」"']?\\s*(?:${suffix.source})`,
@@ -238,7 +250,11 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
       version: 1,
     },
     {
-      config: { columnMode: 'union', includeSourceFile: true },
+      config: {
+        columnMode: 'union',
+        includeSourceFile: true,
+        layout: requestedSeparateWorkbookSheets(request.prompt) ? 'separate_sheets' : 'flatten',
+      },
       id: 'merge_local_workbooks',
       type: 'excel.merge',
       version: 1,

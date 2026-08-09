@@ -4328,3 +4328,10 @@ Status: in progress
   validate the cloud summary/Slides/GAS continuation, and separately validate
   the large Drive folder. This phase is
   not considered production-accepted until those runs succeed.
+
+- Added an explicit `excel.merge` `layout: separate_sheets` mode for requests
+  that ask for one workbook with many tabs. The local executor now preserves
+  every source worksheet as its own output tab and adds `索引` and `統計摘要`
+  tabs; the existing `flatten` behavior remains the default for older plans.
+  Planner intent coverage and a desktop end-to-end fixture verify the tab
+  count, duplicate-name suffixing, index, summary, and non-overwriting output.

@@ -55,7 +55,9 @@ const EnvelopeSchema = z
       .array(z.string().min(1).max(1_024).refine(isSafeRelativeEnvelopePath))
       .max(1_000)
       .default([]),
-    tables: z.array(TableSchema).max(2_000).default([]),
+    // A separate-sheet merge adds the index and summary tabs to the bounded
+    // source-sheet envelope.
+    tables: z.array(TableSchema).max(2_002).default([]),
     write: z
       .object({
         backupCreated: z.boolean().optional(),
@@ -385,6 +387,9 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
           };
         }
         case 'excel.merge': {
+          if (parsed.config.layout === 'separate_sheets') {
+            return preservedSheets(envelope);
+          }
           const table = this.spreadsheet.transform(envelope.tables, {
             columnMode: parsed.config.columnMode,
           });
@@ -816,6 +821,44 @@ function transformed(
       inputHashes: envelope.inputHashes,
       paths: envelope.paths,
       tables: [table],
+    }),
+  };
+}
+
+function preservedSheets(envelope: DesktopEnvelope): {
+  readonly metrics: {
+    readonly processedFileCount: number;
+    readonly processedRowCount: number;
+  };
+  readonly output: JsonValue;
+} {
+  const sheets = envelope.tables;
+  const indexRows = sheets.map((sheet, index) => ({
+    分頁: sheet.name,
+    分頁序號: index + 1,
+    資料列數: sheet.rows.length,
+  }));
+  const summaryRows = [
+    {
+      來源檔案數: envelope.paths.length,
+      分頁數: sheets.length,
+      資料列總數: countRows(sheets),
+    },
+  ];
+  return {
+    metrics: {
+      processedFileCount: envelope.paths.length,
+      processedRowCount: countRows(sheets),
+    },
+    output: jsonEnvelope({
+      ...(envelope.folderAliasId === undefined ? {} : { folderAliasId: envelope.folderAliasId }),
+      inputHashes: envelope.inputHashes,
+      paths: envelope.paths,
+      tables: [
+        { columns: ['分頁', '分頁序號', '資料列數'], name: '索引', rows: indexRows },
+        ...sheets,
+        { columns: ['來源檔案數', '分頁數', '資料列總數'], name: '統計摘要', rows: summaryRows },
+      ],
     }),
   };
 }
