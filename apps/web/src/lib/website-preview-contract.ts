@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { WEBSITE_CART_SCRIPT_SHA256 } from './website-cart';
+
 export const WebsitePreviewViewportSchema = z.enum(['desktop', 'tablet', 'mobile']);
 
 export const WEBSITE_PREVIEW_VIEWPORTS = {
@@ -38,7 +40,7 @@ export const WEBSITE_PREVIEW_HEADERS = {
     "style-src 'unsafe-inline'",
     'img-src data: https://*.supabase.co',
     "font-src 'none'",
-    "script-src 'none'",
+    `script-src '${WEBSITE_CART_SCRIPT_SHA256}'`,
     "connect-src 'none'",
     "media-src 'none'",
     "object-src 'none'",
@@ -59,7 +61,7 @@ export const WEBSITE_PUBLIC_HEADERS = {
     "style-src 'unsafe-inline'",
     "img-src 'self'",
     "font-src 'none'",
-    "script-src 'none'",
+    `script-src '${WEBSITE_CART_SCRIPT_SHA256}'`,
     "connect-src 'none'",
     "media-src 'none'",
     "object-src 'none'",

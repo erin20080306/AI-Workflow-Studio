@@ -1,6 +1,7 @@
 import { WebsiteSpecSchema } from '@ai-workflow-studio/website-schema';
 import { describe, expect, it } from 'vitest';
 
+import { WEBSITE_CART_SCRIPT_SHA256 } from './website-cart';
 import {
   WEBSITE_PUBLIC_HEADERS,
   WEBSITE_PREVIEW_HEADERS,
@@ -128,7 +129,38 @@ describe('website preview', () => {
     expect(html).toContain('product-price">NT$1,680');
     expect(html).toContain('class="gallery gallery-grid"');
     expect(html).toContain('gallery-caption">Morning');
-    expect(html).not.toContain('<script');
+  });
+
+  it('adds a hash-pinned cart only to pages that have a product-grid', () => {
+    const commerce = WebsiteSpecSchema.parse({
+      ...spec,
+      pages: [
+        {
+          ...spec.pages[0],
+          sections: [
+            {
+              columns: '2',
+              id: 'products-main',
+              items: [
+                { name: 'Item A', price: 1680, priceLabel: 'NT$1,680', sku: 'AN-1' },
+                { name: 'Item B', price: 1280, priceLabel: 'NT$1,280', sku: 'AN-2' },
+              ],
+              title: 'Shop',
+              type: 'product-grid',
+            },
+            spec.pages[0]!.sections[1],
+          ],
+        },
+      ],
+    });
+    const shop = renderWebsitePreviewDocument(commerce, 'home');
+    // Add-to-cart buttons, header toggle, drawer, and exactly one script tag.
+    expect(shop).toContain('data-add-cart');
+    expect(shop).toContain('data-cart-toggle');
+    expect(shop).toContain('data-cart-root');
+    expect(shop.match(/<script>/gu)).toHaveLength(1);
+    // A non-commerce page stays completely script-free.
+    expect(renderWebsitePreviewDocument(spec, 'home')).not.toContain('<script');
   });
 
   it('renders published navigation, managed content, and a same-origin contact form', () => {
@@ -164,7 +196,12 @@ describe('website preview', () => {
     expect(html).toContain('href="/api/public-sites/product-site-a1000000/auth?pageSlug=home"');
     expect(html).toContain('<form');
     expect(html).not.toContain('<script');
-    expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("script-src 'none'");
+    expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain(
+      `script-src '${WEBSITE_CART_SCRIPT_SHA256}'`,
+    );
+    expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).not.toContain(
+      "script-src 'unsafe-inline'",
+    );
     expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("form-action 'self'");
     expect(WEBSITE_PUBLIC_HEADERS['content-security-policy']).toContain("frame-ancestors 'none'");
   });
@@ -351,8 +388,13 @@ describe('website preview', () => {
     expect(blocked).not.toContain('<img alt="Generated private hero"');
   });
 
-  it('locks the preview response to a no-script, no-network CSP', () => {
-    expect(WEBSITE_PREVIEW_HEADERS['content-security-policy']).toContain("script-src 'none'");
+  it('locks the preview response to a single hash-pinned script and no network', () => {
+    expect(WEBSITE_PREVIEW_HEADERS['content-security-policy']).toContain(
+      `script-src '${WEBSITE_CART_SCRIPT_SHA256}'`,
+    );
+    expect(WEBSITE_PREVIEW_HEADERS['content-security-policy']).not.toContain(
+      "script-src 'unsafe-inline'",
+    );
     expect(WEBSITE_PREVIEW_HEADERS['content-security-policy']).toContain("connect-src 'none'");
     expect(WEBSITE_PREVIEW_HEADERS['content-security-policy']).toContain("form-action 'none'");
     expect(WEBSITE_PREVIEW_HEADERS['content-security-policy']).toContain(

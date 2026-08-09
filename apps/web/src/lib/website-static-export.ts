@@ -156,7 +156,7 @@ export function createWebsiteStaticSource(input: {
       `Website: ${project.name}`,
       `Version: ${generation.version} · ${generation.versionName}`,
       'Open index.html in a browser or upload the extracted folder to any static host.',
-      'This archive contains static HTML and local PNG assets only. It contains no API keys, prompts, login data, server code, or executable scripts.',
+      'This archive contains static HTML and local PNG assets only. It contains no API keys, prompts, login data, or server code. Storefront pages include one built-in shopping-cart script (client-side only, no network calls).',
       '',
     ].join('\n'),
   );
