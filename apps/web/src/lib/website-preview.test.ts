@@ -131,6 +131,51 @@ describe('website preview', () => {
     expect(html).toContain('gallery-caption">Morning');
   });
 
+  it('renders a real product image when an item has an attached asset', () => {
+    const withImage = WebsiteSpecSchema.parse({
+      ...spec,
+      assets: [
+        { alt: 'Product photo', id: 'asset-p1', kind: 'project-asset', role: 'illustration' },
+      ],
+      pages: [
+        {
+          ...spec.pages[0],
+          sections: [
+            {
+              columns: '2',
+              id: 'products-main',
+              items: [
+                {
+                  assetId: 'asset-p1',
+                  name: 'Item A',
+                  price: 1680,
+                  priceLabel: 'NT$1,680',
+                  sku: 'AN-1',
+                },
+                { name: 'Item B', price: 1280, priceLabel: 'NT$1,280', sku: 'AN-2' },
+              ],
+              title: 'Shop',
+              type: 'product-grid',
+            },
+            spec.pages[0]!.sections[1],
+          ],
+        },
+      ],
+    });
+    const html = renderWebsitePreviewDocument(
+      withImage,
+      'home',
+      new Map([
+        [
+          'asset-p1',
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk',
+        ],
+      ]),
+    );
+    expect(html).toContain('class="asset-image"');
+    expect(html).toContain('alt="Product photo"');
+  });
+
   it('adds a hash-pinned cart only to pages that have a product-grid', () => {
     const commerce = WebsiteSpecSchema.parse({
       ...spec,

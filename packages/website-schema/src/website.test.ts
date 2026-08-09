@@ -378,6 +378,17 @@ describe('Website Spec validation', () => {
         versionName: 'Hero image',
       }),
     ).toMatchObject({ provider: 'auto', tier: 'economy' });
+    // A product/gallery item image targets a bounded item index.
+    expect(
+      WebsiteImageGenerationInputSchema.parse({
+        alt: 'Product photo',
+        itemIndex: 2,
+        pageSlug: 'home',
+        prompt: 'A minimalist product photo on a neutral studio backdrop.',
+        sectionId: 'home-product-grid-2',
+        versionName: 'Product image',
+      }).itemIndex,
+    ).toBe(2);
     expect(
       WebsiteGeneratedAssetSchema.parse({
         alt: 'Professional automation workspace',

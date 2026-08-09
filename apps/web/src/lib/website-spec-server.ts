@@ -748,7 +748,23 @@ export interface WebsiteAssetGenerationResult {
 
 function imageSectionRole(
   section: WebsiteSpec['pages'][number]['sections'][number],
+  itemIndex: number | undefined,
 ): 'hero' | 'illustration' | 'portrait' {
+  if (itemIndex !== undefined) {
+    // Product and gallery item images are stored with the generic 'illustration'
+    // role (the storage role enum has no 'product'); the renderer locates them
+    // by assetId, not role.
+    if (section.type === 'product-grid' || section.type === 'gallery') {
+      if (itemIndex >= section.items.length) {
+        throw new WebsiteStudioError('WEBSITE_INVALID', 'The selected item was not found.');
+      }
+      return 'illustration';
+    }
+    throw new WebsiteStudioError(
+      'WEBSITE_INVALID',
+      'Item images can only be attached to product-grid or gallery sections.',
+    );
+  }
   if (section.type === 'hero') return 'hero';
   if (section.type === 'testimonial') return 'portrait';
   if (section.type === 'content') return 'illustration';
@@ -796,7 +812,7 @@ export async function generateWebsiteAsset(
   if (page === undefined || section === undefined) {
     throw new WebsiteStudioError('WEBSITE_INVALID', 'The selected website section was not found.');
   }
-  const role = imageSectionRole(section);
+  const role = imageSectionRole(section, input.itemIndex);
   const route = await resolveWebsiteImageRoute(context, {
     provider: input.provider,
     tier: input.tier,
@@ -842,26 +858,48 @@ export async function generateWebsiteAsset(
     const outputSection = outputPage?.sections.find(
       (candidate) => candidate.id === input.sectionId,
     );
-    if (
-      outputSection === undefined ||
-      (outputSection.type !== 'content' &&
-        outputSection.type !== 'hero' &&
-        outputSection.type !== 'testimonial')
-    ) {
+    if (outputSection === undefined) {
       throw new WebsiteStudioError(
         'WEBSITE_STATE_CONFLICT',
         'The selected section changed before the image could be attached.',
       );
     }
-    output.assets.push({
+    const conflict = () => {
+      throw new WebsiteStudioError(
+        'WEBSITE_STATE_CONFLICT',
+        'The selected section changed before the image could be attached.',
+      );
+    };
+    const assetReference = {
       alt: storedAsset.alt,
       id: storedAsset.id,
-      kind: 'project-asset',
+      kind: 'project-asset' as const,
       role: storedAsset.role,
-    });
-    outputSection.assetId = storedAsset.id;
-    if (outputSection.type === 'hero' && outputSection.layout !== 'split') {
-      outputSection.layout = 'split';
+    };
+    const itemIndex = input.itemIndex;
+    if (itemIndex !== undefined) {
+      if (outputSection.type !== 'product-grid' && outputSection.type !== 'gallery') conflict();
+      else if (itemIndex >= outputSection.items.length) conflict();
+      else {
+        const item = outputSection.items[itemIndex];
+        if (item === undefined) conflict();
+        else {
+          output.assets.push(assetReference);
+          item.assetId = storedAsset.id;
+        }
+      }
+    } else if (
+      outputSection.type === 'content' ||
+      outputSection.type === 'hero' ||
+      outputSection.type === 'testimonial'
+    ) {
+      output.assets.push(assetReference);
+      outputSection.assetId = storedAsset.id;
+      if (outputSection.type === 'hero' && outputSection.layout !== 'split') {
+        outputSection.layout = 'split';
+      }
+    } else {
+      conflict();
     }
     if (outputSection.type === 'content' && outputSection.layout === 'text') {
       outputSection.layout = 'image-right';

@@ -528,6 +528,7 @@ export const WebsiteSpecRestoreInputSchema = z
 export const WebsiteImageGenerationInputSchema = z
   .object({
     alt: safeText(1, 180),
+    itemIndex: z.number().int().min(0).max(11).optional(),
     locale: z.enum(['en', 'zh-Hant']).default('zh-Hant'),
     pageSlug: PageSlugSchema,
     prompt: safeText(10, 1_200),
