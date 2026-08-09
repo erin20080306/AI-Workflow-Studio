@@ -83,22 +83,64 @@ describe('cloud Slides and approved GAS planning', () => {
     expect(deploySafeAppsScript).not.toHaveBeenCalled();
   });
 
-  it('creates exactly the requested slide count and keeps references bounded', () => {
+  it('turns a structured report into titled section slides with an agenda and bounded references', () => {
+    const report = [
+      '# 成本摘要報告',
+      '',
+      '### 一、 事實 (Facts)',
+      '1. 本次分析涵蓋 3 個 Excel 檔案，共 153 列。',
+      '2. 主要材質為 SPCC，單價 22 NT/kg。',
+      '',
+      '### 二、 分析 (Analysis)',
+      '- 成本結構完整，材料與加工分項清楚。',
+      '- 議價空間會壓縮毛利率。',
+      '',
+      '### 三、 建議 (Recommendations)',
+      '- 建立自動化成本試算模型。',
+      '- 設定各產品線最低毛利防線。',
+      'https://example.com/chart.png',
+    ].join('\n');
+
     const slides = buildProfessionalSlides(
-      '摘要重點一包含足夠文字\n摘要重點二包含足夠文字\nhttps://example.com/chart.png',
-      {
-        includeImages: true,
-        includeReferences: true,
-        maxSlides: 5,
-        title: '成本摘要',
-      },
+      report,
+      { includeImages: true, includeReferences: true, maxSlides: 8, title: '成本摘要' },
       '2026-08-01',
     );
 
-    expect(slides).toHaveLength(5);
-    expect(slides[0]?.title).toBe('成本摘要');
+    // Agenda slide plus one slide per parsed section — meaningful, not padded.
+    expect(slides.map((slide) => slide.title)).toEqual([
+      '成本摘要',
+      '一、 事實 (Facts)',
+      '二、 分析 (Analysis)',
+      '三、 建議 (Recommendations)',
+    ]);
+    // The agenda lists the section headings.
+    expect(slides[0]?.body).toEqual([
+      '一、 事實 (Facts)',
+      '二、 分析 (Analysis)',
+      '三、 建議 (Recommendations)',
+    ]);
+    // Section bullets are cleaned of markdown/numbering.
+    expect(slides[1]?.body[0]).toBe('本次分析涵蓋 3 個 Excel 檔案，共 153 列。');
+    expect(slides[2]?.body).toContain('議價空間會壓縮毛利率。');
+    // Image only on content slides, references bounded to three.
+    expect(slides[0]).not.toHaveProperty('imageUrl');
     expect(slides[1]).toMatchObject({ imageUrl: 'https://example.com/chart.png' });
-    expect(slides.every((slide) => slide.body.length >= 1 && slide.body.length <= 8)).toBe(true);
+    expect(slides.every((slide) => (slide.references?.length ?? 0) <= 3)).toBe(true);
+    expect(slides.every((slide) => slide.body.length >= 1 && slide.body.length <= 6)).toBe(true);
+  });
+
+  it('falls back to bounded chunking for unstructured summary text', () => {
+    const slides = buildProfessionalSlides(
+      '摘要重點一包含足夠文字內容\n摘要重點二包含足夠文字內容\n摘要重點三包含足夠文字內容',
+      { includeImages: false, includeReferences: false, maxSlides: 5, title: '成本摘要' },
+      '2026-08-01',
+    );
+
+    expect(slides.length).toBeGreaterThanOrEqual(1);
+    expect(slides.length).toBeLessThanOrEqual(5);
+    expect(slides[0]?.title).toBe('成本摘要');
+    expect(slides.every((slide) => slide.body.length >= 1 && slide.body.length <= 6)).toBe(true);
   });
 
   it('binds the allowlisted Slides GAS template only to a validated presentation output', () => {
