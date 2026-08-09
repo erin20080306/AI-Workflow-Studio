@@ -32,3 +32,7 @@ supabase/.temp/
 .DS_Store
 .idea/
 .vscode/
+
+# Bundled LibreOffice is staged by CI, never committed (see apps/desktop/build/libreoffice/README.md)
+apps/desktop/build/libreoffice/*
+!apps/desktop/build/libreoffice/README.md

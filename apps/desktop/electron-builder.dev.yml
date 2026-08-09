@@ -1,4 +1,7 @@
 extends: ./electron-builder.yml
+# Ad-hoc/prerelease test builds skip the ~400 MB LibreOffice bundle for speed;
+# resolveSofficePath falls back to the developer's system install.
+extraResources: []
 mac:
   artifactName: AI-Workflow-Studio-Agent-${version}-mac-${arch}-UNSIGNED-PRERELEASE.${ext}
   identity: null

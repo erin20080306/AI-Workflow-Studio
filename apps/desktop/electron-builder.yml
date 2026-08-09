@@ -10,6 +10,15 @@ files:
   - '!node_modules/@ai-workflow-studio/**'
   - '!node_modules/**/*.{test,spec}.{js,ts,tsx}'
   - '!node_modules/**/*.map'
+# Bundle a headless LibreOffice so the formatting-preserving workbook combine
+# engine needs no separate customer install. CI must stage the platform's
+# LibreOffice under build/libreoffice/ before packaging (see docs/EXCEL_MERGE_ENGINE.md).
+# It lands at Resources/libreoffice/ and is resolved by resolveSofficePath.
+extraResources:
+  - from: build/libreoffice
+    to: libreoffice
+    filter:
+      - '**/*'
 mac:
   artifactName: AI-Workflow-Studio-Agent-${version}-mac-${arch}.${ext}
   category: public.app-category.productivity
