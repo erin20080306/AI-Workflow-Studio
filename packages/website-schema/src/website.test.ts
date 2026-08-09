@@ -337,6 +337,34 @@ describe('Website Spec validation', () => {
         versionName: 'Unsafe edit',
       }),
     ).toThrow();
+    // Product management: an update-product edit patches a bounded item.
+    expect(
+      WebsiteSpecEditInputSchema.parse({
+        edit: {
+          itemIndex: 1,
+          pageSlug: 'home',
+          patch: { availabilityLabel: '現貨 9', priceLabel: 'NT$1,880' },
+          sectionId: 'home-product-grid-2',
+          type: 'update-product',
+        },
+        kind: 'direct',
+        versionName: 'Price update',
+      }).kind,
+    ).toBe('direct');
+    // An empty patch is rejected.
+    expect(() =>
+      WebsiteSpecEditInputSchema.parse({
+        edit: {
+          itemIndex: 0,
+          pageSlug: 'home',
+          patch: {},
+          sectionId: 'home-product-grid-2',
+          type: 'update-product',
+        },
+        kind: 'direct',
+        versionName: 'Empty patch',
+      }),
+    ).toThrow();
   });
 
   it('records reversible version metadata and compares deterministic spec changes', () => {

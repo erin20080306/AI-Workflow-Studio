@@ -335,6 +335,33 @@ export function WebsiteSpecEditor({
     }
   }
 
+  function saveProduct(form: FormData): void {
+    if (section?.type !== 'product-grid') return;
+    const index = Math.min(itemIndex, section.items.length - 1);
+    const current = section.items[index];
+    if (current === undefined) return;
+    const read = (key: string): string => String(form.get(key) ?? '').trim();
+    const patch: Record<string, string> = {};
+    const name = read('name');
+    if (name.length >= 2 && name !== current.name) patch.name = name;
+    const priceLabel = read('priceLabel');
+    if (priceLabel.length >= 1 && priceLabel !== current.priceLabel) patch.priceLabel = priceLabel;
+    const variant = read('variant');
+    if (variant.length >= 1 && variant !== (current.variant ?? '')) patch.variant = variant;
+    const availabilityLabel = read('availabilityLabel');
+    if (availabilityLabel.length >= 1 && availabilityLabel !== (current.availabilityLabel ?? '')) {
+      patch.availabilityLabel = availabilityLabel;
+    }
+    const badge = read('badge');
+    if (badge.length >= 1 && badge !== (current.badge ?? '')) patch.badge = badge;
+    if (Object.keys(patch).length === 0) return;
+    void createEdit({
+      edit: { itemIndex: index, pageSlug, patch, sectionId, type: 'update-product' },
+      kind: 'direct',
+      versionName,
+    });
+  }
+
   async function generateImage(): Promise<void> {
     if (
       busy ||
@@ -465,6 +492,10 @@ export function WebsiteSpecEditor({
   const hasProductGrid =
     currentPage?.sections.some((item) => item.type === 'product-grid') ?? false;
   const isItemImageSection = section?.type === 'product-grid' || section?.type === 'gallery';
+  const editProductIndex =
+    section?.type === 'product-grid' ? Math.min(itemIndex, section.items.length - 1) : 0;
+  const editProduct =
+    section?.type === 'product-grid' ? section.items[editProductIndex] : undefined;
   const imageCompatible =
     section?.type === 'hero' ||
     section?.type === 'content' ||
@@ -696,6 +727,80 @@ export function WebsiteSpecEditor({
               >
                 <SaveIcon className="size-4" /> {text.sectionCopy}
               </button>
+            </div>
+          ) : null}
+          {section?.type === 'product-grid' && editProduct !== undefined ? (
+            <div className="mt-4 rounded-xl bg-violet-50 p-3">
+              <p className="text-xs font-semibold text-violet-800">
+                {locale === 'en' ? 'Product manager' : '商品管理'}
+              </p>
+              <label className="mt-3 block text-xs font-semibold text-slate-600">
+                <span className="mb-1.5 block">{locale === 'en' ? 'Product' : '選擇商品'}</span>
+                <select
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                  onChange={(event) => setItemIndex(Number(event.target.value))}
+                  value={editProductIndex}
+                >
+                  {section.items.map((item, index) => (
+                    <option key={index} value={index}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <form
+                className="mt-3 grid gap-2"
+                key={`${sectionId}-${editProductIndex}`}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveProduct(new FormData(event.currentTarget));
+                }}
+              >
+                <input
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                  defaultValue={editProduct.name}
+                  maxLength={100}
+                  name="name"
+                  placeholder={locale === 'en' ? 'Name' : '名稱'}
+                />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                    defaultValue={editProduct.priceLabel}
+                    maxLength={40}
+                    name="priceLabel"
+                    placeholder={locale === 'en' ? 'Price (e.g. NT$1,680)' : '價格 (如 NT$1,680)'}
+                  />
+                  <input
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                    defaultValue={editProduct.variant ?? ''}
+                    maxLength={60}
+                    name="variant"
+                    placeholder={locale === 'en' ? 'Variant' : '款式 / 顏色'}
+                  />
+                  <input
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                    defaultValue={editProduct.availabilityLabel ?? ''}
+                    maxLength={40}
+                    name="availabilityLabel"
+                    placeholder={locale === 'en' ? 'Stock' : '庫存 (如 現貨 18)'}
+                  />
+                  <input
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                    defaultValue={editProduct.badge ?? ''}
+                    maxLength={24}
+                    name="badge"
+                    placeholder={locale === 'en' ? 'Badge' : '標籤 (如 新品)'}
+                  />
+                </div>
+                <button
+                  className="mt-1 inline-flex items-center gap-2 self-start rounded-xl bg-violet-700 px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-40"
+                  disabled={busy}
+                  type="submit"
+                >
+                  <SaveIcon className="size-4" /> {locale === 'en' ? 'Save product' : '儲存商品'}
+                </button>
+              </form>
             </div>
           ) : null}
         </article>

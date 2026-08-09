@@ -497,6 +497,26 @@ export const WebsiteDirectEditSchema = z.discriminatedUnion('type', [
       type: z.literal('duplicate-section'),
     })
     .strict(),
+  z
+    .object({
+      itemIndex: z.number().int().min(0).max(11),
+      pageSlug: PageSlugSchema,
+      patch: z
+        .object({
+          availabilityLabel: safeText(1, 40).optional(),
+          badge: safeText(1, 24).optional(),
+          name: safeText(2, 100).optional(),
+          priceLabel: safeText(1, 40).optional(),
+          variant: safeText(1, 60).optional(),
+        })
+        .strict()
+        .refine((patch) => Object.keys(patch).length > 0, {
+          message: 'At least one product property must be supplied.',
+        }),
+      sectionId: IdentifierSchema,
+      type: z.literal('update-product'),
+    })
+    .strict(),
 ]);
 
 export const WebsiteSpecEditInputSchema = z.discriminatedUnion('kind', [

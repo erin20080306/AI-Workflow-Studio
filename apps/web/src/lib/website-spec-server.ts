@@ -469,7 +469,7 @@ function findEditableSection(
   spec: WebsiteSpec,
   edit: Extract<
     WebsiteDirectEdit,
-    { type: 'duplicate-section' | 'move-section' | 'update-section-copy' }
+    { type: 'duplicate-section' | 'move-section' | 'update-product' | 'update-section-copy' }
   >,
 ) {
   const page = spec.pages.find((candidate) => candidate.slug === edit.pageSlug);
@@ -542,6 +542,41 @@ function applyDirectEdit(specValue: WebsiteSpec, editValue: WebsiteDirectEdit): 
   }
 
   const { page, section, sectionIndex } = findEditableSection(spec, edit);
+  if (edit.type === 'update-product') {
+    if (section.type !== 'product-grid') {
+      throw new WebsiteStudioError(
+        'WEBSITE_INVALID',
+        'The selected section is not a product grid.',
+      );
+    }
+    const item = section.items[edit.itemIndex];
+    if (item === undefined) {
+      throw new WebsiteStudioError('WEBSITE_INVALID', 'The selected product was not found.');
+    }
+    if (edit.patch.name !== undefined) item.name = edit.patch.name;
+    if (edit.patch.variant !== undefined) item.variant = edit.patch.variant;
+    if (edit.patch.availabilityLabel !== undefined) {
+      item.availabilityLabel = edit.patch.availabilityLabel;
+    }
+    if (edit.patch.badge !== undefined) item.badge = edit.patch.badge;
+    if (edit.patch.priceLabel !== undefined) {
+      item.priceLabel = edit.patch.priceLabel;
+      // Keep the numeric cart price in step with the displayed label.
+      const match = /\d[\d,]*(?:\.\d+)?/u.exec(edit.patch.priceLabel);
+      const amount = match === null ? undefined : Number(match[0].replaceAll(',', ''));
+      if (
+        amount !== undefined &&
+        Number.isFinite(amount) &&
+        amount >= 0 &&
+        amount <= 1_000_000_000
+      ) {
+        item.price = amount;
+      } else {
+        delete item.price;
+      }
+    }
+    return WebsiteSpecSchema.parse(spec);
+  }
   if (edit.type === 'update-section-copy') {
     updateSectionCopy(section, edit);
   } else if (edit.type === 'move-section') {
@@ -572,12 +607,14 @@ function directChangeSummary(edit: WebsiteDirectEdit, locale: 'en' | 'zh-Hant'):
   const english = {
     'duplicate-section': 'Duplicated a registered section.',
     'move-section': 'Reordered a registered section.',
+    'update-product': 'Updated a validated product.',
     'update-section-copy': 'Updated validated section copy.',
     'update-theme': 'Updated validated theme properties.',
   } as const;
   const chinese = {
     'duplicate-section': '複製已註冊區塊。',
     'move-section': '重新排列已註冊區塊。',
+    'update-product': '更新已驗證的商品資料。',
     'update-section-copy': '更新已驗證的區塊文案。',
     'update-theme': '更新已驗證的主題屬性。',
   } as const;
