@@ -194,6 +194,59 @@ describe('GoogleWorkspaceClient', () => {
     expect(calls.every((call) => call.method === 'POST' || call.method === 'PUT')).toBe(true);
   });
 
+  it('embeds a native Google chart built inside the user account, no external image host', async () => {
+    const calls: { readonly body: string; readonly url: string }[] = [];
+    const fetchTransport: GoogleFetch = async (input, init) => {
+      const url = String(input);
+      calls.push({ body: String(init?.body ?? ''), url });
+      if (url.endsWith('/presentations')) return response({ presentationId: 'presentation_1234' });
+      if (url.endsWith('/spreadsheets')) return response({ spreadsheetId: 'spreadsheet_5678' });
+      if (url.includes('/spreadsheets/') && url.endsWith(':batchUpdate')) {
+        return response({ replies: [{ addChart: { chart: { chartId: 42 } } }] });
+      }
+      return response({});
+    };
+    const client = new GoogleWorkspaceClient({
+      fetchTransport,
+      sheetsBaseUrl: 'https://sheets.example.test/v4',
+      slidesBaseUrl: 'https://slides.example.test/v1',
+    });
+
+    await expect(
+      client.createProfessionalDeck(ACCESS_TOKEN, {
+        chart: {
+          categories: ['光板', '鍍鋅板', '其他'],
+          kind: 'column',
+          title: '各類報價數量',
+          values: [120, 187, 40],
+        },
+        locale: 'zh-Hant',
+        slides: [
+          { body: ['營運摘要'], title: '摘要' },
+          { body: ['訂單增加'], title: '發現' },
+          { body: ['優先處理高價值訂單'], title: '建議' },
+        ],
+        title: '專業營運簡報',
+      }),
+    ).resolves.toEqual({ presentationId: 'presentation_1234' });
+
+    // The data lives in a Sheet in the user's account, charted with addChart.
+    const dataSheet = calls.find((call) => call.url.endsWith('/spreadsheets'));
+    expect(dataSheet?.body).toContain('鍍鋅板');
+    const chartBatch = calls.find(
+      (call) => call.url.includes('/spreadsheets/') && call.url.endsWith(':batchUpdate'),
+    );
+    expect(chartBatch?.body).toContain('addChart');
+    expect(chartBatch?.body).toContain('COLUMN');
+    // The deck embeds that chart by id as a static image — no external URL.
+    const slideBatch = calls.find((call) => call.url.includes('/presentations/'));
+    expect(slideBatch?.body).toContain('createSheetsChart');
+    expect(slideBatch?.body).toContain('spreadsheet_5678');
+    expect(slideBatch?.body).toContain('"chartId":42');
+    expect(slideBatch?.body).toContain('NOT_LINKED_IMAGE');
+    expect(calls.every((call) => !call.url.includes('quickchart'))).toBe(true);
+  });
+
   it('rejects an unsupported web app deployment before creating a script project', async () => {
     let requests = 0;
     const client = new GoogleWorkspaceClient({

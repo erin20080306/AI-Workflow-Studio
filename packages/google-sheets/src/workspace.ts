@@ -79,6 +79,7 @@ export interface GoogleWorkspaceClientOptions {
   readonly fetchTransport?: GoogleFetch;
   readonly formsBaseUrl?: string;
   readonly gmailBaseUrl?: string;
+  readonly sheetsBaseUrl?: string;
   readonly slidesBaseUrl?: string;
 }
 
@@ -111,7 +112,15 @@ export interface ProfessionalSlide {
   readonly title: string;
 }
 
+export interface ProfessionalDeckChart {
+  readonly categories: readonly string[];
+  readonly kind: 'bar' | 'column' | 'line' | 'pie';
+  readonly title: string;
+  readonly values: readonly number[];
+}
+
 export interface ProfessionalDeckInput {
+  readonly chart?: ProfessionalDeckChart;
   readonly folderId?: string;
   readonly locale: 'en' | 'zh-Hant';
   readonly slides: readonly ProfessionalSlide[];
@@ -231,6 +240,7 @@ export class GoogleWorkspaceClient {
   private readonly fetchTransport: GoogleFetch;
   private readonly formsBaseUrl: string;
   private readonly gmailBaseUrl: string;
+  private readonly sheetsBaseUrl: string;
   private readonly slidesBaseUrl: string;
 
   constructor(options: GoogleWorkspaceClientOptions = {}) {
@@ -241,6 +251,7 @@ export class GoogleWorkspaceClient {
     this.fetchTransport = options.fetchTransport ?? fetch;
     this.formsBaseUrl = baseUrl(options.formsBaseUrl ?? 'https://forms.googleapis.com/v1');
     this.gmailBaseUrl = baseUrl(options.gmailBaseUrl ?? 'https://gmail.googleapis.com/gmail/v1');
+    this.sheetsBaseUrl = baseUrl(options.sheetsBaseUrl ?? 'https://sheets.googleapis.com/v4');
     this.slidesBaseUrl = baseUrl(options.slidesBaseUrl ?? 'https://slides.googleapis.com/v1');
   }
 
@@ -388,6 +399,116 @@ export class GoogleWorkspaceClient {
     return { id: draft.id, threadId: draft.message.threadId };
   }
 
+  /**
+   * Build a chart entirely inside the user's own Google account: write the
+   * series into a new Sheet, add a chart to it, and return the ids so a deck
+   * can embed a static image of that chart. No third-party service and no
+   * external image hosting are involved.
+   */
+  private async createDataChart(
+    accessToken: string,
+    chart: ProfessionalDeckChart,
+    signal: AbortSignal | undefined,
+  ): Promise<{ readonly chartId: number; readonly spreadsheetId: string }> {
+    const rowData = [
+      {
+        values: [
+          { userEnteredValue: { stringValue: 'Category' } },
+          { userEnteredValue: { stringValue: chart.title } },
+        ],
+      },
+      ...chart.categories.map((category, index) => ({
+        values: [
+          { userEnteredValue: { stringValue: category } },
+          { userEnteredValue: { numberValue: chart.values[index] ?? 0 } },
+        ],
+      })),
+    ];
+    const spreadsheet = await this.request({
+      accessToken,
+      body: {
+        properties: { title: `AIWS chart — ${chart.title}`.slice(0, 100) },
+        sheets: [
+          {
+            data: [{ rowData, startColumnIndex: 0, startRowIndex: 0 }],
+            properties: { sheetId: 0, title: 'Data' },
+          },
+        ],
+      },
+      method: 'POST',
+      schema: z.object({ spreadsheetId: GoogleIdSchema }).passthrough(),
+      ...(signal === undefined ? {} : { signal }),
+      url: `${this.sheetsBaseUrl}/spreadsheets`,
+    });
+    const endRowIndex = chart.categories.length + 1;
+    const domainRange = {
+      sources: [
+        { endColumnIndex: 1, endRowIndex, sheetId: 0, startColumnIndex: 0, startRowIndex: 1 },
+      ],
+    };
+    const seriesRange = {
+      sources: [
+        { endColumnIndex: 2, endRowIndex, sheetId: 0, startColumnIndex: 1, startRowIndex: 1 },
+      ],
+    };
+    const spec =
+      chart.kind === 'pie'
+        ? {
+            pieChart: {
+              domain: { sourceRange: domainRange },
+              legendPosition: 'RIGHT_LEGEND',
+              series: { sourceRange: seriesRange },
+            },
+            title: chart.title,
+          }
+        : {
+            basicChart: {
+              chartType: chart.kind === 'bar' ? 'BAR' : chart.kind === 'line' ? 'LINE' : 'COLUMN',
+              domains: [{ domain: { sourceRange: domainRange } }],
+              headerCount: 0,
+              legendPosition: 'BOTTOM_LEGEND',
+              series: [{ series: { sourceRange: seriesRange }, targetAxis: 'LEFT_AXIS' }],
+            },
+            title: chart.title,
+          };
+    const reply = await this.request({
+      accessToken,
+      body: {
+        requests: [
+          {
+            addChart: {
+              chart: {
+                position: {
+                  overlayPosition: {
+                    anchorCell: { columnIndex: 3, rowIndex: 0, sheetId: 0 },
+                  },
+                },
+                spec,
+              },
+            },
+          },
+        ],
+      },
+      method: 'POST',
+      schema: z.object({
+        replies: z
+          .array(
+            z.object({
+              addChart: z.object({ chart: z.object({ chartId: z.number().int() }) }).optional(),
+            }),
+          )
+          .default([]),
+      }),
+      ...(signal === undefined ? {} : { signal }),
+      url: `${this.sheetsBaseUrl}/spreadsheets/${encodeURIComponent(spreadsheet.spreadsheetId)}:batchUpdate`,
+    });
+    const chartId = reply.replies[0]?.addChart?.chart.chartId;
+    if (chartId === undefined) {
+      throw new GoogleSheetsError('GOOGLE_REQUEST_INVALID', 'The data chart was not created.');
+    }
+    return { chartId, spreadsheetId: spreadsheet.spreadsheetId };
+  }
+
   async createProfessionalDeck(
     accessToken: string,
     inputValue: ProfessionalDeckInput,
@@ -395,6 +516,18 @@ export class GoogleWorkspaceClient {
   ): Promise<{ readonly presentationId: string }> {
     const input = z
       .object({
+        chart: z
+          .object({
+            categories: z.array(z.string().trim().min(1).max(60)).min(2).max(12),
+            kind: z.enum(['bar', 'column', 'line', 'pie']),
+            title: z.string().trim().min(1).max(120),
+            values: z.array(z.number().finite()).min(2).max(12),
+          })
+          .strict()
+          .refine((value) => value.categories.length === value.values.length, {
+            message: 'Chart categories and values must have the same length.',
+          })
+          .optional(),
         folderId: GoogleIdSchema.optional(),
         locale: z.enum(['en', 'zh-Hant']),
         slides: z
@@ -449,7 +582,11 @@ export class GoogleWorkspaceClient {
         })}`,
       });
     }
-    const requests = input.slides.flatMap((slide, index) => {
+    const chartEmbed =
+      input.chart === undefined
+        ? undefined
+        : await this.createDataChart(accessToken, input.chart, signal);
+    const requests: Record<string, unknown>[] = input.slides.flatMap((slide, index) => {
       const slideId = `slide_${String(index + 1).padStart(2, '0')}`;
       const titleId = `${slideId}_title`;
       const bodyId = `${slideId}_body`;
@@ -530,6 +667,49 @@ export class GoogleWorkspaceClient {
             ]),
       ];
     });
+    if (chartEmbed !== undefined && input.chart !== undefined) {
+      const chartSlideId = 'slide_chart';
+      const chartTitleId = `${chartSlideId}_title`;
+      requests.push(
+        {
+          createSlide: {
+            objectId: chartSlideId,
+            slideLayoutReference: { predefinedLayout: 'BLANK' },
+          },
+        },
+        {
+          createShape: {
+            elementProperties: {
+              pageObjectId: chartSlideId,
+              size: {
+                height: { magnitude: 56, unit: 'PT' },
+                width: { magnitude: 640, unit: 'PT' },
+              },
+              transform: { scaleX: 1, scaleY: 1, translateX: 36, translateY: 24, unit: 'PT' },
+            },
+            objectId: chartTitleId,
+            shapeType: 'TEXT_BOX',
+          },
+        },
+        { insertText: { objectId: chartTitleId, text: input.chart.title } },
+        {
+          createSheetsChart: {
+            chartId: chartEmbed.chartId,
+            elementProperties: {
+              pageObjectId: chartSlideId,
+              size: {
+                height: { magnitude: 300, unit: 'PT' },
+                width: { magnitude: 640, unit: 'PT' },
+              },
+              transform: { scaleX: 1, scaleY: 1, translateX: 36, translateY: 96, unit: 'PT' },
+            },
+            linkingMode: 'NOT_LINKED_IMAGE',
+            objectId: `${chartSlideId}_chart`,
+            spreadsheetId: chartEmbed.spreadsheetId,
+          },
+        },
+      );
+    }
     await this.request({
       accessToken,
       body: { requests },
