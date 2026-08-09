@@ -94,7 +94,8 @@ const copy = {
     imageGenerating: 'Generating, validating, and storing a private image…',
     imageHelp:
       'Choose a hero, content, or testimonial section. The server generates one PNG, validates it, stores it privately, and creates a reversible version.',
-    imageIncompatible: 'Select a hero, content, or testimonial section to attach an image.',
+    imageIncompatible:
+      'Select a hero, content, testimonial, product, or gallery section to attach an image.',
     imageLast: 'Latest image',
     imageModel: 'Image provider',
     imagePrompt: 'Visual description',
@@ -155,7 +156,7 @@ const copy = {
     imageGenerating: '正在產生、驗證並私密儲存圖片…',
     imageHelp:
       '選擇 Hero、內容或推薦語區塊；伺服器會產生一張 PNG、驗證格式、私密儲存，並建立可還原版本。',
-    imageIncompatible: '請選擇 Hero、內容或推薦語區塊，才能套用圖片。',
+    imageIncompatible: '請選擇 Hero、內容、推薦語、商品或圖廊區塊，才能套用圖片。',
     imageLast: '最新圖片',
     imageModel: '圖片模型供應商',
     imagePrompt: '圖片描述',
@@ -253,6 +254,7 @@ export function WebsiteSpecEditor({
   const [imageTier, setImageTier] = useState<AiModelTierSelection>('auto');
   const [imagePrompt, setImagePrompt] = useState('');
   const [imageAlt, setImageAlt] = useState('');
+  const [itemIndex, setItemIndex] = useState(0);
   const [lastAsset, setLastAsset] = useState<WebsiteGeneratedAsset>();
   const [versionName, setVersionName] = useState(`Version ${generation.version + 1}`);
   const [compareVersion, setCompareVersion] = useState<number>();
@@ -334,6 +336,12 @@ export function WebsiteSpecEditor({
     ) {
       return;
     }
+    const itemSection =
+      section?.type === 'product-grid' || section?.type === 'gallery' ? section : undefined;
+    const targetItemIndex =
+      itemSection === undefined
+        ? undefined
+        : Math.max(0, Math.min(itemIndex, itemSection.items.length - 1));
     setBusy(true);
     setImageBusy(true);
     setMessage(undefined);
@@ -341,6 +349,7 @@ export function WebsiteSpecEditor({
       const response = await fetch(`/api/websites/${projectId}/images`, {
         body: JSON.stringify({
           alt: imageAlt,
+          ...(targetItemIndex === undefined ? {} : { itemIndex: targetItemIndex }),
           locale,
           pageSlug,
           prompt: imagePrompt,
@@ -411,8 +420,21 @@ export function WebsiteSpecEditor({
   }
 
   const sectionIndex = currentPage?.sections.findIndex((item) => item.id === sectionId) ?? -1;
+  const itemImageOptions =
+    section?.type === 'product-grid'
+      ? section.items.map((item, index) => ({ index, label: item.name }))
+      : section?.type === 'gallery'
+        ? section.items.map((item, index) => ({
+            index,
+            label: item.caption ?? `#${index + 1}`,
+          }))
+        : [];
+  const isItemImageSection = section?.type === 'product-grid' || section?.type === 'gallery';
   const imageCompatible =
-    section?.type === 'hero' || section?.type === 'content' || section?.type === 'testimonial';
+    section?.type === 'hero' ||
+    section?.type === 'content' ||
+    section?.type === 'testimonial' ||
+    (isItemImageSection && itemImageOptions.length > 0);
   const selectedImageTier = imageTier === 'auto' ? undefined : imageTier;
 
   return (
@@ -766,6 +788,32 @@ export function WebsiteSpecEditor({
             : websiteImageModelLabel(selectedImageTier)}
         </div>
 
+        {isItemImageSection ? (
+          <label className="mt-3 block text-xs font-semibold text-slate-600">
+            <span className="mb-1.5 block">
+              {locale === 'en'
+                ? section?.type === 'gallery'
+                  ? 'Gallery item'
+                  : 'Product'
+                : section?.type === 'gallery'
+                  ? '圖廊項目'
+                  : '選擇商品'}
+            </span>
+            <select
+              aria-label={locale === 'en' ? 'Item' : '選擇項目'}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none focus:border-violet-500"
+              disabled={busy}
+              onChange={(event) => setItemIndex(Number(event.target.value))}
+              value={Math.min(itemIndex, Math.max(0, itemImageOptions.length - 1))}
+            >
+              {itemImageOptions.map((option) => (
+                <option key={option.index} value={option.index}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <label className="mt-3 block text-xs font-semibold text-slate-600">
           <span className="mb-1.5 block">{text.imagePrompt}</span>
           <textarea
