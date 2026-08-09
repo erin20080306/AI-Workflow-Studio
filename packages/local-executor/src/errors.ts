@@ -7,7 +7,9 @@ export type LocalExecutorErrorCode =
   | 'FILE_OUTPUT_INVALID'
   | 'FILE_UNSAFE_CONTENT'
   | 'FILE_WRITE_FAILED'
-  | 'WATCH_CONFIGURATION_INVALID';
+  | 'WATCH_CONFIGURATION_INVALID'
+  | 'WORKBOOK_COMBINE_FAILED'
+  | 'WORKBOOK_CONVERSION_FAILED';
 
 export class LocalExecutorError extends Error {
   readonly code: LocalExecutorErrorCode;

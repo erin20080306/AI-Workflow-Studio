@@ -1,3 +1,9 @@
+export {
+  combineWorkbooksAsTabs,
+  combineXlsxWorkbooksAsTabs,
+  type CombineWorkbooksOptions,
+  type CombineWorkbooksResult,
+} from './combine-workbooks';
 export { LocalExecutorError, type LocalExecutorErrorCode } from './errors';
 export { hashFile } from './hash';
 export { ProcessingLedger, type ProcessingClaim } from './ledger';
