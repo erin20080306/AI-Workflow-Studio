@@ -118,7 +118,7 @@ afterEach(async () => {
 });
 
 describe('visible Drive download tracking', () => {
-  it('waits for Chrome activation before clicking the trusted selection coordinate', () => {
+  it('selects items with dispatched mouse events and a shift-click range, not screen coordinates', () => {
     const selectionStart = MACOS_VISIBLE_DRIVE_SCRIPT.indexOf(
       'if semanticAction is "select_items" then',
     );
@@ -126,22 +126,23 @@ describe('visible Drive download tracking', () => {
       'if semanticAction is "download_items" then',
     );
     const selectionBlock = MACOS_VISIBLE_DRIVE_SCRIPT.slice(selectionStart, selectionEnd);
-    const frontmost = selectionBlock.indexOf('set frontmost to true');
-    const activationDelay = selectionBlock.indexOf('delay 1', frontmost);
-    const trustedClick = selectionBlock.indexOf('click at {clickX, clickY}', activationDelay);
-    const postClickDelay = selectionBlock.indexOf('delay 1', trustedClick);
-    const selectAll = selectionBlock.indexOf('key code 0 using {command down}', postClickDelay);
+    const dispatchFirst = selectionBlock.indexOf('fire(cells[0],{})');
+    const shiftRange = selectionBlock.indexOf('shiftKey:true', dispatchFirst);
+    const verifySelection = selectionBlock.indexOf('aria-selected', shiftRange);
 
     expect(selectionStart).toBeGreaterThanOrEqual(0);
     expect(selectionEnd).toBeGreaterThan(selectionStart);
-    expect(frontmost).toBeGreaterThanOrEqual(0);
-    expect(activationDelay).toBeGreaterThan(frontmost);
-    expect(trustedClick).toBeGreaterThan(activationDelay);
-    expect(postClickDelay).toBeGreaterThan(trustedClick);
-    expect(selectAll).toBeGreaterThan(postClickDelay);
+    // Selection now happens by dispatching real MouseEvents on the DOM items,
+    // which cannot miss the way absolute screen-coordinate clicks did.
+    expect(selectionBlock).toContain('new MouseEvent(t,o)');
+    expect(dispatchFirst).toBeGreaterThanOrEqual(0);
+    expect(shiftRange).toBeGreaterThan(dispatchFirst);
+    expect(verifySelection).toBeGreaterThan(shiftRange);
+    expect(selectionBlock).not.toContain('click at {clickX, clickY}');
+    expect(selectionBlock).not.toContain('key code 0 using {command down}');
   });
 
-  it('waits for Chrome activation before clicking the trusted Download coordinate', () => {
+  it('triggers Download by dispatching a click on the button element, not a screen coordinate', () => {
     const downloadStart = MACOS_VISIBLE_DRIVE_SCRIPT.indexOf(
       'if semanticAction is "download_items" then',
     );
@@ -149,19 +150,21 @@ describe('visible Drive download tracking', () => {
       'error "Unsupported visible Drive action."',
     );
     const downloadBlock = MACOS_VISIBLE_DRIVE_SCRIPT.slice(downloadStart, downloadEnd);
-    const frontmost = downloadBlock.indexOf('set frontmost to true');
-    const activationDelay = downloadBlock.indexOf('delay 1', frontmost);
-    const trustedClick = downloadBlock.indexOf('click at {clickX, clickY}', activationDelay);
-    const postClickDelay = downloadBlock.indexOf('delay 1', trustedClick);
-    const dialogCheck = downloadBlock.indexOf('set dialogState to execute', postClickDelay);
+    const locateButton = downloadBlock.indexOf("l==='下載'||l==='Download'");
+    const dispatchClick = downloadBlock.indexOf(
+      'b.dispatchEvent(new MouseEvent(t,o))',
+      locateButton,
+    );
+    const dialogCheck = downloadBlock.indexOf('set dialogState to execute', dispatchClick);
 
     expect(downloadStart).toBeGreaterThanOrEqual(0);
     expect(downloadEnd).toBeGreaterThan(downloadStart);
-    expect(frontmost).toBeGreaterThanOrEqual(0);
-    expect(activationDelay).toBeGreaterThan(frontmost);
-    expect(trustedClick).toBeGreaterThan(activationDelay);
-    expect(postClickDelay).toBeGreaterThan(trustedClick);
-    expect(dialogCheck).toBeGreaterThan(postClickDelay);
+    expect(locateButton).toBeGreaterThanOrEqual(0);
+    expect(dispatchClick).toBeGreaterThan(locateButton);
+    expect(dialogCheck).toBeGreaterThan(dispatchClick);
+    // No coordinate clicking and no synthetic keystrokes remain in the download path.
+    expect(downloadBlock).not.toContain('click at {clickX, clickY}');
+    expect(downloadBlock).not.toContain('key code 53');
   });
 
   it('keeps the validated Chrome window ID as text without weakening front-window trust', () => {

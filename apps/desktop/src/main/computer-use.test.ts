@@ -357,11 +357,15 @@ it.runIf(process.platform === 'darwin')(
 it.runIf(process.platform === 'darwin')(
   'compiles the fixed macOS Drive automation script without executing it',
   async () => {
-    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("return x+','+y");
-    expect(MACOS_VISIBLE_DRIVE_SCRIPT.indexOf('click at {clickX, clickY}')).toBeLessThan(
-      MACOS_VISIBLE_DRIVE_SCRIPT.indexOf('key code 0 using {command down}'),
-    );
+    // Selection and Download now happen by dispatching real MouseEvents on the
+    // located DOM elements, so no screen-coordinate math or synthetic keystrokes
+    // remain in the visible-drive script.
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('click at {clickX, clickY}');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('key code 0 using {command down}');
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('keystroke "a"');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('new MouseEvent(t,o)');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('shiftKey:true');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('b.dispatchEvent(new MouseEvent(t,o))');
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain(
       "return Number.isSafeInteger(count)&&count>0?String(count):'invalid'",
     );
@@ -369,21 +373,19 @@ it.runIf(process.platform === 'darwin')(
       'return "requested:" & trustedWindowId & ":" & selectionCountText',
     );
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("querySelectorAll('button,[role=button]')");
-    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('if(e.length!==1)return');
-    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('elementFromPoint');
-    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('downloadPoint is "missing"');
-    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain(
-      'if (count of pointParts) is not 2 then error "The trusted Drive Download coordinate is invalid."',
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("if(e.length===0)return 'missing'");
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('clickState is "missing"');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain(
+      'The trusted Drive Download coordinate is invalid.',
     );
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('perform action "AXPress"');
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('dialogState is "share"');
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("t.indexOf('共用')===0");
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("t.toLowerCase().indexOf('share')===0");
-    expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('key code 53');
+    expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('key code 53');
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain(
       "querySelectorAll('[aria-label=下載],[aria-label=Download]",
     );
-    expect(MACOS_VISIBLE_DRIVE_SCRIPT).not.toContain('e[0].click()');
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain("location.pathname==='/drive/folders/");
     expect(MACOS_VISIBLE_DRIVE_SCRIPT).toContain('repeat with chromeWindow in windows');
     expect(MACOS_DRIVE_SAVE_DIALOG_SCRIPT).toContain(

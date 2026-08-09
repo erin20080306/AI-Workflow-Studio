@@ -195,28 +195,13 @@ export const MACOS_VISIBLE_DRIVE_SCRIPT = `on run argv
   end tell
   if semanticAction is "select_items" then
     tell application "Google Chrome"
-      set itemPoint to execute active tab of front window javascript "(function(){var c=Array.from(document.querySelectorAll('[role=gridcell][aria-label]')).find(function(v){var r=v.getBoundingClientRect();return v.offsetParent!==null&&r.width>8&&r.height>8&&r.bottom>0&&r.right>0&&r.top<window.innerHeight&&r.left<window.innerWidth;});if(!c)return 'no_items';var r=c.getBoundingClientRect();var x=Math.round(window.screenX+r.left+r.width/2);var y=Math.round(window.screenY+(window.outerHeight-window.innerHeight)+r.top+r.height/2);return x+','+y;})()"
-      if itemPoint is "no_items" then error "No downloadable Drive items are visible."
+      set dispatchState to execute active tab of front window javascript "(function(){var cells=Array.from(document.querySelectorAll('[role=gridcell][aria-label]')).filter(function(v){var r=v.getBoundingClientRect();return v.offsetParent!==null&&r.width>8&&r.height>8;});if(cells.length===0)return 'no_items';function fire(el,extra){var r=el.getBoundingClientRect();var o={bubbles:true,cancelable:true,view:window,clientX:r.left+r.width/2,clientY:r.top+r.height/2,button:0};for(var k in extra){o[k]=extra[k];}['mousedown','mouseup','click'].forEach(function(t){el.dispatchEvent(new MouseEvent(t,o));});}fire(cells[0],{});if(cells.length>1){fire(cells[cells.length-1],{shiftKey:true});}return 'dispatched';})()"
+      if dispatchState is "no_items" then error "No downloadable Drive items are visible."
     end tell
-    set AppleScript's text item delimiters to ","
-    set pointParts to text items of itemPoint
-    if (count of pointParts) is not 2 then error "The visible Drive item coordinate is invalid."
-    set clickX to item 1 of pointParts as integer
-    set clickY to item 2 of pointParts as integer
-    set AppleScript's text item delimiters to ""
-    tell application "System Events"
-      tell process "Google Chrome"
-        set frontmost to true
-        delay 1
-        click at {clickX, clickY}
-        delay 1
-        key code 0 using {command down}
-      end tell
-    end tell
-    delay 3
+    delay 2
     tell application "Google Chrome"
-      set selectionCountText to execute active tab of front window javascript "(function(){var text=(document.body&&document.body.innerText)||'';var match=text.match(/已選取\\\\s*([\\\\d,]+)\\\\s*個項目/)||text.match(/([\\\\d,]+)\\\\s+items?\\\\s+selected/i);var raw=match&&match[1];var count=raw?Number(raw.replace(/,/g,'')):0;return Number.isSafeInteger(count)&&count>0?String(count):'invalid';})()"
-      if selectionCountText is "invalid" then error "Drive did not expose a trusted selected item count."
+      set selectionCountText to execute active tab of front window javascript "(function(){var text=(document.body&&document.body.innerText)||'';var match=text.match(/已選取\\\\s*([\\\\d,]+)\\\\s*個項目/)||text.match(/([\\\\d,]+)\\\\s+items?\\\\s+selected/i);var raw=match&&match[1];var reported=raw?Number(raw.replace(/,/g,'')):0;var selected=Array.from(document.querySelectorAll('[role=gridcell][aria-label]')).filter(function(c){return c.getAttribute('aria-selected')==='true';}).length;var count=reported>0?reported:selected;return Number.isSafeInteger(count)&&count>0?String(count):'invalid';})()"
+      if selectionCountText is "invalid" then error "Drive did not select any visible item."
       return "selected:" & selectionCountText
     end tell
   end if
@@ -232,37 +217,17 @@ export const MACOS_VISIBLE_DRIVE_SCRIPT = `on run argv
       end tell
     end tell
     tell application "Google Chrome"
-      set selectionCountText to execute active tab of front window javascript "(function(){var text=(document.body&&document.body.innerText)||'';var match=text.match(/已選取\\\\s*([\\\\d,]+)\\\\s*個項目/)||text.match(/([\\\\d,]+)\\\\s+items?\\\\s+selected/i);var raw=match&&match[1];var count=raw?Number(raw.replace(/,/g,'')):0;return Number.isSafeInteger(count)&&count>0?String(count):'invalid';})()"
-      set downloadPoint to execute active tab of front window javascript "(function(){var e=Array.from(document.querySelectorAll('button,[role=button]')).filter(function(v){var l=(v.getAttribute('aria-label')||v.getAttribute('data-tooltip')||v.getAttribute('title')||'').trim();var r=v.getBoundingClientRect();if((l!=='下載'&&l!=='Download')||v.offsetParent===null||r.width<=8||r.height<=8||r.bottom<=0||r.right<=0||r.top>=window.innerHeight||r.left>=window.innerWidth)return false;var h=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return h!==null&&h.closest('button,[role=button]')===v;});if(e.length!==1)return e.length===0?'missing':'ambiguous';var r=e[0].getBoundingClientRect();var x=Math.round(window.screenX+r.left+r.width/2);var y=Math.round(window.screenY+(window.outerHeight-window.innerHeight)+r.top+r.height/2);return x+','+y;})()"
+      set selectionCountText to execute active tab of front window javascript "(function(){var text=(document.body&&document.body.innerText)||'';var match=text.match(/已選取\\\\s*([\\\\d,]+)\\\\s*個項目/)||text.match(/([\\\\d,]+)\\\\s+items?\\\\s+selected/i);var raw=match&&match[1];var reported=raw?Number(raw.replace(/,/g,'')):0;var selected=Array.from(document.querySelectorAll('[role=gridcell][aria-label]')).filter(function(c){return c.getAttribute('aria-selected')==='true';}).length;var count=reported>0?reported:selected;return Number.isSafeInteger(count)&&count>0?String(count):'invalid';})()"
+      set clickState to execute active tab of front window javascript "(function(){var e=Array.from(document.querySelectorAll('button,[role=button]')).filter(function(v){var l=(v.getAttribute('aria-label')||v.getAttribute('data-tooltip')||v.getAttribute('title')||'').trim();var r=v.getBoundingClientRect();return (l==='下載'||l==='Download')&&v.offsetParent!==null&&r.width>8&&r.height>8;});if(e.length===0)return 'missing';var b=e[0];var r=b.getBoundingClientRect();var o={bubbles:true,cancelable:true,view:window,clientX:r.left+r.width/2,clientY:r.top+r.height/2,button:0};['mousedown','mouseup','click'].forEach(function(t){b.dispatchEvent(new MouseEvent(t,o));});return 'clicked';})()"
       set trustedWindowId to id of front window as text
     end tell
     if selectionCountText is "invalid" then error "Drive did not expose a trusted selected item count before Download."
-    if downloadPoint is "missing" or downloadPoint is "ambiguous" then error "The trusted Drive Download action is unavailable."
-    set AppleScript's text item delimiters to ","
-    set pointParts to text items of downloadPoint
-    if (count of pointParts) is not 2 then error "The trusted Drive Download coordinate is invalid."
-    set clickX to item 1 of pointParts as integer
-    set clickY to item 2 of pointParts as integer
-    set AppleScript's text item delimiters to ""
-    tell application "System Events"
-      tell process "Google Chrome"
-        set frontmost to true
-        delay 1
-        click at {clickX, clickY}
-      end tell
-    end tell
+    if clickState is "missing" then error "The trusted Drive Download action is unavailable."
     delay 1
     tell application "Google Chrome"
       set dialogState to execute active tab of front window javascript "(function(){var d=Array.from(document.querySelectorAll('[role=dialog]')).find(function(v){return v.offsetParent!==null;});if(!d)return 'clear';var t=(d.innerText||'').trim();return (t.indexOf('共用')===0||t.toLowerCase().indexOf('share')===0)?'share':'clear';})()"
     end tell
-    if dialogState is "share" then
-      tell application "System Events"
-        tell process "Google Chrome"
-          key code 53
-        end tell
-      end tell
-      error "The Drive Share dialog opened instead of Download."
-    end if
+    if dialogState is "share" then error "The Drive Share dialog opened instead of Download."
     tell application "Google Chrome"
       if (id of front window as text) is not trustedWindowId then error "The approved Chrome window changed during Download."
     end tell
