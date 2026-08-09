@@ -133,7 +133,10 @@ export function validateWorkflowIntentCoverage(
       if (actual.has(type)) return false;
       if (!isDesktopDriveOperation) return true;
       if (type === 'google_drive.read_excel_folder') return false;
-      if (type === 'google_drive.create_excel_report' && actual.has('excel.create_report')) {
+      if (
+        type === 'google_drive.create_excel_report' &&
+        (actual.has('excel.create_report') || actual.has('excel.combine_workbooks'))
+      ) {
         return false;
       }
       return true;

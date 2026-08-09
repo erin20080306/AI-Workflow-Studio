@@ -60,6 +60,10 @@ export const NODE_PRESENTATION: Readonly<
     category: { en: 'Data transform', zhHant: '資料轉換' },
     label: { en: 'Validate data', zhHant: '驗證資料' },
   },
+  'excel.combine_workbooks': {
+    category: { en: 'Excel', zhHant: 'Excel' },
+    label: { en: 'Combine workbooks into tabs', zhHant: '合併成多分頁' },
+  },
   'excel.create_report': {
     category: { en: 'Excel', zhHant: 'Excel' },
     label: { en: 'Create Excel report', zhHant: '建立 Excel 報表' },

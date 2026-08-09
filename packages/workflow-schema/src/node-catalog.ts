@@ -42,6 +42,13 @@ export const NODE_CATALOG = [
   entry('excel.write', 'write', 'first_run', 'desktop', 'Write a new Excel file.'),
   entry('excel.create_report', 'write', 'first_run', 'desktop', 'Create a new Excel report.'),
   entry(
+    'excel.combine_workbooks',
+    'write',
+    'first_run',
+    'desktop',
+    'Combine approved workbooks into one formatting-preserving multi-tab Excel file.',
+  ),
+  entry(
     'excel.open_file',
     'external',
     'always',

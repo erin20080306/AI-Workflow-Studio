@@ -259,20 +259,32 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
       type: 'excel.merge',
       version: 1,
     },
-    {
-      config: {
-        folderAliasId,
-        outputName,
-        overwrite: false,
-        reportTitle:
-          request.context.locale === 'en'
-            ? 'AI Workflow Studio Excel consolidation'
-            : 'AI Workflow Studio Excel 匯總',
-      },
-      id: 'create_local_report',
-      type: 'excel.create_report',
-      version: 1,
-    },
+    requestedSeparateWorkbookSheets(request.prompt)
+      ? {
+          config: {
+            folderAliasId,
+            maxFiles: 500,
+            outputName,
+            overwrite: false,
+          },
+          id: 'create_local_report',
+          type: 'excel.combine_workbooks',
+          version: 1,
+        }
+      : {
+          config: {
+            folderAliasId,
+            outputName,
+            overwrite: false,
+            reportTitle:
+              request.context.locale === 'en'
+                ? 'AI Workflow Studio Excel consolidation'
+                : 'AI Workflow Studio Excel 匯總',
+          },
+          id: 'create_local_report',
+          type: 'excel.create_report',
+          version: 1,
+        },
     {
       config: {
         actions: ['autofit_used_range', 'save_workbook', 'verify_active_workbook'],

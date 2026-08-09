@@ -7,6 +7,7 @@ import {
   buildPlannerUserPrompt,
 } from './prompts';
 import type { PlannerRequest } from './types';
+import { validateWorkflowIntentCoverage } from './workflow-intent';
 
 const request: PlannerRequest = {
   context: {
@@ -483,6 +484,14 @@ describe('planner prompts', () => {
     expect(example.workflow.nodes.find((node) => node.type === 'excel.merge')).toMatchObject({
       config: { layout: 'separate_sheets' },
     });
+    // A many-tabs request produces the formatting-preserving combine node
+    // (LibreOffice + ExcelJS) instead of the value-only create_report write.
+    const combineNode = example.workflow.nodes.find(
+      (node) => node.type === 'excel.combine_workbooks',
+    );
+    expect(combineNode).toMatchObject({ config: { overwrite: false } });
+    expect(example.workflow.nodes.some((node) => node.type === 'excel.create_report')).toBe(false);
+    expect(validateWorkflowIntentCoverage(multiSheetRequest, example)).toEqual([]);
     expect(parseStrictPlannerOutput(JSON.stringify(example)).success).toBe(true);
   });
 

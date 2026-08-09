@@ -32,6 +32,7 @@ import { createPlatformExcelDriver, DesktopComputerUseController } from './compu
 import { createPlatformVisibleDriveDriver } from './visible-drive';
 import { FolderGrantStore } from './folder-grants';
 import { DesktopSpreadsheetExecutor } from './local-executor';
+import { resolveInstalledSofficePath } from './soffice-path';
 import { DesktopWorkflowJobExecutor } from './workflow-job-executor';
 import { StructuredLogger } from './logger';
 import { SettingsStore, type DesktopSettings } from './settings-store';
@@ -426,6 +427,7 @@ async function initialize(): Promise<void> {
     folderGrants,
     new ProcessingLedger(join(userData, 'processing-ledger.json')),
     async (absolutePath) => await shell.openPath(absolutePath),
+    resolveInstalledSofficePath(app.isPackaged, process.resourcesPath),
   );
   computerUse = new DesktopComputerUseController({
     audit: (event) => {

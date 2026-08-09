@@ -2,6 +2,7 @@ import {
   ProcessingLedger,
   SafeFolderWatcher,
   aggregateRows,
+  combineWorkbooksAsTabs,
   deduplicateRows,
   filterRows,
   groupRows,
@@ -12,6 +13,7 @@ import {
   sortRows,
   validateRows,
   type AggregateOperation,
+  type CombineWorkbooksResult,
   type FilterCondition,
   type SafeFileWatchEvent,
   type SortField,
@@ -63,11 +65,22 @@ export interface VisibleDriveDownloadWorkspace {
   readonly workRelativePath: string;
 }
 
+export interface CombineWorkbooksSource {
+  readonly folderAliasId: string;
+  readonly relativePaths: readonly string[];
+}
+
+export interface CombineWorkbooksWriteResult extends CombineWorkbooksResult {
+  readonly fileHash: string;
+  readonly fileSizeBytes: number;
+}
+
 export class DesktopSpreadsheetExecutor {
   constructor(
     private readonly folderGrants: FolderGrantStore,
     private readonly ledger: ProcessingLedger,
     private readonly openPath?: (absolutePath: string) => Promise<string>,
+    private readonly sofficePath?: string,
   ) {}
 
   capabilities(): readonly string[] {
@@ -77,6 +90,7 @@ export class DesktopSpreadsheetExecutor {
       'excel.merge',
       'excel.write',
       'excel.create_report',
+      'excel.combine_workbooks',
       'excel.open_file',
       'excel.visible_review',
       'google_drive.download_excel_folder',
@@ -338,6 +352,62 @@ export class DesktopSpreadsheetExecutor {
       });
       await this.ledger.complete(contextKey, inputHashes, result.fileHash);
       return { duplicate: false, result };
+    } catch (error) {
+      this.ledger.release(contextKey, inputHashes);
+      throw error;
+    }
+  }
+
+  async combineWorkbooksOnce(
+    deviceId: string,
+    contextKey: string,
+    inputHashes: readonly string[],
+    source: CombineWorkbooksSource,
+    output: AuthorizedOutput,
+    maxFiles: number,
+  ): Promise<{ readonly duplicate: boolean; readonly result?: CombineWorkbooksWriteResult }> {
+    if (this.sofficePath === undefined) {
+      throw new Error('The bundled LibreOffice engine is unavailable for combining workbooks.');
+    }
+    if (source.relativePaths.length === 0) {
+      throw new Error('No approved workbooks were selected to combine.');
+    }
+    const claim = await this.ledger.claim(contextKey, inputHashes);
+    if (claim !== 'claimed') {
+      return { duplicate: true };
+    }
+    try {
+      const inputPaths = await Promise.all(
+        source.relativePaths.map((relativePath) =>
+          this.folderGrants.resolveAuthorizedPath(
+            source.folderAliasId,
+            deviceId,
+            relativePath,
+            'read',
+          ),
+        ),
+      );
+      const outputPath = await this.folderGrants.resolveAuthorizedOutputPath(
+        output.folderAliasId,
+        deviceId,
+        output.outputName,
+      );
+      if ((await existingFileHash(outputPath)) !== undefined) {
+        throw new Error('The combined workbook output already exists.');
+      }
+      const combined = await combineWorkbooksAsTabs({
+        inputPaths,
+        maxFiles,
+        outputPath,
+        sofficePath: this.sofficePath,
+      });
+      const bytes = await readFile(outputPath);
+      const fileHash = createHash('sha256').update(bytes).digest('hex');
+      await this.ledger.complete(contextKey, inputHashes, fileHash);
+      return {
+        duplicate: false,
+        result: { ...combined, fileHash, fileSizeBytes: bytes.byteLength },
+      };
     } catch (error) {
       this.ledger.release(contextKey, inputHashes);
       throw error;

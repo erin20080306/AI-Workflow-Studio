@@ -132,8 +132,8 @@ describe('WorkflowSchema', () => {
 
   it('registers exactly the first-version allowlist with no duplicate type/version pairs', () => {
     const keys = NODE_CATALOG.map((node) => `${node.type}@${node.version}`);
-    expect(NODE_CATALOG).toHaveLength(40);
-    expect(new Set(keys).size).toBe(40);
+    expect(NODE_CATALOG).toHaveLength(41);
+    expect(new Set(keys).size).toBe(41);
   });
 
   it('requires unique visible Excel actions ending in active-workbook verification', () => {

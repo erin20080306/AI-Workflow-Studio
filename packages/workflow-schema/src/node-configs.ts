@@ -268,6 +268,17 @@ export const ExcelCreateReportNodeSchema = node(
     reportTitle: NonEmptyLabelSchema.optional(),
   }).strict(),
 );
+export const ExcelCombineWorkbooksNodeSchema = node(
+  'excel.combine_workbooks',
+  z
+    .object({
+      folderAliasId: UuidSchema,
+      maxFiles: z.number().int().min(1).max(500).default(500),
+      outputName: FileNameTemplateSchema,
+      overwrite: z.literal(false).default(false),
+    })
+    .strict(),
+);
 export const ExcelOpenFileNodeSchema = node(
   'excel.open_file',
   z
@@ -618,6 +629,7 @@ export const WorkflowNodeSchema = z.discriminatedUnion('type', [
   ExcelMergeNodeSchema,
   ExcelWriteNodeSchema,
   ExcelCreateReportNodeSchema,
+  ExcelCombineWorkbooksNodeSchema,
   ExcelOpenFileNodeSchema,
   ExcelVisibleReviewNodeSchema,
   ExcelSplitByFieldNodeSchema,

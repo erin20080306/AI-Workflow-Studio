@@ -67,6 +67,7 @@ const EnvelopeSchema = z
           .regex(/^[a-f0-9]{64}$/)
           .optional(),
         fileSizeBytes: z.number().int().min(0).optional(),
+        imageCount: z.number().int().min(0).optional(),
         processedRowCount: z.number().int().min(0).optional(),
         sheetCount: z.number().int().min(0).optional(),
       })
@@ -85,6 +86,7 @@ const SUPPORTED_NODE_TYPES = [
   'excel.merge',
   'excel.write',
   'excel.create_report',
+  'excel.combine_workbooks',
   'excel.open_file',
   'excel.visible_review',
   'data.filter',
@@ -514,6 +516,41 @@ class DesktopNodeExecutor implements RegisteredWorkflowNodeExecutor {
                       fileSizeBytes: written.result.fileSizeBytes,
                       processedRowCount: written.result.processedRowCount,
                       sheetCount: written.result.sheetCount,
+                    }),
+              },
+            }),
+          };
+        }
+        case 'excel.combine_workbooks': {
+          if (envelope.folderAliasId === undefined || envelope.paths.length === 0) {
+            throw new Error('No approved workbooks are available to combine.');
+          }
+          const combined = await this.spreadsheet.combineWorkbooksOnce(
+            this.deviceId,
+            `${context.idempotencyKey}:${context.nodeId}`,
+            envelope.inputHashes,
+            { folderAliasId: envelope.folderAliasId, relativePaths: envelope.paths },
+            {
+              folderAliasId: parsed.config.folderAliasId,
+              outputName: parsed.config.outputName,
+            },
+            parsed.config.maxFiles,
+          );
+          return {
+            metrics: { processedFileCount: combined.result?.sheetCount ?? 0 },
+            output: jsonEnvelope({
+              ...envelope,
+              folderAliasId: parsed.config.folderAliasId,
+              paths: [parsed.config.outputName],
+              write: {
+                duplicate: combined.duplicate,
+                ...(combined.result === undefined
+                  ? {}
+                  : {
+                      fileHash: combined.result.fileHash,
+                      fileSizeBytes: combined.result.fileSizeBytes,
+                      imageCount: combined.result.imageCount,
+                      sheetCount: combined.result.sheetCount,
                     }),
               },
             }),

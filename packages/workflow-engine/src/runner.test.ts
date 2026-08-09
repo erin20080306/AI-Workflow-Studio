@@ -108,7 +108,7 @@ const baseOptions = {
 describe('NodeRegistry', () => {
   it('registers all allowlisted node executors and rejects duplicate registration', () => {
     const registry = createMockNodeRegistry();
-    expect(registry.list()).toHaveLength(40);
+    expect(registry.list()).toHaveLength(41);
 
     const existing = registry.get('data.filter', 1);
     expect(() => registry.register(existing)).toThrowError(
