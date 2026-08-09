@@ -358,7 +358,7 @@ function buildDesktopDriveExcelOperation(request: PlannerRequest): AIPlannerOutp
     nodes.push({
       config: {
         connectionId,
-        deployment: 'api_executable',
+        deployment: 'manual',
         template:
           presentationNodeId === undefined ? 'sheet-cost-summary' : 'slides-executive-report',
         title:
@@ -582,7 +582,7 @@ function buildConnectedGoogleExample(request: PlannerRequest): AIPlannerOutput |
     nodes.push({
       config: {
         connectionId,
-        deployment: 'api_executable',
+        deployment: 'manual',
         template:
           presentationNodeId === undefined ? 'sheet-cost-summary' : 'slides-executive-report',
         title:

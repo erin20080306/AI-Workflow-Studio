@@ -44,6 +44,7 @@ import { safeGoogleNodeFailure } from '@/lib/cloud-workflow-errors';
 import { buildCloudAiSummaryInstructions } from '@/lib/cloud-workflow-input';
 import {
   appsScriptParentId,
+  buildAppsScriptManualSetup,
   buildProfessionalSlides,
   deriveChartSeries,
 } from '@/lib/cloud-workflow-output';
@@ -651,12 +652,22 @@ class AppsScriptDeployExecutor extends CloudNodeExecutor {
     const parsed = z
       .object({
         connectionId: UuidSchema,
-        deployment: z.enum(['api_executable', 'web_app']),
+        deployment: z.enum(['api_executable', 'manual', 'web_app']),
         template: z.enum(['email-order-summary', 'sheet-cost-summary', 'slides-executive-report']),
         title: z.string().trim().min(1).max(160),
       })
       .strict()
       .parse(config);
+    if (parsed.deployment === 'manual') {
+      // Emit copy-and-paste setup instructions instead of an API deployment,
+      // so the customer installs the approved template themselves. No external
+      // call is made, so this path cannot fail on a missing Apps Script API.
+      return {
+        output: JsonValueSchema.parse(
+          buildAppsScriptManualSetup(parsed.template, parsed.title, 'zh-Hant'),
+        ),
+      };
+    }
     if (parsed.deployment !== 'api_executable') {
       throw new GoogleSheetsError(
         'GOOGLE_REQUEST_INVALID',

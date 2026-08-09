@@ -51,6 +51,7 @@ export type {
 } from './types';
 export {
   GoogleWorkspaceClient,
+  safeScriptTemplate,
   type GmailMessageSummary,
   type GoogleFormResponse,
   type GoogleWorkspaceClientOptions,

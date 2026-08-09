@@ -9,6 +9,7 @@ import { safeGoogleNodeFailure } from './cloud-workflow-errors';
 import { buildCloudAiSummaryInstructions } from './cloud-workflow-input';
 import {
   appsScriptParentId,
+  buildAppsScriptManualSetup,
   buildProfessionalSlides,
   deriveChartSeries,
 } from './cloud-workflow-output';
@@ -175,6 +176,20 @@ describe('cloud Slides and approved GAS planning', () => {
     expect(slides.length).toBeLessThanOrEqual(5);
     expect(slides[0]?.title).toBe('成本摘要');
     expect(slides.every((slide) => slide.body.length >= 1 && slide.body.length <= 6)).toBe(true);
+  });
+
+  it('produces copy-paste manual Apps Script setup with source, scopes, and steps', () => {
+    const setup = buildAppsScriptManualSetup('sheet-cost-summary', '核准型成本摘要', 'zh-Hant');
+    expect(setup.kind).toBe('apps_script_manual');
+    expect(setup.template).toBe('sheet-cost-summary');
+    // Includes the manifest and a .gs code file to paste.
+    expect(setup.files.some((file) => file.name === 'appsscript.json')).toBe(true);
+    const codeFile = setup.files.find((file) => file.name.endsWith('.gs'));
+    expect(codeFile?.source).toContain('refreshApprovedCostSummary');
+    // Lists the required OAuth scopes and human steps, no external call.
+    expect(setup.requiredScopes.length).toBeGreaterThan(0);
+    expect(setup.steps.length).toBeGreaterThanOrEqual(4);
+    expect(setup.steps.join('\n')).toContain('script.google.com');
   });
 
   it('binds the allowlisted Slides GAS template only to a validated presentation output', () => {

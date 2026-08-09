@@ -187,7 +187,7 @@ function rawEmail(input: {
   return Buffer.from(message, 'utf8').toString('base64url');
 }
 
-function safeScriptTemplate(
+export function safeScriptTemplate(
   template: SafeAppsScriptTemplate,
   deployment: SafeAppsScriptDeployment,
 ): {

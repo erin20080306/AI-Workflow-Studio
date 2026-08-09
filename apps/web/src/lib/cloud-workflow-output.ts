@@ -1,4 +1,9 @@
-import type { ProfessionalDeckChart, ProfessionalSlide } from '@ai-workflow-studio/google-sheets';
+import {
+  safeScriptTemplate,
+  type ProfessionalDeckChart,
+  type ProfessionalSlide,
+  type SafeAppsScriptTemplate,
+} from '@ai-workflow-studio/google-sheets';
 import type { JsonValue } from '@ai-workflow-studio/workflow-schema';
 import { z } from 'zod';
 
@@ -195,6 +200,57 @@ export function buildProfessionalSlides(
     ...(references === undefined ? {} : { references }),
     title: slide.title.slice(0, MAX_SLIDE_TITLE_LENGTH),
   }));
+}
+
+export interface AppsScriptManualSetup {
+  readonly files: readonly { readonly name: string; readonly source: string }[];
+  readonly kind: 'apps_script_manual';
+  readonly requiredScopes: readonly string[];
+  readonly steps: readonly string[];
+  readonly template: string;
+  readonly title: string;
+}
+
+/**
+ * Produce copy-and-paste Apps Script setup instructions so a customer can
+ * install the approved template themselves at script.google.com. Used instead
+ * of the API deployment (which needs the Apps Script API enabled in the user's
+ * Google Cloud project) — this path performs no external call and cannot fail.
+ */
+export function buildAppsScriptManualSetup(
+  template: SafeAppsScriptTemplate,
+  title: string,
+  locale: 'en' | 'zh-Hant',
+): AppsScriptManualSetup {
+  const compiled = safeScriptTemplate(template, 'api_executable');
+  const files = compiled.files.map((file) => ({
+    name: file.name === 'appsscript' ? 'appsscript.json' : `${file.name}.gs`,
+    source: file.source,
+  }));
+  const steps =
+    locale === 'en'
+      ? [
+          'Open https://script.google.com and click "New project".',
+          'Delete the default Code.gs contents and paste the provided .gs code.',
+          'Open Project Settings and enable "Show appsscript.json manifest file in editor".',
+          'Open the appsscript.json file and paste the provided manifest (it lists the required scopes).',
+          'Save, choose the function to run, and click Run — approve the one-time authorization when prompted.',
+        ]
+      : [
+          '開啟 https://script.google.com,點「新增專案」。',
+          '把預設 Code.gs 的內容全部刪掉,貼上下方提供的 .gs 程式碼。',
+          '進入「專案設定」,勾選「在編輯器中顯示 appsscript.json 資訊清單檔案」。',
+          '回到編輯器打開 appsscript.json,貼上下方提供的資訊清單(裡面列出所需權限)。',
+          '存檔後選擇要執行的函式並按「執行」,第一次會要求授權,請按「允許」。',
+        ];
+  return {
+    files,
+    kind: 'apps_script_manual',
+    requiredScopes: compiled.requiredScopes,
+    steps,
+    template,
+    title,
+  };
 }
 
 export function appsScriptParentId(input: JsonValue): string | undefined {

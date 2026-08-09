@@ -584,7 +584,7 @@ export const AppsScriptDeployTemplateNodeSchema = node(
   z
     .object({
       connectionId: UuidSchema,
-      deployment: z.enum(['api_executable', 'web_app']).default('api_executable'),
+      deployment: z.enum(['api_executable', 'manual', 'web_app']).default('api_executable'),
       template: z.enum(['email-order-summary', 'sheet-cost-summary', 'slides-executive-report']),
       title: NonEmptyLabelSchema,
     })

@@ -454,7 +454,7 @@ describe('planner prompts', () => {
     expect(example.workflow.nodes[8]).toMatchObject({
       config: {
         connectionId,
-        deployment: 'api_executable',
+        deployment: 'manual',
         template: 'slides-executive-report',
       },
       type: 'apps_script.deploy_template',
