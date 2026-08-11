@@ -170,9 +170,8 @@ describe('website admin backend', () => {
 
   it('captures a re-priced storefront order and advances its fulfillment status', async () => {
     const { createWebsiteProject } = await import('./website-studio-server');
-    const { createWebsiteOrder, getWebsiteAdminDashboard, mutateWebsiteAdmin } = await import(
-      './website-admin-server'
-    );
+    const { createWebsiteOrder, getWebsiteAdminDashboard, mutateWebsiteAdmin } =
+      await import('./website-admin-server');
     const project = await createWebsiteProject(context, { name: `Store ${crypto.randomUUID()}` });
     const website = { projectId: project.id, spec: commerceSpec, tenantId: context.actor.tenantId };
 
@@ -205,11 +204,8 @@ describe('website admin backend', () => {
 
   it('deducts live stock on checkout, restocks on cancel, and resets on demand', async () => {
     const { createWebsiteProject } = await import('./website-studio-server');
-    const {
-      createWebsiteOrder,
-      getWebsiteInventorySold,
-      mutateWebsiteAdmin,
-    } = await import('./website-admin-server');
+    const { createWebsiteOrder, getWebsiteInventorySold, mutateWebsiteAdmin } =
+      await import('./website-admin-server');
     const project = await createWebsiteProject(context, { name: `Store ${crypto.randomUUID()}` });
     const website = { projectId: project.id, spec: commerceSpec, tenantId: context.actor.tenantId };
     const line = (quantity: number) => ({

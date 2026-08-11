@@ -1,10 +1,7 @@
 import { z } from 'zod';
 
 import { WEBSITE_PUBLIC_HEADERS } from '@/lib/website-preview-contract';
-import {
-  applyInventorySold,
-  renderWebsitePublishedDocument,
-} from '@/lib/website-preview-renderer';
+import { applyInventorySold, renderWebsitePublishedDocument } from '@/lib/website-preview-renderer';
 import {
   renderWebsiteAccessDeniedDocument,
   websiteAccessHeaders,

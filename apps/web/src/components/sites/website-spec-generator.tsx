@@ -31,8 +31,7 @@ function hasImagelessProducts(spec: WebsiteSpecClientGeneration['spec']): boolea
   return spec.pages.some((page) =>
     page.sections.some(
       (section) =>
-        section.type === 'product-grid' &&
-        section.items.some((item) => item.assetId === undefined),
+        section.type === 'product-grid' && section.items.some((item) => item.assetId === undefined),
     ),
   );
 }
@@ -118,7 +117,12 @@ export function WebsiteSpecGenerator({
     setAutoFilling(true);
     try {
       const response = await fetch(`/api/websites/${projectId}/images/auto`, {
-        body: JSON.stringify({ locale, provider: 'auto', tier: 'auto', versionName: text.autoFilling }),
+        body: JSON.stringify({
+          locale,
+          provider: 'auto',
+          tier: 'auto',
+          versionName: text.autoFilling,
+        }),
         headers: { 'content-type': 'application/json' },
         method: 'POST',
       });

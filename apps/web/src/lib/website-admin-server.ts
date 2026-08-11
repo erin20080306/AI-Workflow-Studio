@@ -232,7 +232,10 @@ function orderView(rowValue: unknown): WebsiteOrder {
 
 /** Derive a leading currency symbol from a price label (e.g. "NT$1,680" → "NT$"). */
 function currencySymbol(priceLabel: string): string {
-  return priceLabel.replace(/[\d.,\s].*$/u, '').trim().slice(0, 8);
+  return priceLabel
+    .replace(/[\d.,\s].*$/u, '')
+    .trim()
+    .slice(0, 8);
 }
 
 /**
@@ -256,7 +259,10 @@ function priceCheckout(
       products.find((candidate) => candidate.sku !== undefined && candidate.sku === line.id) ??
       products.find((candidate) => candidate.name === line.name);
     if (product === undefined) {
-      throw new WebsiteStudioError('WEBSITE_INVALID', 'A product in the order is no longer available.');
+      throw new WebsiteStudioError(
+        'WEBSITE_INVALID',
+        'A product in the order is no longer available.',
+      );
     }
     if (product.stock !== undefined && (product.stock === 0 || line.quantity > product.stock)) {
       throw new WebsiteStudioError(
@@ -560,10 +566,7 @@ export async function mutateWebsiteAdmin(
         .eq('tenant_id', context.actor.tenantId)
         .eq('project_id', project.id);
       if (result.error !== null) {
-        throw new WebsiteStudioError(
-          'WEBSITE_STATE_CONFLICT',
-          'The inventory could not be reset.',
-        );
+        throw new WebsiteStudioError('WEBSITE_STATE_CONFLICT', 'The inventory could not be reset.');
       }
     }
   } else {
@@ -782,7 +785,10 @@ export async function createWebsiteOrder(
     );
   }
   if ((recent.count ?? 0) >= 5) {
-    throw new WebsiteStudioError('WEBSITE_RATE_LIMITED', 'Please wait before placing another order.');
+    throw new WebsiteStudioError(
+      'WEBSITE_RATE_LIMITED',
+      'Please wait before placing another order.',
+    );
   }
   const result = await admin
     .from('website_storefront_orders')

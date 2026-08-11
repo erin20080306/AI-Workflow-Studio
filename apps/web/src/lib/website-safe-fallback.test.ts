@@ -140,9 +140,7 @@ describe('Website Studio safe provider fallback', () => {
       'cta',
       'footer',
     ]);
-    const productGrid = spec.pages[0]?.sections.find(
-      (section) => section.type === 'product-grid',
-    );
+    const productGrid = spec.pages[0]?.sections.find((section) => section.type === 'product-grid');
     expect(productGrid?.type === 'product-grid' && productGrid.items.length).toBeGreaterThanOrEqual(
       2,
     );
@@ -156,8 +154,7 @@ describe('Website Studio safe provider fallback', () => {
         productGrid.items.every((item) => typeof item.stock === 'number'),
     ).toBe(true);
     expect(
-      productGrid?.type === 'product-grid' &&
-        productGrid.items.some((item) => item.stock === 0),
+      productGrid?.type === 'product-grid' && productGrid.items.some((item) => item.stock === 0),
     ).toBe(true);
   });
 

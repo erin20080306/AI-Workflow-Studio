@@ -180,17 +180,77 @@ interface StorefrontProduct {
 function storefrontProducts(locale: 'en' | 'zh-Hant'): readonly StorefrontProduct[] {
   if (locale === 'en') {
     return [
-      { badge: 'Bestseller', currency: '$', name: 'Organic cotton shirt', price: 128, priceLabel: '$128', sku: 'AN-101', stock: 24 },
-      { badge: 'New', currency: '$', name: 'Handmade leather bag', price: 268, priceLabel: '$268', sku: 'AN-204', stock: 8 },
-      { currency: '$', name: 'Tailored wide trousers', price: 188, priceLabel: '$188', sku: 'AN-306', stock: 3 },
-      { currency: '$', name: 'Everyday knit sweater', price: 158, priceLabel: '$158', sku: 'AN-408', stock: 0 },
+      {
+        badge: 'Bestseller',
+        currency: '$',
+        name: 'Organic cotton shirt',
+        price: 128,
+        priceLabel: '$128',
+        sku: 'AN-101',
+        stock: 24,
+      },
+      {
+        badge: 'New',
+        currency: '$',
+        name: 'Handmade leather bag',
+        price: 268,
+        priceLabel: '$268',
+        sku: 'AN-204',
+        stock: 8,
+      },
+      {
+        currency: '$',
+        name: 'Tailored wide trousers',
+        price: 188,
+        priceLabel: '$188',
+        sku: 'AN-306',
+        stock: 3,
+      },
+      {
+        currency: '$',
+        name: 'Everyday knit sweater',
+        price: 158,
+        priceLabel: '$158',
+        sku: 'AN-408',
+        stock: 0,
+      },
     ];
   }
   return [
-    { badge: '熱銷', currency: 'NT$', name: '經典有機棉上衣', price: 1280, priceLabel: 'NT$1,280', sku: 'AN-101', stock: 24 },
-    { badge: '新品', currency: 'NT$', name: '手工皮革肩背包', price: 2680, priceLabel: 'NT$2,680', sku: 'AN-204', stock: 8 },
-    { currency: 'NT$', name: '立體剪裁寬褲', price: 1880, priceLabel: 'NT$1,880', sku: 'AN-306', stock: 3 },
-    { currency: 'NT$', name: '日常針織衫', price: 1580, priceLabel: 'NT$1,580', sku: 'AN-408', stock: 0 },
+    {
+      badge: '熱銷',
+      currency: 'NT$',
+      name: '經典有機棉上衣',
+      price: 1280,
+      priceLabel: 'NT$1,280',
+      sku: 'AN-101',
+      stock: 24,
+    },
+    {
+      badge: '新品',
+      currency: 'NT$',
+      name: '手工皮革肩背包',
+      price: 2680,
+      priceLabel: 'NT$2,680',
+      sku: 'AN-204',
+      stock: 8,
+    },
+    {
+      currency: 'NT$',
+      name: '立體剪裁寬褲',
+      price: 1880,
+      priceLabel: 'NT$1,880',
+      sku: 'AN-306',
+      stock: 3,
+    },
+    {
+      currency: 'NT$',
+      name: '日常針織衫',
+      price: 1580,
+      priceLabel: 'NT$1,580',
+      sku: 'AN-408',
+      stock: 0,
+    },
   ];
 }
 
@@ -231,14 +291,34 @@ function commerceHomeSections(
       id: `${pageSlug}-features`,
       items: en
         ? [
-            { body: 'Free shipping once your order reaches the threshold.', icon: 'globe' as const, title: 'Free shipping' },
-            { body: 'In-stock items are prepared and dispatched quickly.', icon: 'clock' as const, title: 'Fast dispatch' },
-            { body: 'A secure checkout that sends every order to your admin inbox.', icon: 'lock' as const, title: 'Secure checkout' },
+            {
+              body: 'Free shipping once your order reaches the threshold.',
+              icon: 'globe' as const,
+              title: 'Free shipping',
+            },
+            {
+              body: 'In-stock items are prepared and dispatched quickly.',
+              icon: 'clock' as const,
+              title: 'Fast dispatch',
+            },
+            {
+              body: 'A secure checkout that sends every order to your admin inbox.',
+              icon: 'lock' as const,
+              title: 'Secure checkout',
+            },
           ]
         : [
-            { body: '單筆訂單達指定金額即享免運，購物更輕鬆。', icon: 'globe' as const, title: '滿額免運' },
+            {
+              body: '單筆訂單達指定金額即享免運，購物更輕鬆。',
+              icon: 'globe' as const,
+              title: '滿額免運',
+            },
             { body: '現貨商品下單後盡快為你安排出貨。', icon: 'clock' as const, title: '快速出貨' },
-            { body: '結帳流程安全可靠，訂單直接進入後台收件匣。', icon: 'lock' as const, title: '安全結帳' },
+            {
+              body: '結帳流程安全可靠，訂單直接進入後台收件匣。',
+              icon: 'lock' as const,
+              title: '安全結帳',
+            },
           ],
       title: en ? 'Why shop with us' : '在這裡購物的理由',
       type: 'feature-grid' as const,
@@ -266,7 +346,11 @@ function commerceHomeSections(
       eyebrow: en ? 'Lookbook' : '造型特輯',
       id: `${pageSlug}-gallery`,
       items: en
-        ? [{ caption: 'Weekday edit' }, { caption: 'Weekend layering' }, { caption: 'Signature accessories' }]
+        ? [
+            { caption: 'Weekday edit' },
+            { caption: 'Weekend layering' },
+            { caption: 'Signature accessories' },
+          ]
         : [{ caption: '平日穿搭' }, { caption: '週末層次' }, { caption: '經典配件' }],
       layout: 'grid' as const,
       title: en ? 'This season in looks' : '本季造型特輯',
@@ -346,7 +430,13 @@ export function createSafeWebsiteSpec(
     brief.callsToAction[0] ?? '',
     1,
     80,
-    commerce ? (locale === 'en' ? 'Shop now' : '立即選購') : locale === 'en' ? 'Contact us' : '聯絡我們',
+    commerce
+      ? locale === 'en'
+        ? 'Shop now'
+        : '立即選購'
+      : locale === 'en'
+        ? 'Contact us'
+        : '聯絡我們',
   );
   const pages = brief.pages.map((page, index) => {
     const pageTitle = safeCopy(page.title, 1, 80, locale === 'en' ? 'Page' : '頁面');
@@ -378,10 +468,7 @@ export function createSafeWebsiteSpec(
       sections:
         index === 0
           ? commerce
-            ? [
-                ...commerceHomeSections(page.slug, projectName, primaryAction, locale),
-                footer,
-              ]
+            ? [...commerceHomeSections(page.slug, projectName, primaryAction, locale), footer]
             : [
                 {
                   body: safeCopy(brief.purpose, 10, 700, page.goal),

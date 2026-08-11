@@ -191,7 +191,13 @@ describe('website preview', () => {
         },
       ],
     });
-    const live = applyInventorySold(commerce, new Map([['S-1', 8], ['S-2', 3]]));
+    const live = applyInventorySold(
+      commerce,
+      new Map([
+        ['S-1', 8],
+        ['S-2', 3],
+      ]),
+    );
     const html = renderWebsitePreviewDocument(live, 'home');
     expect(html).toContain('僅剩 2 件'); // 10 published − 8 sold
     expect(html).toContain('stock-out">售完'); // 3 published − 3 sold
