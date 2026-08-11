@@ -146,6 +146,144 @@ function inferredCallsToAction(description: string): string[] {
   return action.length < 2 ? [] : [action];
 }
 
+/**
+ * Strong signals that the brief is a shop/storefront rather than a marketing site.
+ * Deliberately excludes the generic word "product/產品" (common for SaaS) so only a
+ * clear commerce intent turns on the storefront sections.
+ */
+const COMMERCE_INTENT_PATTERN =
+  /商店|商城|電商|網店|網購|網路商店|購物|商品|賣場|販售|銷售|零售|下單|訂購|結帳|購物車|購物袋|選物|型錄|加入購物|立即購買|立即選購|賣家|拍賣|上架|\bshop\b|\bstore\b|\bstores\b|e-?commerce|\bcommerce\b|storefront|\bcart\b|checkout|\bretail\b|\bmerch\b|catalog(?:ue)?|buy\s+now|order\s+online|\bsell\b|\bselling\b|shopping/iu;
+
+function looksLikeStore(brief: WebsiteBrief, projectName: string): boolean {
+  const haystack = [
+    projectName,
+    brief.purpose,
+    brief.content,
+    brief.audience,
+    ...brief.callsToAction,
+    ...brief.pages.flatMap((page) => [page.title, page.goal]),
+  ].join(' ');
+  return COMMERCE_INTENT_PATTERN.test(haystack);
+}
+
+interface StorefrontProduct {
+  readonly availabilityLabel: string;
+  readonly badge?: string;
+  readonly currency: string;
+  readonly name: string;
+  readonly price: number;
+  readonly priceLabel: string;
+  readonly sku: string;
+}
+
+/** Deterministic bounded placeholder catalogue so the cart and checkout light up. */
+function storefrontProducts(locale: 'en' | 'zh-Hant'): readonly StorefrontProduct[] {
+  if (locale === 'en') {
+    return [
+      { availabilityLabel: 'In stock', badge: 'Bestseller', currency: '$', name: 'Organic cotton shirt', price: 128, priceLabel: '$128', sku: 'AN-101' },
+      { availabilityLabel: 'In stock', badge: 'New', currency: '$', name: 'Handmade leather bag', price: 268, priceLabel: '$268', sku: 'AN-204' },
+      { availabilityLabel: 'Low stock', currency: '$', name: 'Tailored wide trousers', price: 188, priceLabel: '$188', sku: 'AN-306' },
+      { availabilityLabel: 'In stock', currency: '$', name: 'Everyday knit sweater', price: 158, priceLabel: '$158', sku: 'AN-408' },
+    ];
+  }
+  return [
+    { availabilityLabel: '現貨', badge: '熱銷', currency: 'NT$', name: '經典有機棉上衣', price: 1280, priceLabel: 'NT$1,280', sku: 'AN-101' },
+    { availabilityLabel: '現貨', badge: '新品', currency: 'NT$', name: '手工皮革肩背包', price: 2680, priceLabel: 'NT$2,680', sku: 'AN-204' },
+    { availabilityLabel: '少量現貨', currency: 'NT$', name: '立體剪裁寬褲', price: 1880, priceLabel: 'NT$1,880', sku: 'AN-306' },
+    { availabilityLabel: '現貨', currency: 'NT$', name: '日常針織衫', price: 1580, priceLabel: 'NT$1,580', sku: 'AN-408' },
+  ];
+}
+
+/**
+ * A complete storefront home page written as real shop copy (not the raw brief),
+ * so a store brief reads like a shop even without a live model. The product-grid
+ * turns on the interactive cart, and every field stays editable in the Canvas.
+ */
+function commerceHomeSections(
+  pageSlug: string,
+  projectName: string,
+  primaryAction: string,
+  locale: 'en' | 'zh-Hant',
+): readonly WebsiteSpec['pages'][number]['sections'][number][] {
+  const products = storefrontProducts(locale);
+  const shopAction = {
+    label: primaryAction,
+    target: { kind: 'section' as const, sectionId: `${pageSlug}-products` },
+  };
+  const en = locale === 'en';
+  return [
+    {
+      body: en
+        ? "Explore this season's edit, add your favourites to the bag, and check out online in minutes. Free shipping on qualifying orders."
+        : '探索本季精選商品，把喜歡的款式加入購物袋，幾個步驟就能線上結帳，指定金額再享免運。',
+      eyebrow: en ? 'New this season' : '當季新品上市',
+      id: `${pageSlug}-hero`,
+      layout: 'split' as const,
+      primaryAction: shopAction,
+      title: safeCopy(projectName, 3, 140, en ? 'Shop the collection' : '質感選物・線上選購'),
+      type: 'hero' as const,
+    },
+    {
+      body: en
+        ? 'A smooth shopping experience from browsing to checkout.'
+        : '從瀏覽到結帳，提供順暢的線上購物體驗。',
+      columns: '3' as const,
+      id: `${pageSlug}-features`,
+      items: en
+        ? [
+            { body: 'Free shipping once your order reaches the threshold.', icon: 'globe' as const, title: 'Free shipping' },
+            { body: 'In-stock items are prepared and dispatched quickly.', icon: 'clock' as const, title: 'Fast dispatch' },
+            { body: 'A secure checkout that sends every order to your admin inbox.', icon: 'lock' as const, title: 'Secure checkout' },
+          ]
+        : [
+            { body: '單筆訂單達指定金額即享免運，購物更輕鬆。', icon: 'globe' as const, title: '滿額免運' },
+            { body: '現貨商品下單後盡快為你安排出貨。', icon: 'clock' as const, title: '快速出貨' },
+            { body: '結帳流程安全可靠，訂單直接進入後台收件匣。', icon: 'lock' as const, title: '安全結帳' },
+          ],
+      title: en ? 'Why shop with us' : '在這裡購物的理由',
+      type: 'feature-grid' as const,
+    },
+    {
+      body: en
+        ? 'Add any item to your bag and check out when you are ready.'
+        : '把喜歡的商品加入購物袋，準備好隨時結帳。',
+      columns: '4' as const,
+      eyebrow: en ? 'Curated now' : '本週選品',
+      id: `${pageSlug}-products`,
+      items: products.map((product) => ({
+        availabilityLabel: product.availabilityLabel,
+        ...(product.badge === undefined ? {} : { badge: product.badge }),
+        currency: product.currency,
+        name: product.name,
+        price: product.price,
+        priceLabel: product.priceLabel,
+        sku: product.sku,
+      })),
+      title: en ? 'Shop the collection' : '選購當季商品',
+      type: 'product-grid' as const,
+    },
+    {
+      eyebrow: en ? 'Lookbook' : '造型特輯',
+      id: `${pageSlug}-gallery`,
+      items: en
+        ? [{ caption: 'Weekday edit' }, { caption: 'Weekend layering' }, { caption: 'Signature accessories' }]
+        : [{ caption: '平日穿搭' }, { caption: '週末層次' }, { caption: '經典配件' }],
+      layout: 'grid' as const,
+      title: en ? 'This season in looks' : '本季造型特輯',
+      type: 'gallery' as const,
+    },
+    {
+      action: shopAction,
+      body: en
+        ? 'Add your favourites to the bag and check out online in minutes.'
+        : '把喜歡的商品加入購物袋，立即完成線上結帳。',
+      id: `${pageSlug}-shop-cta`,
+      title: en ? 'Ready to shop?' : '準備好開始選購了嗎？',
+      type: 'cta' as const,
+    },
+  ];
+}
+
 function inferredPages(description: string, locale: 'en' | 'zh-Hant') {
   const matches = pagePatterns
     .map((page) => ({ index: description.search(page.pattern), page }))
@@ -203,11 +341,12 @@ export function createSafeWebsiteSpec(
   locale: 'en' | 'zh-Hant',
 ): WebsiteSpec {
   const projectName = safeCopy(project.name, 2, 120, 'Website Studio');
+  const commerce = looksLikeStore(brief, projectName);
   const primaryAction = safeCopy(
     brief.callsToAction[0] ?? '',
     1,
     80,
-    locale === 'en' ? 'Contact us' : '聯絡我們',
+    commerce ? (locale === 'en' ? 'Shop now' : '立即選購') : locale === 'en' ? 'Contact us' : '聯絡我們',
   );
   const pages = brief.pages.map((page, index) => {
     const pageTitle = safeCopy(page.title, 1, 80, locale === 'en' ? 'Page' : '頁面');
@@ -238,59 +377,64 @@ export function createSafeWebsiteSpec(
       metaDescription: safeCopy(page.goal, 10, 200, brief.purpose),
       sections:
         index === 0
-          ? [
-              {
-                body: safeCopy(brief.purpose, 10, 700, page.goal),
-                id: `${page.slug}-hero`,
-                layout: 'split' as const,
-                primaryAction: {
-                  label: primaryAction,
-                  target: { channel: 'form' as const, kind: 'contact' as const },
+          ? commerce
+            ? [
+                ...commerceHomeSections(page.slug, projectName, primaryAction, locale),
+                footer,
+              ]
+            : [
+                {
+                  body: safeCopy(brief.purpose, 10, 700, page.goal),
+                  id: `${page.slug}-hero`,
+                  layout: 'split' as const,
+                  primaryAction: {
+                    label: primaryAction,
+                    target: { channel: 'form' as const, kind: 'contact' as const },
+                  },
+                  title: safeCopy(
+                    page.title,
+                    3,
+                    140,
+                    locale === 'en' ? projectName : `${projectName} 首頁`,
+                  ),
+                  type: 'hero' as const,
                 },
-                title: safeCopy(
-                  page.title,
-                  3,
-                  140,
-                  locale === 'en' ? projectName : `${projectName} 首頁`,
-                ),
-                type: 'hero' as const,
-              },
-              {
-                body: safeCopy(brief.content, 10, 400, brief.purpose),
-                columns: '3' as const,
-                id: `${page.slug}-features`,
-                items: [
-                  {
-                    body:
-                      locale === 'en'
-                        ? 'A clear structure turns your brief into reviewable website decisions.'
-                        : '將需求轉成清楚、可檢視的網站決策。',
-                    icon: 'workflow' as const,
-                    title: locale === 'en' ? 'Structured' : '結構清楚',
-                  },
-                  {
-                    body:
-                      locale === 'en'
-                        ? 'Only registered components and bounded content are accepted.'
-                        : '只接受已註冊元件與有上限的內容。',
-                    icon: 'shield' as const,
-                    title: locale === 'en' ? 'Validated' : '安全驗證',
-                  },
-                  {
-                    body:
-                      locale === 'en'
-                        ? 'Every page remains a draft until explicit publishing approval.'
-                        : '所有頁面在明確核准發布前都維持草稿。',
-                    icon: 'check' as const,
-                    title: locale === 'en' ? 'Reviewable' : '可供核准',
-                  },
-                ],
-                title: locale === 'en' ? 'Built for a safe workflow' : '為安全流程而設計',
-                type: 'feature-grid' as const,
-              },
-              commonCta,
-              footer,
-            ]
+                {
+                  body: safeCopy(brief.content, 10, 400, brief.purpose),
+                  columns: '3' as const,
+                  id: `${page.slug}-features`,
+                  items: [
+                    {
+                      body:
+                        locale === 'en'
+                          ? 'A clear structure turns your brief into reviewable website decisions.'
+                          : '將需求轉成清楚、可檢視的網站決策。',
+                      icon: 'workflow' as const,
+                      title: locale === 'en' ? 'Structured' : '結構清楚',
+                    },
+                    {
+                      body:
+                        locale === 'en'
+                          ? 'Only registered components and bounded content are accepted.'
+                          : '只接受已註冊元件與有上限的內容。',
+                      icon: 'shield' as const,
+                      title: locale === 'en' ? 'Validated' : '安全驗證',
+                    },
+                    {
+                      body:
+                        locale === 'en'
+                          ? 'Every page remains a draft until explicit publishing approval.'
+                          : '所有頁面在明確核准發布前都維持草稿。',
+                      icon: 'check' as const,
+                      title: locale === 'en' ? 'Reviewable' : '可供核准',
+                    },
+                  ],
+                  title: locale === 'en' ? 'Built for a safe workflow' : '為安全流程而設計',
+                  type: 'feature-grid' as const,
+                },
+                commonCta,
+                footer,
+              ]
           : [
               {
                 body: safeCopy(page.goal, 10, 1_500, brief.content),
