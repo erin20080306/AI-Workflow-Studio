@@ -243,11 +243,11 @@ describe('website preview', () => {
     // A non-commerce page stays completely script-free.
     expect(renderWebsitePreviewDocument(spec, 'home')).not.toContain('<script');
 
-    // Published: checkout posts an order into the same-origin contact pipeline.
+    // Published: checkout posts a structured order into the same-origin orders pipeline.
     const published = renderWebsitePublishedDocument(commerce, 'home', 'product-site-a1000000');
     expect(published).toContain('class="cart-checkout-form"');
-    expect(published).toContain('action="/api/public-sites/product-site-a1000000/contact"');
-    expect(published).toContain('data-cart-order-message');
+    expect(published).toContain('action="/api/public-sites/product-site-a1000000/checkout"');
+    expect(published).toContain('data-cart-items-json');
     // Preview (no backend) keeps the anchor fallback, not a POST form.
     expect(shop).toContain('class="action cart-checkout" href="#contact"');
     expect(shop).not.toContain('<form class="cart-checkout-form"');

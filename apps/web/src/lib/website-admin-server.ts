@@ -3,14 +3,20 @@ import 'server-only';
 import {
   WebsiteAdminDashboardSchema,
   WebsiteAdminMutationSchema,
+  WebsiteCheckoutInputSchema,
   WebsiteContactSubmissionInputSchema,
   WebsiteContentEntrySchema,
   WebsiteFormSubmissionSchema,
+  WebsiteOrderSchema,
   type WebsiteAdminDashboard,
   type WebsiteAdminMutation,
+  type WebsiteCheckoutInput,
   type WebsiteContactSubmissionInput,
   type WebsiteContentEntry,
   type WebsiteFormSubmission,
+  type WebsiteOrder,
+  type WebsiteOrderItem,
+  type WebsiteSpec,
 } from '@ai-workflow-studio/website-schema';
 import { z } from 'zod';
 
@@ -53,8 +59,27 @@ const SubmissionRowSchema = z
   })
   .strict();
 
+const OrderRowSchema = z
+  .object({
+    buyer_email: z.string().email(),
+    buyer_name: z.string().min(1).max(120),
+    created_at: z.string().datetime({ offset: true }),
+    currency: z.string().max(8),
+    id: z.string().uuid(),
+    item_count: z.number().int().min(1),
+    items: z.array(z.record(z.string(), z.unknown())),
+    page_slug: z.string().min(1).max(80),
+    project_id: z.string().uuid(),
+    status: z.enum(['pending', 'paid', 'shipped', 'completed', 'cancelled']),
+    subtotal: z.union([z.number(), z.string()]),
+    tenant_id: z.string().uuid(),
+    updated_at: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
 interface MemoryWebsiteAdmin {
   readonly content: Map<string, WebsiteContentEntry>;
+  readonly orders: WebsiteOrder[];
   readonly submissions: WebsiteFormSubmission[];
 }
 
@@ -66,9 +91,77 @@ function memoryAdmin(projectId: string): MemoryWebsiteAdmin {
   adminGlobal.__aiWorkflowWebsiteAdmin ??= new Map();
   const existing = adminGlobal.__aiWorkflowWebsiteAdmin.get(projectId);
   if (existing !== undefined) return existing;
-  const created: MemoryWebsiteAdmin = { content: new Map(), submissions: [] };
+  const created: MemoryWebsiteAdmin = { content: new Map(), orders: [], submissions: [] };
   adminGlobal.__aiWorkflowWebsiteAdmin.set(projectId, created);
   return created;
+}
+
+function orderView(rowValue: unknown): WebsiteOrder {
+  const row = OrderRowSchema.parse(rowValue);
+  return WebsiteOrderSchema.parse({
+    buyerEmail: row.buyer_email,
+    buyerName: row.buyer_name,
+    createdAt: row.created_at,
+    currency: row.currency,
+    id: row.id,
+    itemCount: row.item_count,
+    items: row.items,
+    pageSlug: row.page_slug,
+    projectId: row.project_id,
+    status: row.status,
+    subtotal: typeof row.subtotal === 'string' ? Number(row.subtotal) : row.subtotal,
+    tenantId: row.tenant_id,
+    updatedAt: row.updated_at,
+  });
+}
+
+/** Derive a leading currency symbol from a price label (e.g. "NT$1,680" → "NT$"). */
+function currencySymbol(priceLabel: string): string {
+  return priceLabel.replace(/[\d.,\s].*$/u, '').trim().slice(0, 8);
+}
+
+/**
+ * Re-price an untrusted checkout against the published spec. Prices, currency,
+ * and availability always come from the server-side spec, never the browser.
+ */
+function priceCheckout(
+  spec: WebsiteSpec,
+  input: WebsiteCheckoutInput,
+): {
+  readonly currency: string;
+  readonly itemCount: number;
+  readonly items: readonly WebsiteOrderItem[];
+} {
+  const products = spec.pages
+    .flatMap((page) => page.sections)
+    .filter((section) => section.type === 'product-grid')
+    .flatMap((section) => (section.type === 'product-grid' ? section.items : []));
+  const items = input.items.map((line) => {
+    const product =
+      products.find((candidate) => candidate.sku !== undefined && candidate.sku === line.id) ??
+      products.find((candidate) => candidate.name === line.name);
+    if (product === undefined) {
+      throw new WebsiteStudioError('WEBSITE_INVALID', 'A product in the order is no longer available.');
+    }
+    if (product.stock !== undefined && (product.stock === 0 || line.quantity > product.stock)) {
+      throw new WebsiteStudioError(
+        'WEBSITE_INVALID',
+        'A product in the order does not have enough stock.',
+      );
+    }
+    const unitPrice = product.price ?? 0;
+    const currency = product.currency ?? currencySymbol(product.priceLabel);
+    return {
+      currency,
+      lineTotal: Math.min(unitPrice * line.quantity, 1_000_000_000_000),
+      name: product.name,
+      quantity: line.quantity,
+      ...(product.sku === undefined ? {} : { sku: product.sku }),
+      unitPrice,
+    } satisfies WebsiteOrderItem;
+  });
+  const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  return { currency: items[0]?.currency ?? '', itemCount, items };
 }
 
 function contentView(rowValue: unknown): WebsiteContentEntry {
@@ -163,13 +256,16 @@ export async function getWebsiteAdminDashboard(
       contentEntries: [...memory.content.values()].sort((left, right) =>
         right.updatedAt.localeCompare(left.updatedAt),
       ),
+      orders: [...memory.orders]
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+        .slice(0, 200),
       submissions: [...memory.submissions]
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
         .slice(0, 200),
     });
   }
   const admin = createSupabaseAdminClient();
-  const [contentResult, submissionsResult] = await Promise.all([
+  const [contentResult, submissionsResult, ordersResult] = await Promise.all([
     admin
       .from('website_content_entries')
       .select(
@@ -188,14 +284,26 @@ export async function getWebsiteAdminDashboard(
       .eq('project_id', project.id)
       .order('created_at', { ascending: false })
       .limit(200),
+    admin
+      .from('website_storefront_orders')
+      .select(
+        'buyer_email, buyer_name, created_at, currency, id, item_count, items, page_slug, project_id, status, subtotal, tenant_id, updated_at',
+      )
+      .eq('tenant_id', context.actor.tenantId)
+      .eq('project_id', project.id)
+      .order('created_at', { ascending: false })
+      .limit(200),
   ]);
   const contentRows = z.array(ContentRowSchema).safeParse(contentResult.data);
   const submissionRows = z.array(SubmissionRowSchema).safeParse(submissionsResult.data);
+  const orderRows = z.array(OrderRowSchema).safeParse(ordersResult.data);
   if (
     contentResult.error !== null ||
     submissionsResult.error !== null ||
+    ordersResult.error !== null ||
     !contentRows.success ||
-    !submissionRows.success
+    !submissionRows.success ||
+    !orderRows.success
   ) {
     throw new WebsiteStudioError(
       'WEBSITE_STATE_CONFLICT',
@@ -204,6 +312,7 @@ export async function getWebsiteAdminDashboard(
   }
   return WebsiteAdminDashboardSchema.parse({
     contentEntries: contentRows.data.map(contentView),
+    orders: orderRows.data.map(orderView),
     submissions: submissionRows.data.map(submissionView),
   });
 }
@@ -280,6 +389,32 @@ export async function mutateWebsiteAdmin(
         'WEBSITE_STATE_CONFLICT',
         'The managed website content could not be saved.',
       );
+    }
+  } else if (mutation.action === 'update-order-status') {
+    if (getEnvironment().mockMode) {
+      const memory = memoryAdmin(project.id);
+      const index = memory.orders.findIndex((order) => order.id === mutation.orderId);
+      const existing = memory.orders[index];
+      if (existing === undefined) {
+        throw new WebsiteStudioError('WEBSITE_NOT_FOUND', 'The website order was not found.');
+      }
+      memory.orders[index] = WebsiteOrderSchema.parse({
+        ...existing,
+        status: mutation.status,
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      const result = await createSupabaseAdminClient()
+        .from('website_storefront_orders')
+        .update({ status: mutation.status })
+        .eq('tenant_id', context.actor.tenantId)
+        .eq('project_id', project.id)
+        .eq('id', mutation.orderId)
+        .select('id')
+        .maybeSingle();
+      if (result.error !== null || result.data === null) {
+        throw new WebsiteStudioError('WEBSITE_NOT_FOUND', 'The website order was not found.');
+      }
     }
   } else {
     if (getEnvironment().mockMode) {
@@ -428,4 +563,91 @@ export async function createWebsiteContactSubmission(
     );
   }
   return submissionView(result.data);
+}
+
+const ORDER_SELECT =
+  'buyer_email, buyer_name, created_at, currency, id, item_count, items, page_slug, project_id, status, subtotal, tenant_id, updated_at';
+
+export async function createWebsiteOrder(
+  website: Pick<PublishedWebsite, 'projectId' | 'spec' | 'tenantId'>,
+  inputValue: WebsiteCheckoutInput,
+): Promise<WebsiteOrder> {
+  const input = WebsiteCheckoutInputSchema.parse(inputValue);
+  if (!website.spec.pages.some((page) => page.slug === input.pageSlug)) {
+    throw new WebsiteStudioError('WEBSITE_INVALID', 'The checkout page is invalid.');
+  }
+  const email = input.email.toLowerCase();
+  const priced = priceCheckout(website.spec, input);
+  const subtotal = Math.min(
+    priced.items.reduce((sum, item) => sum + item.lineTotal, 0),
+    1_000_000_000_000,
+  );
+  if (getEnvironment().mockMode) {
+    const memory = memoryAdmin(website.projectId);
+    const cutoff = Date.now() - 10 * 60 * 1_000;
+    const recent = memory.orders.filter(
+      (order) => order.buyerEmail === email && new Date(order.createdAt).getTime() >= cutoff,
+    );
+    if (recent.length >= 5) {
+      throw new WebsiteStudioError(
+        'WEBSITE_RATE_LIMITED',
+        'Please wait before placing another order.',
+      );
+    }
+    const now = new Date().toISOString();
+    const order = WebsiteOrderSchema.parse({
+      buyerEmail: email,
+      buyerName: input.name,
+      createdAt: now,
+      currency: priced.currency,
+      id: crypto.randomUUID(),
+      itemCount: priced.itemCount,
+      items: priced.items,
+      pageSlug: input.pageSlug,
+      projectId: website.projectId,
+      status: 'pending',
+      subtotal,
+      tenantId: website.tenantId,
+      updatedAt: now,
+    });
+    memory.orders.push(order);
+    return order;
+  }
+  const admin = createSupabaseAdminClient();
+  const cutoff = new Date(Date.now() - 10 * 60 * 1_000).toISOString();
+  const recent = await admin
+    .from('website_storefront_orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', website.tenantId)
+    .eq('project_id', website.projectId)
+    .eq('buyer_email', email)
+    .gte('created_at', cutoff);
+  if (recent.error !== null) {
+    throw new WebsiteStudioError(
+      'WEBSITE_STATE_CONFLICT',
+      'The order could not be checked safely.',
+    );
+  }
+  if ((recent.count ?? 0) >= 5) {
+    throw new WebsiteStudioError('WEBSITE_RATE_LIMITED', 'Please wait before placing another order.');
+  }
+  const result = await admin
+    .from('website_storefront_orders')
+    .insert({
+      buyer_email: email,
+      buyer_name: input.name,
+      currency: priced.currency,
+      item_count: priced.itemCount,
+      items: priced.items,
+      page_slug: input.pageSlug,
+      project_id: website.projectId,
+      subtotal,
+      tenant_id: website.tenantId,
+    })
+    .select(ORDER_SELECT)
+    .single();
+  if (result.error !== null) {
+    throw new WebsiteStudioError('WEBSITE_STATE_CONFLICT', 'The order could not be saved.');
+  }
+  return orderView(result.data);
 }

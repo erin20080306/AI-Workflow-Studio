@@ -88,6 +88,7 @@ interface PublishedRenderOptions {
     readonly href: string;
     readonly label: string;
   };
+  readonly checkoutAction?: string;
   readonly contactAction?: string;
   readonly pageHref: (pageSlug: string) => string;
   readonly siteSlug?: string;
@@ -524,9 +525,7 @@ function cartCheckoutMarkup(
     checkout.action,
   )}"><input name="pageSlug" type="hidden" value="${escapeHtml(
     checkout.pageSlug,
-  )}"><input name="subject" type="hidden" value="${
-    zh ? '網路訂單' : 'Online order'
-  }"><input data-cart-order-message name="message" type="hidden" value=""><label class="contact-honeypot">Website<input autocomplete="off" name="website" tabindex="-1"></label><div class="cart-buyer"><input autocomplete="name" maxlength="120" name="name" placeholder="${
+  )}"><input data-cart-items-json name="items" type="hidden" value=""><label class="contact-honeypot">Website<input autocomplete="off" name="website" tabindex="-1"></label><div class="cart-buyer"><input autocomplete="name" maxlength="120" name="name" placeholder="${
     zh ? '姓名' : 'Name'
   }" required><input autocomplete="email" maxlength="254" name="email" placeholder="Email" required type="email"></div><button class="action cart-checkout" type="submit">${
     zh ? '送出訂單' : 'Place order'
@@ -624,9 +623,9 @@ function renderWebsiteDocument(
       ? cartDrawerMarkup(
           spec,
           page,
-          published?.contactAction === undefined
+          published?.checkoutAction === undefined
             ? undefined
-            : { action: published.contactAction, pageSlug },
+            : { action: published.checkoutAction, pageSlug },
         )
       : ''
   }</div></body></html>`;
@@ -657,6 +656,7 @@ export function renderWebsitePublishedDocument(
     assetUrls,
     {
       ...(account === undefined ? {} : { account }),
+      checkoutAction: `/api/public-sites/${published}/checkout`,
       contactAction: `/api/public-sites/${published}/contact`,
       pageHref: (targetPageSlug) =>
         routeMode === 'site-host' ? `/${targetPageSlug}` : `/s/${published}/${targetPageSlug}`,
