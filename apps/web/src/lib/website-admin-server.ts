@@ -79,6 +79,7 @@ const OrderRowSchema = z
 
 interface MemoryWebsiteAdmin {
   readonly content: Map<string, WebsiteContentEntry>;
+  readonly inventory: Map<string, number>;
   readonly orders: WebsiteOrder[];
   readonly submissions: WebsiteFormSubmission[];
 }
@@ -91,9 +92,123 @@ function memoryAdmin(projectId: string): MemoryWebsiteAdmin {
   adminGlobal.__aiWorkflowWebsiteAdmin ??= new Map();
   const existing = adminGlobal.__aiWorkflowWebsiteAdmin.get(projectId);
   if (existing !== undefined) return existing;
-  const created: MemoryWebsiteAdmin = { content: new Map(), orders: [], submissions: [] };
+  const created: MemoryWebsiteAdmin = {
+    content: new Map(),
+    inventory: new Map(),
+    orders: [],
+    submissions: [],
+  };
   adminGlobal.__aiWorkflowWebsiteAdmin.set(projectId, created);
   return created;
+}
+
+/** Published stock per tracked SKU (products that declare both a SKU and stock). */
+function specStockBySku(spec: WebsiteSpec): Map<string, number> {
+  const stock = new Map<string, number>();
+  for (const page of spec.pages) {
+    for (const section of page.sections) {
+      if (section.type !== 'product-grid') continue;
+      for (const item of section.items) {
+        if (item.sku !== undefined && item.stock !== undefined) stock.set(item.sku, item.stock);
+      }
+    }
+  }
+  return stock;
+}
+
+/** Reservation lines for the order's items that are stock-tracked in the spec. */
+function orderStockLines(
+  spec: WebsiteSpec,
+  items: readonly WebsiteOrderItem[],
+): { readonly quantity: number; readonly sku: string; readonly stock: number }[] {
+  const stock = specStockBySku(spec);
+  const lines: { quantity: number; sku: string; stock: number }[] = [];
+  for (const item of items) {
+    if (item.sku === undefined) continue;
+    const limit = stock.get(item.sku);
+    if (limit === undefined) continue;
+    lines.push({ quantity: item.quantity, sku: item.sku, stock: limit });
+  }
+  return lines;
+}
+
+async function reserveOrderStock(
+  website: Pick<PublishedWebsite, 'projectId' | 'tenantId'>,
+  lines: readonly { readonly quantity: number; readonly sku: string; readonly stock: number }[],
+): Promise<void> {
+  if (lines.length === 0) return;
+  if (getEnvironment().mockMode) {
+    const memory = memoryAdmin(website.projectId);
+    for (const line of lines) {
+      const sold = memory.inventory.get(line.sku) ?? 0;
+      if (sold + line.quantity > line.stock) {
+        throw new WebsiteStudioError(
+          'WEBSITE_INVALID',
+          'A product in the order does not have enough stock.',
+        );
+      }
+    }
+    for (const line of lines) {
+      memory.inventory.set(line.sku, (memory.inventory.get(line.sku) ?? 0) + line.quantity);
+    }
+    return;
+  }
+  const result = await createSupabaseAdminClient().rpc('website_reserve_order_stock', {
+    p_lines: lines,
+    p_project: website.projectId,
+    p_tenant: website.tenantId,
+  });
+  if (result.error !== null) {
+    throw new WebsiteStudioError(
+      'WEBSITE_INVALID',
+      'A product in the order does not have enough stock.',
+    );
+  }
+}
+
+/** Return reserved units to stock when an order is cancelled. */
+async function restockOrder(
+  website: Pick<PublishedWebsite, 'projectId' | 'tenantId'>,
+  order: WebsiteOrder,
+): Promise<void> {
+  const lines = order.items.filter((item) => item.sku !== undefined);
+  if (lines.length === 0) return;
+  if (getEnvironment().mockMode) {
+    const memory = memoryAdmin(website.projectId);
+    for (const item of lines) {
+      const next = Math.max(0, (memory.inventory.get(item.sku as string) ?? 0) - item.quantity);
+      memory.inventory.set(item.sku as string, next);
+    }
+    return;
+  }
+  const admin = createSupabaseAdminClient();
+  for (const item of lines) {
+    await admin.rpc('website_release_order_stock', {
+      p_project: website.projectId,
+      p_qty: item.quantity,
+      p_sku: item.sku,
+      p_tenant: website.tenantId,
+    });
+  }
+}
+
+export async function getWebsiteInventorySold(
+  website: Pick<PublishedWebsite, 'projectId' | 'tenantId'>,
+): Promise<ReadonlyMap<string, number>> {
+  if (getEnvironment().mockMode) {
+    return new Map(memoryAdmin(website.projectId).inventory);
+  }
+  const result = await createSupabaseAdminClient()
+    .from('website_inventory')
+    .select('sku, sold')
+    .eq('tenant_id', website.tenantId)
+    .eq('project_id', website.projectId)
+    .limit(1_000);
+  const rows = z
+    .array(z.object({ sku: z.string(), sold: z.number().int().min(0) }).strict())
+    .safeParse(result.data);
+  if (result.error !== null || !rows.success) return new Map();
+  return new Map(rows.data.map((row) => [row.sku, row.sold]));
 }
 
 function orderView(rowValue: unknown): WebsiteOrder {
@@ -391,6 +506,7 @@ export async function mutateWebsiteAdmin(
       );
     }
   } else if (mutation.action === 'update-order-status') {
+    const scope = { projectId: project.id, tenantId: context.actor.tenantId };
     if (getEnvironment().mockMode) {
       const memory = memoryAdmin(project.id);
       const index = memory.orders.findIndex((order) => order.id === mutation.orderId);
@@ -403,8 +519,23 @@ export async function mutateWebsiteAdmin(
         status: mutation.status,
         updatedAt: new Date().toISOString(),
       });
+      if (mutation.status === 'cancelled' && existing.status !== 'cancelled') {
+        await restockOrder(scope, existing);
+      }
     } else {
-      const result = await createSupabaseAdminClient()
+      const admin = createSupabaseAdminClient();
+      const current = await admin
+        .from('website_storefront_orders')
+        .select(ORDER_SELECT)
+        .eq('tenant_id', context.actor.tenantId)
+        .eq('project_id', project.id)
+        .eq('id', mutation.orderId)
+        .maybeSingle();
+      if (current.error !== null || current.data === null) {
+        throw new WebsiteStudioError('WEBSITE_NOT_FOUND', 'The website order was not found.');
+      }
+      const previous = orderView(current.data);
+      const result = await admin
         .from('website_storefront_orders')
         .update({ status: mutation.status })
         .eq('tenant_id', context.actor.tenantId)
@@ -414,6 +545,25 @@ export async function mutateWebsiteAdmin(
         .maybeSingle();
       if (result.error !== null || result.data === null) {
         throw new WebsiteStudioError('WEBSITE_NOT_FOUND', 'The website order was not found.');
+      }
+      if (mutation.status === 'cancelled' && previous.status !== 'cancelled') {
+        await restockOrder(scope, previous);
+      }
+    }
+  } else if (mutation.action === 'reset-inventory') {
+    if (getEnvironment().mockMode) {
+      memoryAdmin(project.id).inventory.clear();
+    } else {
+      const result = await createSupabaseAdminClient()
+        .from('website_inventory')
+        .delete()
+        .eq('tenant_id', context.actor.tenantId)
+        .eq('project_id', project.id);
+      if (result.error !== null) {
+        throw new WebsiteStudioError(
+          'WEBSITE_STATE_CONFLICT',
+          'The inventory could not be reset.',
+        );
       }
     }
   } else {
@@ -582,6 +732,9 @@ export async function createWebsiteOrder(
     priced.items.reduce((sum, item) => sum + item.lineTotal, 0),
     1_000_000_000_000,
   );
+  // Reserve live stock atomically before recording the order; a shortfall here
+  // rejects the whole checkout so the storefront never oversells.
+  await reserveOrderStock(website, orderStockLines(website.spec, priced.items));
   if (getEnvironment().mockMode) {
     const memory = memoryAdmin(website.projectId);
     const cutoff = Date.now() - 10 * 60 * 1_000;

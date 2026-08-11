@@ -144,6 +144,11 @@ export const WebsiteAdminMutationSchema = z.discriminatedUnion('action', [
       status: WebsiteOrderStatusSchema,
     })
     .strict(),
+  z
+    .object({
+      action: z.literal('reset-inventory'),
+    })
+    .strict(),
 ]);
 
 export const WebsiteAdminDashboardSchema = z

@@ -631,6 +631,28 @@ function renderWebsiteDocument(
   }</div></body></html>`;
 }
 
+/**
+ * Return a spec whose tracked product stock reflects live sales
+ * (remaining = published stock − sold). Used only at public render time.
+ */
+export function applyInventorySold(
+  specValue: WebsiteSpec,
+  soldBySku: ReadonlyMap<string, number>,
+): WebsiteSpec {
+  if (soldBySku.size === 0) return specValue;
+  const spec = WebsiteSpecSchema.parse(structuredClone(specValue));
+  for (const page of spec.pages) {
+    for (const section of page.sections) {
+      if (section.type !== 'product-grid') continue;
+      for (const item of section.items) {
+        if (item.sku === undefined || item.stock === undefined) continue;
+        item.stock = Math.max(0, item.stock - (soldBySku.get(item.sku) ?? 0));
+      }
+    }
+  }
+  return spec;
+}
+
 export function renderWebsitePreviewDocument(
   specValue: WebsiteSpec,
   pageSlug: string,

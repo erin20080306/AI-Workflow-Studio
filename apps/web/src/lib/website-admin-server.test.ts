@@ -203,6 +203,45 @@ describe('website admin backend', () => {
     expect(await getWebsiteAdminDashboard(context, project.id)).toEqual(afterStatus);
   });
 
+  it('deducts live stock on checkout, restocks on cancel, and resets on demand', async () => {
+    const { createWebsiteProject } = await import('./website-studio-server');
+    const {
+      createWebsiteOrder,
+      getWebsiteInventorySold,
+      mutateWebsiteAdmin,
+    } = await import('./website-admin-server');
+    const project = await createWebsiteProject(context, { name: `Store ${crypto.randomUUID()}` });
+    const website = { projectId: project.id, spec: commerceSpec, tenantId: context.actor.tenantId };
+    const line = (quantity: number) => ({
+      email: 'buyer@example.com',
+      items: [{ id: 'OK-1', name: '有現貨商品', quantity }],
+      name: '購買者',
+      pageSlug: 'home',
+    });
+
+    const first = await createWebsiteOrder(website, line(4));
+    expect((await getWebsiteInventorySold(website)).get('OK-1')).toBe(4);
+    // Only 1 of 5 remains, so a further order of 2 must be rejected.
+    await expect(createWebsiteOrder(website, line(2))).rejects.toMatchObject({
+      code: 'WEBSITE_INVALID',
+    });
+
+    // Cancelling the first order returns its units to stock.
+    await mutateWebsiteAdmin(context, project.id, {
+      action: 'update-order-status',
+      orderId: first.id,
+      status: 'cancelled',
+    });
+    expect((await getWebsiteInventorySold(website)).get('OK-1')).toBe(0);
+    const second = await createWebsiteOrder(website, line(5));
+    expect(second.itemCount).toBe(5);
+    expect((await getWebsiteInventorySold(website)).get('OK-1')).toBe(5);
+
+    // Resetting inventory clears the sold counters back to the published level.
+    await mutateWebsiteAdmin(context, project.id, { action: 'reset-inventory' });
+    expect((await getWebsiteInventorySold(website)).get('OK-1')).toBeUndefined();
+  });
+
   it('rejects a checkout for a sold-out product or a quantity above stock', async () => {
     const { createWebsiteProject } = await import('./website-studio-server');
     const { createWebsiteOrder } = await import('./website-admin-server');

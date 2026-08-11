@@ -9,6 +9,7 @@ import {
   websitePreviewUrl,
 } from './website-preview-contract';
 import {
+  applyInventorySold,
   renderWebsitePreviewDocument,
   renderWebsitePublishedDocument,
   renderWebsiteStaticDocument,
@@ -165,6 +166,39 @@ describe('website preview', () => {
     expect(html).toContain('product-add product-soldout');
     // The sold-out item renders no add button (so no data-stock="0").
     expect(html).not.toContain('data-stock="0"');
+  });
+
+  it('reduces displayed product stock by units already sold', () => {
+    const commerce = WebsiteSpecSchema.parse({
+      ...spec,
+      locale: 'zh-Hant',
+      pages: [
+        {
+          ...spec.pages[0],
+          sections: [
+            {
+              columns: '2',
+              id: 'products-main',
+              items: [
+                { name: '暢銷商品', price: 1000, priceLabel: 'NT$1,000', sku: 'S-1', stock: 10 },
+                { name: '完售商品', price: 800, priceLabel: 'NT$800', sku: 'S-2', stock: 3 },
+              ],
+              title: '本週選品',
+              type: 'product-grid',
+            },
+            spec.pages[0]!.sections[1],
+          ],
+        },
+      ],
+    });
+    const live = applyInventorySold(commerce, new Map([['S-1', 8], ['S-2', 3]]));
+    const html = renderWebsitePreviewDocument(live, 'home');
+    expect(html).toContain('僅剩 2 件'); // 10 published − 8 sold
+    expect(html).toContain('stock-out">售完'); // 3 published − 3 sold
+    expect(html).toContain('product-add product-soldout');
+    // The original spec is not mutated by the render-time transform.
+    const untouched = commerce.pages[0]!.sections[0]!;
+    expect(untouched.type === 'product-grid' && untouched.items[0]?.stock).toBe(10);
   });
 
   it('renders a real product image when an item has an attached asset', () => {

@@ -76,6 +76,8 @@ const copy = {
     openOrders: 'Open orders',
     orderItems: 'Items',
     orders: 'Orders',
+    resetInventory: 'Reset stock counts',
+    resetInventoryHint: 'Restores every product’s shown stock to its published level.',
     subtotal: 'Subtotal',
     totalOrders: 'Orders',
     page: 'Target page',
@@ -119,6 +121,8 @@ const copy = {
     openOrders: '待處理訂單',
     orderItems: '商品',
     orders: '訂單',
+    resetInventory: '重設庫存已售數',
+    resetInventoryHint: '將每項商品顯示的庫存還原為發布時的數量。',
     subtotal: '小計',
     totalOrders: '訂單數',
     page: '顯示頁面',
@@ -489,7 +493,22 @@ export function WebsiteAdminDashboard({
 
       {tab === 'orders' ? (
         <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-          <h2 className="text-xl font-semibold text-slate-950">{text.orders}</h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h2 className="text-xl font-semibold text-slate-950">{text.orders}</h2>
+            <div className="text-right">
+              <button
+                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-40"
+                disabled={!canManage || saving}
+                onClick={() => void mutate({ action: 'reset-inventory' })}
+                type="button"
+              >
+                {text.resetInventory}
+              </button>
+              <p className="mt-1 max-w-xs text-[10px] leading-4 text-slate-400">
+                {text.resetInventoryHint}
+              </p>
+            </div>
+          </div>
           <div className="mt-5 space-y-4">
             {dashboard.orders.length === 0 ? (
               <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
