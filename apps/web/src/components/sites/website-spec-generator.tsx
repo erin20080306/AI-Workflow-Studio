@@ -21,9 +21,26 @@ const GenerationResponseSchema = z.object({
   generation: WebsiteSpecClientGenerationSchema,
 });
 
+const AutoImagesResponseSchema = z.object({
+  generated: z.number().int().min(0),
+  generation: WebsiteSpecClientGenerationSchema.optional(),
+});
+
+/** True when the generated site has storefront products that still need a photo. */
+function hasImagelessProducts(spec: WebsiteSpecClientGeneration['spec']): boolean {
+  return spec.pages.some((page) =>
+    page.sections.some(
+      (section) =>
+        section.type === 'product-grid' &&
+        section.items.some((item) => item.assetId === undefined),
+    ),
+  );
+}
+
 const copy = {
   en: {
     attempt: 'Validated attempts',
+    autoFilling: 'Adding product photos…',
     available: 'Choose a model',
     empty:
       'AI website generation is not enabled yet. Ask the platform administrator to configure a server-only provider.',
@@ -42,6 +59,7 @@ const copy = {
   },
   'zh-Hant': {
     attempt: '通過驗證的嘗試次數',
+    autoFilling: '正在為商品自動配圖…',
     available: '選擇模型',
     empty: 'AI 網站生成功能尚未開放，請由平台管理者在伺服器端設定至少一個 Provider。',
     failed: '網站規格無法產生，或內容未通過安全驗證。',
@@ -91,7 +109,30 @@ export function WebsiteSpecGenerator({
   const [selectedTier, setSelectedTier] = useState<AiModelTierSelection>('auto');
   const [generation, setGeneration] = useState(initialGeneration);
   const [generating, setGenerating] = useState(false);
+  const [autoFilling, setAutoFilling] = useState(false);
   const [message, setMessage] = useState<string>();
+
+  /** Best-effort: give a freshly generated storefront product photos automatically. */
+  async function autoFillStorefrontImages(current: WebsiteSpecClientGeneration): Promise<void> {
+    if (!hasImagelessProducts(current.spec)) return;
+    setAutoFilling(true);
+    try {
+      const response = await fetch(`/api/websites/${projectId}/images/auto`, {
+        body: JSON.stringify({ locale, provider: 'auto', tier: 'auto', versionName: text.autoFilling }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) return;
+      const parsed = AutoImagesResponseSchema.parse(payload);
+      if (parsed.generation !== undefined) setGeneration(parsed.generation);
+    } catch {
+      // Budget, provider, or network issues leave the products image-less; the
+      // manual "auto-fill product photos" button in the editor remains available.
+    } finally {
+      setAutoFilling(false);
+    }
+  }
 
   async function generate(): Promise<void> {
     if (generating || modelOptions.length === 0 || generation !== undefined) return;
@@ -105,7 +146,9 @@ export function WebsiteSpecGenerator({
       });
       const payload: unknown = await response.json();
       if (!response.ok) throw new Error('generation failed');
-      setGeneration(GenerationResponseSchema.parse(payload).generation);
+      const next = GenerationResponseSchema.parse(payload).generation;
+      setGeneration(next);
+      await autoFillStorefrontImages(next);
     } catch {
       setMessage(text.failed);
     } finally {
@@ -153,12 +196,12 @@ export function WebsiteSpecGenerator({
             </div>
             <button
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={generating}
+              disabled={generating || autoFilling}
               onClick={() => void generate()}
               type="button"
             >
               <ShieldIcon className="size-4" />
-              {generating ? text.generating : text.generate}
+              {autoFilling ? text.autoFilling : generating ? text.generating : text.generate}
             </button>
           </>
         ) : (
@@ -172,6 +215,15 @@ export function WebsiteSpecGenerator({
             <CheckIcon className="size-4" />
             {text.generated}
           </p>
+          {autoFilling ? (
+            <p
+              aria-live="polite"
+              className="mt-3 inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1.5 text-xs font-semibold text-violet-900"
+            >
+              <SparkIcon className="size-4" />
+              {text.autoFilling}
+            </p>
+          ) : null}
           <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {[
               [text.version, generation.version],
