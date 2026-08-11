@@ -150,6 +150,15 @@ describe('Website Studio safe provider fallback', () => {
       productGrid?.type === 'product-grid' &&
         productGrid.items.every((item) => typeof item.price === 'number'),
     ).toBe(true);
+    // Every fallback product carries a numeric stock count (incl. a sold-out one).
+    expect(
+      productGrid?.type === 'product-grid' &&
+        productGrid.items.every((item) => typeof item.stock === 'number'),
+    ).toBe(true);
+    expect(
+      productGrid?.type === 'product-grid' &&
+        productGrid.items.some((item) => item.stock === 0),
+    ).toBe(true);
   });
 
   it('applies only recognized bounded theme instructions', () => {

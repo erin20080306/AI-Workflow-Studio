@@ -167,30 +167,30 @@ function looksLikeStore(brief: WebsiteBrief, projectName: string): boolean {
 }
 
 interface StorefrontProduct {
-  readonly availabilityLabel: string;
   readonly badge?: string;
   readonly currency: string;
   readonly name: string;
   readonly price: number;
   readonly priceLabel: string;
   readonly sku: string;
+  readonly stock: number;
 }
 
 /** Deterministic bounded placeholder catalogue so the cart and checkout light up. */
 function storefrontProducts(locale: 'en' | 'zh-Hant'): readonly StorefrontProduct[] {
   if (locale === 'en') {
     return [
-      { availabilityLabel: 'In stock', badge: 'Bestseller', currency: '$', name: 'Organic cotton shirt', price: 128, priceLabel: '$128', sku: 'AN-101' },
-      { availabilityLabel: 'In stock', badge: 'New', currency: '$', name: 'Handmade leather bag', price: 268, priceLabel: '$268', sku: 'AN-204' },
-      { availabilityLabel: 'Low stock', currency: '$', name: 'Tailored wide trousers', price: 188, priceLabel: '$188', sku: 'AN-306' },
-      { availabilityLabel: 'In stock', currency: '$', name: 'Everyday knit sweater', price: 158, priceLabel: '$158', sku: 'AN-408' },
+      { badge: 'Bestseller', currency: '$', name: 'Organic cotton shirt', price: 128, priceLabel: '$128', sku: 'AN-101', stock: 24 },
+      { badge: 'New', currency: '$', name: 'Handmade leather bag', price: 268, priceLabel: '$268', sku: 'AN-204', stock: 8 },
+      { currency: '$', name: 'Tailored wide trousers', price: 188, priceLabel: '$188', sku: 'AN-306', stock: 3 },
+      { currency: '$', name: 'Everyday knit sweater', price: 158, priceLabel: '$158', sku: 'AN-408', stock: 0 },
     ];
   }
   return [
-    { availabilityLabel: '現貨', badge: '熱銷', currency: 'NT$', name: '經典有機棉上衣', price: 1280, priceLabel: 'NT$1,280', sku: 'AN-101' },
-    { availabilityLabel: '現貨', badge: '新品', currency: 'NT$', name: '手工皮革肩背包', price: 2680, priceLabel: 'NT$2,680', sku: 'AN-204' },
-    { availabilityLabel: '少量現貨', currency: 'NT$', name: '立體剪裁寬褲', price: 1880, priceLabel: 'NT$1,880', sku: 'AN-306' },
-    { availabilityLabel: '現貨', currency: 'NT$', name: '日常針織衫', price: 1580, priceLabel: 'NT$1,580', sku: 'AN-408' },
+    { badge: '熱銷', currency: 'NT$', name: '經典有機棉上衣', price: 1280, priceLabel: 'NT$1,280', sku: 'AN-101', stock: 24 },
+    { badge: '新品', currency: 'NT$', name: '手工皮革肩背包', price: 2680, priceLabel: 'NT$2,680', sku: 'AN-204', stock: 8 },
+    { currency: 'NT$', name: '立體剪裁寬褲', price: 1880, priceLabel: 'NT$1,880', sku: 'AN-306', stock: 3 },
+    { currency: 'NT$', name: '日常針織衫', price: 1580, priceLabel: 'NT$1,580', sku: 'AN-408', stock: 0 },
   ];
 }
 
@@ -251,13 +251,13 @@ function commerceHomeSections(
       eyebrow: en ? 'Curated now' : '本週選品',
       id: `${pageSlug}-products`,
       items: products.map((product) => ({
-        availabilityLabel: product.availabilityLabel,
         ...(product.badge === undefined ? {} : { badge: product.badge }),
         currency: product.currency,
         name: product.name,
         price: product.price,
         priceLabel: product.priceLabel,
         sku: product.sku,
+        stock: product.stock,
       })),
       title: en ? 'Shop the collection' : '選購當季商品',
       type: 'product-grid' as const,

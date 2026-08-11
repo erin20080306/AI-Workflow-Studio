@@ -341,7 +341,7 @@ export function WebsiteSpecEditor({
     const current = section.items[index];
     if (current === undefined) return;
     const read = (key: string): string => String(form.get(key) ?? '').trim();
-    const patch: Record<string, string> = {};
+    const patch: Record<string, string | number> = {};
     const name = read('name');
     if (name.length >= 2 && name !== current.name) patch.name = name;
     const priceLabel = read('priceLabel');
@@ -354,6 +354,13 @@ export function WebsiteSpecEditor({
     }
     const badge = read('badge');
     if (badge.length >= 1 && badge !== (current.badge ?? '')) patch.badge = badge;
+    const stockRaw = read('stock');
+    if (stockRaw.length > 0) {
+      const stock = Number(stockRaw);
+      if (Number.isInteger(stock) && stock >= 0 && stock <= 1_000_000 && stock !== current.stock) {
+        patch.stock = stock;
+      }
+    }
     if (Object.keys(patch).length === 0) return;
     void createEdit({
       edit: { itemIndex: index, pageSlug, patch, sectionId, type: 'update-product' },
@@ -780,10 +787,14 @@ export function WebsiteSpecEditor({
                   />
                   <input
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                    defaultValue={editProduct.availabilityLabel ?? ''}
-                    maxLength={40}
-                    name="availabilityLabel"
-                    placeholder={locale === 'en' ? 'Stock' : '庫存 (如 現貨 18)'}
+                    defaultValue={editProduct.stock ?? ''}
+                    inputMode="numeric"
+                    max={1_000_000}
+                    min={0}
+                    name="stock"
+                    placeholder={locale === 'en' ? 'Stock qty (number)' : '庫存數量 (數字)'}
+                    step={1}
+                    type="number"
                   />
                   <input
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
@@ -791,6 +802,15 @@ export function WebsiteSpecEditor({
                     maxLength={24}
                     name="badge"
                     placeholder={locale === 'en' ? 'Badge' : '標籤 (如 新品)'}
+                  />
+                  <input
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm sm:col-span-2"
+                    defaultValue={editProduct.availabilityLabel ?? ''}
+                    maxLength={40}
+                    name="availabilityLabel"
+                    placeholder={
+                      locale === 'en' ? 'Custom stock text (optional)' : '自訂庫存文字 (選填)'
+                    }
                   />
                 </div>
                 <button

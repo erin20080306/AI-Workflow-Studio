@@ -65,6 +65,7 @@ const BlueprintProductSchema = z
       .trim()
       .regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,39}$/)
       .optional(),
+    stock: z.number().int().min(0).max(1_000_000).optional(),
     variant: blueprintText(1, 60).optional(),
   })
   .strip();
@@ -384,6 +385,7 @@ function compileSection(
             ...(price === undefined ? {} : { price }),
             priceLabel: boundedText(product.priceLabel, 1, 40, '—'),
             ...(product.sku === undefined ? {} : { sku: product.sku }),
+            ...(product.stock === undefined ? {} : { stock: product.stock }),
             ...(product.variant === undefined ? {} : { variant: product.variant }),
           };
         });

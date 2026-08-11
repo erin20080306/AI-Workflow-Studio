@@ -131,6 +131,42 @@ describe('website preview', () => {
     expect(html).toContain('gallery-caption">Morning');
   });
 
+  it('shows stock levels and disables add-to-bag for sold-out products', () => {
+    const commerce = WebsiteSpecSchema.parse({
+      ...spec,
+      locale: 'zh-Hant',
+      pages: [
+        {
+          ...spec.pages[0],
+          sections: [
+            {
+              columns: '3',
+              id: 'products-main',
+              items: [
+                { name: '現貨商品', price: 1680, priceLabel: 'NT$1,680', sku: 'IN-1', stock: 24 },
+                { name: '低量商品', price: 1280, priceLabel: 'NT$1,280', sku: 'LO-1', stock: 3 },
+                { name: '售完商品', price: 980, priceLabel: 'NT$980', sku: 'OUT-1', stock: 0 },
+              ],
+              title: '本週選品',
+              type: 'product-grid',
+            },
+            spec.pages[0]!.sections[1],
+          ],
+        },
+      ],
+    });
+    const html = renderWebsitePreviewDocument(commerce, 'home');
+    expect(html).toContain('現貨 24 件');
+    expect(html).toContain('stock-low">僅剩 3 件');
+    expect(html).toContain('stock-out">售完');
+    // In-stock and low-stock items are addable; the sold-out item is not.
+    expect(html).toContain('data-stock="24"');
+    expect(html).toContain('data-stock="3"');
+    expect(html).toContain('product-add product-soldout');
+    // The sold-out item renders no add button (so no data-stock="0").
+    expect(html).not.toContain('data-stock="0"');
+  });
+
   it('renders a real product image when an item has an attached asset', () => {
     const withImage = WebsiteSpecSchema.parse({
       ...spec,

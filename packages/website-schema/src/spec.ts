@@ -220,6 +220,7 @@ const ProductItemSchema = z
       .string()
       .regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,39}$/)
       .optional(),
+    stock: z.number().int().min(0).max(1_000_000).optional(),
     variant: safeText(1, 60).optional(),
   })
   .strict();
@@ -507,6 +508,7 @@ export const WebsiteDirectEditSchema = z.discriminatedUnion('type', [
           badge: safeText(1, 24).optional(),
           name: safeText(2, 100).optional(),
           priceLabel: safeText(1, 40).optional(),
+          stock: z.number().int().min(0).max(1_000_000).optional(),
           variant: safeText(1, 60).optional(),
         })
         .strict()
