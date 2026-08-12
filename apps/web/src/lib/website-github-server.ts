@@ -21,7 +21,11 @@ import {
   type WebsiteGithubRepository,
   type WebsiteGithubState,
 } from '@/lib/website-github-schema';
-import { assertWebsiteGithubSourceSafe } from '@/lib/website-github-source-safety';
+import {
+  assertWebsiteGithubSourceSafe,
+  assertWebsiteNextSourceSafe,
+} from '@/lib/website-github-source-safety';
+import { prepareWebsiteNextSource } from '@/lib/website-nextjs-export-server';
 import { prepareWebsiteStaticSource } from '@/lib/website-static-export-server';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
@@ -300,8 +304,15 @@ export async function publishWebsiteVersionToGithub(
 ): Promise<WebsiteGithubPublication> {
   assertGithubAccess(context);
   await getWebsiteProject(context, projectId);
-  const prepared = await prepareWebsiteStaticSource(context, projectId, input.version);
-  assertWebsiteGithubSourceSafe(prepared.source);
+  const prepared =
+    input.format === 'next-app'
+      ? await prepareWebsiteNextSource(context, projectId, input.version)
+      : await prepareWebsiteStaticSource(context, projectId, input.version);
+  if (input.format === 'next-app') {
+    assertWebsiteNextSourceSafe(prepared.source);
+  } else {
+    assertWebsiteGithubSourceSafe(prepared.source);
+  }
   const connection = await connectionRecord(context);
   if (connection === undefined) {
     throw new WebsiteStudioError(

@@ -196,6 +196,216 @@ const ENV_EXAMPLE = String.raw`# Your own Supabase project (Settings -> API in t
 # Never commit real values. Set these as environment variables in Vercel.
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+# A long random secret you choose; required to open /admin.
+ADMIN_TOKEN=
+`;
+
+const ADMIN_LIB = String.raw`import { createClient } from '@supabase/supabase-js';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { cookies } from 'next/headers';
+
+export function adminClient() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('Supabase environment variables are not configured.');
+  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+}
+
+function digest(value: string): Buffer {
+  return createHash('sha256').update(String(value)).digest();
+}
+
+export function tokenMatches(provided: string): boolean {
+  const token = process.env.ADMIN_TOKEN;
+  if (!token) return false;
+  const a = digest(provided);
+  const b = digest(token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export async function isAdmin(): Promise<boolean> {
+  const cookie = (await cookies()).get('store_admin');
+  return cookie ? tokenMatches(cookie.value) : false;
+}
+
+export function esc(value: any): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+`;
+
+const ADMIN_API_ROUTE = String.raw`import { cookies } from 'next/headers';
+
+import { adminClient, isAdmin, tokenMatches } from '@/lib/admin';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function redirect(location: string): Response {
+  return new Response(null, { status: 303, headers: { location: location } });
+}
+
+export async function POST(request: Request): Promise<Response> {
+  try {
+    const form = await request.formData();
+    const action = String(form.get('action') || '');
+    if (action === 'login') {
+      const provided = String(form.get('token') || '');
+      if (tokenMatches(provided)) {
+        (await cookies()).set('store_admin', provided, {
+          httpOnly: true,
+          maxAge: 28800,
+          path: '/',
+          sameSite: 'lax',
+          secure: true,
+        });
+        return redirect('/admin');
+      }
+      return redirect('/admin?error=login');
+    }
+    if (!(await isAdmin())) return redirect('/admin?error=auth');
+    if (action === 'logout') {
+      (await cookies()).delete('store_admin');
+      return redirect('/admin');
+    }
+    if (action === 'order-status') {
+      const id = String(form.get('id') || '');
+      const status = String(form.get('status') || '');
+      if (['pending', 'paid', 'shipped', 'completed', 'cancelled'].indexOf(status) < 0) {
+        return redirect('/admin?error=status');
+      }
+      await adminClient()
+        .from('orders')
+        .update({ status: status, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      return redirect('/admin');
+    }
+    return redirect('/admin');
+  } catch (error) {
+    return redirect('/admin?error=server');
+  }
+}
+`;
+
+const ADMIN_PAGE_ROUTE = String.raw`import { adminClient, esc, isAdmin } from '@/lib/admin';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function shell(body: string): Response {
+  const doc =
+    '<!doctype html><html><head><meta charset="utf-8">' +
+    '<meta content="width=device-width,initial-scale=1" name="viewport"><title>Store admin</title>' +
+    '<style>body{font-family:system-ui,sans-serif;background:#f1f5f9;color:#0f172a;margin:0;padding:24px}' +
+    '.wrap{max-width:960px;margin:0 auto}h1{font-size:22px}h2{font-size:16px}table{width:100%;border-collapse:collapse;' +
+    'background:#fff;border-radius:12px;overflow:hidden;margin-top:10px}th,td{padding:10px 12px;border-bottom:1px solid #e2e8f0;' +
+    'text-align:left;font-size:13px;vertical-align:top}button,select,input{font:inherit;padding:6px 10px;border:1px solid #cbd5e1;' +
+    'border-radius:8px;background:#fff}.btn{background:#4f46e5;color:#fff;border:0;cursor:pointer}.card{background:#fff;' +
+    'border-radius:12px;padding:20px;max-width:380px}</style></head><body><div class="wrap">' +
+    body +
+    '</div></body></html>';
+  return new Response(doc, {
+    status: 200,
+    headers: { 'cache-control': 'no-store', 'content-type': 'text/html; charset=utf-8' },
+  });
+}
+
+export async function GET(request: Request): Promise<Response> {
+  const error = new URL(request.url).searchParams.get('error');
+  if (!(await isAdmin())) {
+    const err = error
+      ? '<p style="color:#b91c1c;font-size:13px">Access denied. Check your admin token.</p>'
+      : '';
+    return shell(
+      '<h1>Store admin</h1><div class="card">' +
+        err +
+        '<form method="post" action="/api/admin"><input type="hidden" name="action" value="login">' +
+        '<p style="font-size:13px;color:#475569">Enter your ADMIN_TOKEN (set in Vercel env).</p>' +
+        '<input name="token" type="password" placeholder="Admin token" required ' +
+        'style="width:100%;box-sizing:border-box;margin:6px 0"><button class="btn" type="submit">Sign in</button></form></div>',
+    );
+  }
+  const supabase = adminClient();
+  const ordersResult = await supabase
+    .from('orders')
+    .select('id, buyer_name, buyer_email, items, currency, subtotal, item_count, status, created_at')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  const messagesResult = await supabase
+    .from('messages')
+    .select('id, name, email, subject, message, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  const orders = ordersResult.data || [];
+  const messages = messagesResult.data || [];
+  const statuses = ['pending', 'paid', 'shipped', 'completed', 'cancelled'];
+  let rows = '';
+  for (let i = 0; i < orders.length; i++) {
+    const o: any = orders[i];
+    const items = Array.isArray(o.items) ? o.items : [];
+    let itemHtml = '';
+    for (let j = 0; j < items.length; j++) {
+      itemHtml += esc(items[j].name) + ' x' + esc(items[j].quantity) + '<br>';
+    }
+    let options = '';
+    for (let k = 0; k < statuses.length; k++) {
+      options +=
+        '<option value="' + statuses[k] + '"' + (o.status === statuses[k] ? ' selected' : '') + '>' + statuses[k] + '</option>';
+    }
+    rows +=
+      '<tr><td>' +
+      esc(o.buyer_name) +
+      '<br><span style="color:#64748b">' +
+      esc(o.buyer_email) +
+      '</span></td><td>' +
+      itemHtml +
+      '</td><td>' +
+      esc(o.currency) +
+      esc(Number(o.subtotal).toLocaleString()) +
+      '</td><td><form method="post" action="/api/admin" style="display:flex;gap:6px">' +
+      '<input type="hidden" name="action" value="order-status"><input type="hidden" name="id" value="' +
+      esc(o.id) +
+      '"><select name="status">' +
+      options +
+      '</select><button class="btn" type="submit">Save</button></form></td></tr>';
+  }
+  const ordersTable = orders.length
+    ? '<table><thead><tr><th>Buyer</th><th>Items</th><th>Subtotal</th><th>Status</th></tr></thead><tbody>' +
+      rows +
+      '</tbody></table>'
+    : '<p style="color:#64748b">No orders yet.</p>';
+  let msgRows = '';
+  for (let m = 0; m < messages.length; m++) {
+    const mg: any = messages[m];
+    msgRows +=
+      '<tr><td>' +
+      esc(mg.name) +
+      '<br><span style="color:#64748b">' +
+      esc(mg.email) +
+      '</span></td><td>' +
+      esc(mg.subject) +
+      '</td><td>' +
+      esc(mg.message) +
+      '</td></tr>';
+  }
+  const msgTable = messages.length
+    ? '<table><thead><tr><th>From</th><th>Subject</th><th>Message</th></tr></thead><tbody>' +
+      msgRows +
+      '</tbody></table>'
+    : '<p style="color:#64748b">No messages yet.</p>';
+  return shell(
+    '<div style="display:flex;justify-content:space-between;align-items:center"><h1>Store admin</h1>' +
+      '<form method="post" action="/api/admin"><input type="hidden" name="action" value="logout">' +
+      '<button type="submit">Sign out</button></form></div><h2>Orders</h2>' +
+      ordersTable +
+      '<h2 style="margin-top:28px">Messages</h2>' +
+      msgTable,
+  );
+}
 `;
 
 // Extra public env vars needed when member login (Supabase Auth) is enabled.
@@ -768,13 +978,18 @@ function readme(
       '```',
       'SUPABASE_URL=你的-project-url',
       'SUPABASE_SERVICE_ROLE_KEY=你的-service-role-key',
+      'ADMIN_TOKEN=自訂一組夠長的隨機密碼',
       '```',
       '',
       '### 6. 部署',
       '按下 Deploy。完成後你的商店就上線了，客人下單會寫進你自己的 Supabase。',
       '',
-      '## 查看訂單與訊息',
-      '在 Supabase 後台 **Table Editor** 查看：**orders**（訂單）、**inventory**（每個 SKU 已售數量）、**messages**（聯絡表單訊息）。',
+      '## 後台訂單管理',
+      '到 `你的網址/admin`，輸入你設定的 `ADMIN_TOKEN` 登入，即可查看訂單、更改出貨狀態（待處理／已付款／已出貨／已完成／已取消）與聯絡訊息。',
+      '⚠️ `ADMIN_TOKEN` 請設為一組夠長的隨機字串，並只放在 Vercel 環境變數。',
+      '',
+      '## 直接看資料（可選）',
+      '也可在 Supabase 後台 **Table Editor** 查看：**orders**、**inventory**、**messages**。',
       '',
       '## 注意事項',
       '- `SUPABASE_SERVICE_ROLE_KEY` 是最高權限金鑰，只放 Vercel 環境變數，**不要**提交進 GitHub。',
@@ -828,10 +1043,14 @@ function readme(
     '```',
     'SUPABASE_URL=your-project-url',
     'SUPABASE_SERVICE_ROLE_KEY=your-service-role-key',
+    'ADMIN_TOKEN=a-long-random-secret-you-choose',
     '```',
     '',
     '### 6. Deploy',
     'Press Deploy. Orders are written to your own Supabase.',
+    '',
+    '## Order admin',
+    'Go to `your-url/admin`, sign in with your `ADMIN_TOKEN`, and manage orders (status: pending / paid / shipped / completed / cancelled) and contact messages. Keep `ADMIN_TOKEN` long, random, and only in Vercel env vars.',
     '',
     '## Notes',
     '- The `service_role` key is a full-access secret: keep it only in Vercel env vars, never in GitHub.',
@@ -938,6 +1157,9 @@ export function createWebsiteNextAppSource(input: {
   );
   addFile(files, 'app/api/checkout/route.ts', textFile(CHECKOUT_ROUTE));
   addFile(files, 'app/api/contact/route.ts', textFile(CONTACT_ROUTE));
+  addFile(files, 'lib/admin.ts', textFile(ADMIN_LIB));
+  addFile(files, 'app/admin/route.ts', textFile(ADMIN_PAGE_ROUTE));
+  addFile(files, 'app/api/admin/route.ts', textFile(ADMIN_API_ROUTE));
   addFile(files, 'supabase/migrations/0001_store.sql', textFile(SUPABASE_MIGRATION));
 
   if (membersEnabled) {
@@ -967,6 +1189,7 @@ export function createWebsiteNextAppSource(input: {
         requiresEnv: [
           'SUPABASE_URL',
           'SUPABASE_SERVICE_ROLE_KEY',
+          'ADMIN_TOKEN',
           ...(membersEnabled ? ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'] : []),
         ],
         schemaVersion: 1,
