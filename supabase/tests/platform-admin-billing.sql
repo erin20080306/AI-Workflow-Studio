@@ -128,11 +128,6 @@ values
     '20000000-0000-0000-0000-000000000001',
     '10000000-0000-0000-0000-000000000001',
     'Free workflow two'
-  ),
-  (
-    '20000000-0000-0000-0000-000000000001',
-    '10000000-0000-0000-0000-000000000001',
-    'Free workflow three'
   );
 
 do $$
@@ -142,9 +137,9 @@ begin
     values (
       '20000000-0000-0000-0000-000000000001',
       '10000000-0000-0000-0000-000000000001',
-      'Free workflow four'
+      'Free workflow three'
     );
-    raise exception 'free workflow limit unexpectedly allowed a fourth workflow';
+    raise exception 'free workflow limit unexpectedly allowed a third workflow';
   exception
     when check_violation then
       null;
