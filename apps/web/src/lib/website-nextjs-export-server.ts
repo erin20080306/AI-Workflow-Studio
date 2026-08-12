@@ -5,20 +5,35 @@ import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { getWebsiteSiteAccessDashboard } from '@/lib/website-access-server';
 import { getPublishedWebsiteAsset } from '@/lib/website-asset-server';
-import { createWebsiteNextAppExport, type WebsiteNextExport } from '@/lib/website-nextjs-export';
+import {
+  createWebsiteNextAppExport,
+  createWebsiteNextAppSource,
+  type WebsiteNextExport,
+  type WebsiteNextExportAccess,
+  type WebsiteNextExportAsset,
+  type WebsiteNextSource,
+} from '@/lib/website-nextjs-export';
 import { getWebsiteSpecVersion } from '@/lib/website-spec-server';
 import { canDownloadWebsiteExport } from '@/lib/website-static-export-access';
 import { getWebsiteProject, WebsiteStudioError } from '@/lib/website-studio-server';
 
-export async function exportWebsiteNextApp(
+export interface PreparedWebsiteNextSource {
+  readonly access?: WebsiteNextExportAccess;
+  readonly assets: readonly WebsiteNextExportAsset[];
+  readonly generation: NonNullable<Awaited<ReturnType<typeof getWebsiteSpecVersion>>>;
+  readonly project: Awaited<ReturnType<typeof getWebsiteProject>>;
+  readonly source: WebsiteNextSource;
+}
+
+export async function prepareWebsiteNextSource(
   context: WorkspaceContext,
   projectId: string,
   version: number,
-): Promise<WebsiteNextExport> {
+): Promise<PreparedWebsiteNextSource> {
   if (!canDownloadWebsiteExport(context)) {
     throw new WebsiteStudioError(
       'WEBSITE_FORBIDDEN',
-      'Deployable store downloads require an active paid subscription.',
+      'Deployable store delivery requires an active paid subscription.',
     );
   }
   const project = await getWebsiteProject(context, projectId);
@@ -48,19 +63,59 @@ export async function exportWebsiteNextApp(
       return { bytes: stored.bytes, id: asset.id };
     }),
   );
-  const access = await getWebsiteSiteAccessDashboard(context, project.id).catch(() => undefined);
-  const protectedSlugs = (access?.rules ?? [])
-    .filter((rule) => rule.requiredRole !== null)
-    .map((rule) => rule.pageSlug);
-  let result: WebsiteNextExport;
+  const accessDashboard = await getWebsiteSiteAccessDashboard(context, project.id).catch(
+    () => undefined,
+  );
+  const access =
+    accessDashboard === undefined
+      ? undefined
+      : {
+          protectedSlugs: accessDashboard.rules
+            .filter((rule) => rule.requiredRole !== null)
+            .map((rule) => rule.pageSlug),
+          registrationEnabled: accessDashboard.registrationEnabled,
+        };
   try {
-    result = createWebsiteNextAppExport({
-      ...(access === undefined
-        ? {}
-        : { access: { protectedSlugs, registrationEnabled: access.registrationEnabled } }),
+    const source = createWebsiteNextAppSource({
+      ...(access === undefined ? {} : { access }),
       assets,
       generation,
       project: { id: project.id, name: project.name, slug: project.slug },
+    });
+    return {
+      ...(access === undefined ? {} : { access }),
+      assets,
+      generation,
+      project,
+      source,
+    };
+  } catch (error) {
+    if (error instanceof WebsiteStudioError) throw error;
+    throw new WebsiteStudioError(
+      'WEBSITE_STATE_CONFLICT',
+      'The deployable store source could not be created.',
+      { cause: error },
+    );
+  }
+}
+
+export async function exportWebsiteNextApp(
+  context: WorkspaceContext,
+  projectId: string,
+  version: number,
+): Promise<WebsiteNextExport> {
+  const prepared = await prepareWebsiteNextSource(context, projectId, version);
+  let result: WebsiteNextExport;
+  try {
+    result = createWebsiteNextAppExport({
+      ...(prepared.access === undefined ? {} : { access: prepared.access }),
+      assets: prepared.assets,
+      generation: prepared.generation,
+      project: {
+        id: prepared.project.id,
+        name: prepared.project.name,
+        slug: prepared.project.slug,
+      },
     });
   } catch (error) {
     if (error instanceof WebsiteStudioError) throw error;

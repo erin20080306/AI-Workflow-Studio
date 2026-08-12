@@ -33,6 +33,11 @@ const copy = {
     disconnected: 'GitHub App disconnected from this workspace.',
     disconnect: 'Disconnect',
     failed: 'GitHub could not publish this version. No other branch was changed.',
+    formatLabel: 'What to publish',
+    formatStatic: 'Static site',
+    formatStore: 'Deployable store (Next.js + your Supabase)',
+    formatStoreHint:
+      'Pushes a Next.js app that runs on the customer’s own Supabase — checkout, orders, inventory, contact, and optional member login.',
     installHelp:
       'Install the least-privilege GitHub App on only the repositories you choose. Personal access tokens are never accepted.',
     locked:
@@ -67,6 +72,11 @@ const copy = {
     disconnected: '已中斷此工作區的 GitHub App 連線。',
     disconnect: '中斷連線',
     failed: 'GitHub 無法發布此版本；其他分支沒有被更動。',
+    formatLabel: '要發布的內容',
+    formatStatic: '靜態網站',
+    formatStore: '可部署商店（Next.js＋你的 Supabase）',
+    formatStoreHint:
+      '推送一個 Next.js App，跑在客戶自己的 Supabase 上——結帳、訂單、庫存、聯絡，可含會員登入。',
     installHelp: '只在你選擇的儲存庫安裝最小權限 GitHub App；平台不接受也不儲存個人存取 Token。',
     locked: 'GitHub 程式碼推送只開放付費方案，且必須由工作區擁有者或管理員操作。',
     notConfigured: '平台管理者尚未完成 GitHub App 發布設定。',
@@ -122,6 +132,17 @@ export function WebsiteGithubPublishPanel({
   const [loadingRepositories, setLoadingRepositories] = useState(false);
   const [repositoryUrl, setRepositoryUrl] = useState('');
   const [version, setVersion] = useState(versions[0]?.version ?? 1);
+  const [format, setFormat] = useState<'static' | 'next-app'>('static');
+  const selectedIsStorefront = useMemo(
+    () =>
+      versions
+        .find((item) => item.version === version)
+        ?.spec.pages.some((page) =>
+          page.sections.some((section) => section.type === 'product-grid'),
+        ) ?? false,
+    [versions, version],
+  );
+  const effectiveFormat = selectedIsStorefront ? format : 'static';
   const [suffix, setSuffix] = useState(() =>
     githubBranchForSiteSlug(suggestedSiteSlug).replace('ai-workflow-studio/', ''),
   );
@@ -192,6 +213,7 @@ export function WebsiteGithubPublishPanel({
         body: JSON.stringify({
           branch,
           confirmed: true,
+          format: effectiveFormat,
           idempotencyKey: crypto.randomUUID(),
           repositoryId,
           version,
@@ -291,6 +313,25 @@ export function WebsiteGithubPublishPanel({
               ))}
             </select>
           </label>
+          {selectedIsStorefront ? (
+            <label className="text-xs font-semibold text-slate-200">
+              <span className="mb-2 block">{text.formatLabel}</span>
+              <select
+                className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-3 text-sm text-white"
+                disabled={busy}
+                onChange={(event) => setFormat(event.target.value as 'static' | 'next-app')}
+                value={format}
+              >
+                <option value="static">{text.formatStatic}</option>
+                <option value="next-app">{text.formatStore}</option>
+              </select>
+              {format === 'next-app' ? (
+                <span className="mt-2 block font-normal leading-5 text-slate-400">
+                  {text.formatStoreHint}
+                </span>
+              ) : null}
+            </label>
+          ) : null}
           <label className="text-xs font-semibold text-slate-200">
             <span className="mb-2 block">{text.repository}</span>
             <input

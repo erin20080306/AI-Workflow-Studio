@@ -78,6 +78,7 @@ export const WebsiteGithubPushInputSchema = z
       .max(96)
       .regex(/^ai-workflow-studio\/[a-z0-9]+(?:-[a-z0-9]+)*$/),
     confirmed: z.literal(true),
+    format: z.enum(['static', 'next-app']).default('static'),
     idempotencyKey: z.string().uuid(),
     repositoryId: z.string().regex(/^[1-9][0-9]{0,19}$/),
     version: z.number().int().min(1),
