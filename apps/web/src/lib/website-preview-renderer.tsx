@@ -703,6 +703,7 @@ export function renderWebsiteSelfHostDocument(
   const firstSlug = spec.pages[0]?.slug;
   return renderWebsiteDocument(spec, pageSlug, assetUrls, {
     checkoutAction: '/api/checkout',
+    contactAction: '/api/contact',
     pageHref: (targetPageSlug) => (targetPageSlug === firstSlug ? '/' : `/${targetPageSlug}`),
   });
 }

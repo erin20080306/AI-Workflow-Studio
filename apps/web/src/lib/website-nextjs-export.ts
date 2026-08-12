@@ -222,10 +222,22 @@ create table if not exists public.inventory (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text not null,
+  subject text not null default '',
+  message text not null,
+  page_slug text not null default '',
+  status text not null default 'new' check (status in ('new', 'read', 'archived')),
+  created_at timestamptz not null default now()
+);
+
 -- Only the server (service_role key) writes these tables; RLS with no policies
 -- denies the public anon role while service_role bypasses RLS.
 alter table public.orders enable row level security;
 alter table public.inventory enable row level security;
+alter table public.messages enable row level security;
 
 -- Atomically reserve stock for every line of one order, or fail the whole order.
 create or replace function public.reserve_order_stock(p_lines jsonb)
@@ -432,6 +444,92 @@ export async function POST(request: Request): Promise<Response> {
 }
 `;
 
+const CONTACT_ROUTE = String.raw`import { createClient } from '@supabase/supabase-js';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const HEADERS = {
+  'cache-control': 'no-store',
+  'content-type': 'text/html; charset=utf-8',
+  'referrer-policy': 'no-referrer',
+  'x-content-type-options': 'nosniff',
+};
+
+function esc(value: any): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function page(title: string, message: string, status: number): Response {
+  const doc =
+    '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">' +
+    '<meta content="width=device-width,initial-scale=1" name="viewport"><title>' +
+    esc(title) +
+    '</title><style>body{font-family:system-ui,sans-serif;background:#f8fafc;color:#0f172a;' +
+    'display:grid;min-height:100vh;margin:0;place-items:center;padding:24px}.card{max-width:560px;' +
+    'border:1px solid #dbe3ee;border-radius:24px;background:#fff;padding:32px}a{display:inline-block;' +
+    'margin-top:16px;border-radius:999px;background:#4f46e5;color:#fff;font-weight:700;padding:10px 18px;' +
+    'text-decoration:none}</style></head><body><main class="card"><h1>' +
+    esc(title) +
+    '</h1><p>' +
+    esc(message) +
+    '</p><a href="/">Back to site</a></main></body></html>';
+  return new Response(doc, { status: status, headers: HEADERS });
+}
+
+function admin() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('Supabase environment variables are not configured.');
+  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+}
+
+export async function POST(request: Request): Promise<Response> {
+  try {
+    const length = Number(request.headers.get('content-length'));
+    if (!Number.isSafeInteger(length) || length < 1 || length > 16000) {
+      return page('Message failed', 'The message request is invalid.', 400);
+    }
+    const form = await request.formData();
+    if (String(form.get('website') || '') !== '') {
+      return page('Message failed', 'The message request is invalid.', 400);
+    }
+    const name = String(form.get('name') || '').trim();
+    const email = String(form.get('email') || '')
+      .trim()
+      .toLowerCase();
+    const subject = String(form.get('subject') || '').trim().slice(0, 160);
+    const message = String(form.get('message') || '').trim();
+    const pageSlug = String(form.get('pageSlug') || '').trim().slice(0, 80);
+    if (
+      name.length < 1 ||
+      name.length > 120 ||
+      email.length < 3 ||
+      email.length > 254 ||
+      email.indexOf('@') < 0 ||
+      message.length < 10 ||
+      message.length > 2000
+    ) {
+      return page('Message failed', 'Please complete all fields correctly.', 400);
+    }
+    const inserted = await admin()
+      .from('messages')
+      .insert({ email: email, message: message, name: name, page_slug: pageSlug, subject: subject });
+    if (inserted.error) {
+      return page('Message failed', 'The message could not be saved. Please try again.', 500);
+    }
+    return page('Message sent', 'Thank you. We received your message.', 201);
+  } catch (error) {
+    return page('Message failed', 'Something went wrong. Please try again later.', 500);
+  }
+}
+`;
+
 function readme(projectName: string, version: number, locale: 'en' | 'zh-Hant'): string {
   if (locale === 'zh-Hant') {
     return [
@@ -469,13 +567,13 @@ function readme(projectName: string, version: number, locale: 'en' | 'zh-Hant'):
       '### 6. 部署',
       '按下 Deploy。完成後你的商店就上線了，客人下單會寫進你自己的 Supabase。',
       '',
-      '## 查看訂單',
-      '在 Supabase 後台 **Table Editor → orders** 就能看到所有訂單；**inventory** 記錄每個 SKU 已售數量。',
+      '## 查看訂單與訊息',
+      '在 Supabase 後台 **Table Editor** 查看：**orders**（訂單）、**inventory**（每個 SKU 已售數量）、**messages**（聯絡表單訊息）。',
       '',
       '## 注意事項',
       '- `SUPABASE_SERVICE_ROLE_KEY` 是最高權限金鑰，只放 Vercel 環境變數，**不要**提交進 GitHub。',
       '- 商品頁顯示的庫存數字是**匯出當下**的值；防超賣是**即時**的（結帳時會即時檢查你 Supabase 的庫存）。要更新頁面上顯示的數字，重新匯出一次即可。',
-      '- 這份匯出只含商店與結帳；聯絡表單、會員登入等其他動態功能未包含在此版本。',
+      '- 這份匯出含商店、結帳與聯絡表單；會員登入未包含在此版本。',
       '',
     ].join('\n');
   }
@@ -576,6 +674,7 @@ export function createWebsiteNextAppSource(input: {
   );
   addFile(files, 'app/[[...slug]]/route.ts', textFile(PAGES_ROUTE));
   addFile(files, 'app/api/checkout/route.ts', textFile(CHECKOUT_ROUTE));
+  addFile(files, 'app/api/contact/route.ts', textFile(CONTACT_ROUTE));
   addFile(files, 'supabase/migrations/0001_store.sql', textFile(SUPABASE_MIGRATION));
 
   const manifest = textFile(

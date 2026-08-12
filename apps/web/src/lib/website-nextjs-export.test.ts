@@ -115,6 +115,7 @@ describe('self-hosted Next.js store export', () => {
       'README.md',
       'app/[[...slug]]/route.ts',
       'app/api/checkout/route.ts',
+      'app/api/contact/route.ts',
       'integrity.sha256',
       'lib/pages.ts',
       'lib/products.ts',
@@ -146,6 +147,15 @@ describe('self-hosted Next.js store export', () => {
     expect(products).toContain('"sku": "AN-101"');
     expect(products).toContain('"price": 1280');
     expect(products).toContain('"stock": 0'); // sold-out item is carried through
+  });
+
+  it('wires the contact form to the app’s own /api/contact and stores messages', () => {
+    const all = files();
+    const route = strFromU8(all['app/api/contact/route.ts'] ?? new Uint8Array());
+    expect(route).toContain("from('messages')");
+    expect(route).toContain('SUPABASE_SERVICE_ROLE_KEY');
+    const migration = strFromU8(all['supabase/migrations/0001_store.sql'] ?? new Uint8Array());
+    expect(migration).toContain('create table if not exists public.messages');
   });
 
   it('ships a standalone Supabase migration (no platform tables) and env template', () => {
