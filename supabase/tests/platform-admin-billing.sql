@@ -80,7 +80,7 @@ values (
 );
 
 select tests.assert_true(
-  (select count(*) from public.billing_plans) = 4,
+  (select count(*) from public.billing_plans) = 5,
   'all public billing plans must exist'
 );
 
