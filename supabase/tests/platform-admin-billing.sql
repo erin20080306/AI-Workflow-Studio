@@ -270,7 +270,7 @@ select
   'pending',
   'free-limit-run-' || run_sequence.run_number
 from public.workflow_versions version
-cross join generate_series(1, 100) as run_sequence(run_number)
+cross join generate_series(1, 50) as run_sequence(run_number)
 where version.tenant_id = '20000000-0000-0000-0000-000000000001';
 
 do $$
@@ -296,9 +296,9 @@ begin
       target_version.id,
       '10000000-0000-0000-0000-000000000001',
       'pending',
-      'free-limit-run-101'
+      'free-limit-run-51'
     );
-    raise exception 'free monthly run limit unexpectedly allowed run 101';
+    raise exception 'free monthly run limit unexpectedly allowed run 51';
   exception
     when check_violation then
       null;
