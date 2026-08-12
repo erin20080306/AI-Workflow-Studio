@@ -155,7 +155,8 @@ For pricing sections provide 1-4 plans, each with a name, priceLabel, descriptio
 1-10 features; highlight at most one plan.
 For faq sections provide clear question and answer pairs.
 For product-grid sections provide 2-12 products, each with a concise name and a priceLabel
-(e.g. "NT$1,680"), and optionally a short variant, availabilityLabel, badge, or sku.
+(e.g. "NT$1,680"), and optionally a short variant, availabilityLabel, badge, sku, or an
+integer stock count (units on hand; 0 means sold out).
 For gallery sections provide 2-8 media items, each with a short caption.
 Copy every page slug from the validated brief exactly; never translate or invent a slug.
 Use concise, useful website copy instead of generic process explanations.
@@ -559,6 +560,7 @@ function applyDirectEdit(specValue: WebsiteSpec, editValue: WebsiteDirectEdit): 
       item.availabilityLabel = edit.patch.availabilityLabel;
     }
     if (edit.patch.badge !== undefined) item.badge = edit.patch.badge;
+    if (edit.patch.stock !== undefined) item.stock = edit.patch.stock;
     if (edit.patch.priceLabel !== undefined) {
       item.priceLabel = edit.patch.priceLabel;
       // Keep the numeric cart price in step with the displayed label.

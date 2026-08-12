@@ -9,6 +9,7 @@ import {
   websitePreviewUrl,
 } from './website-preview-contract';
 import {
+  applyInventorySold,
   renderWebsitePreviewDocument,
   renderWebsitePublishedDocument,
   renderWebsiteStaticDocument,
@@ -131,6 +132,81 @@ describe('website preview', () => {
     expect(html).toContain('gallery-caption">Morning');
   });
 
+  it('shows stock levels and disables add-to-bag for sold-out products', () => {
+    const commerce = WebsiteSpecSchema.parse({
+      ...spec,
+      locale: 'zh-Hant',
+      pages: [
+        {
+          ...spec.pages[0],
+          sections: [
+            {
+              columns: '3',
+              id: 'products-main',
+              items: [
+                { name: '現貨商品', price: 1680, priceLabel: 'NT$1,680', sku: 'IN-1', stock: 24 },
+                { name: '低量商品', price: 1280, priceLabel: 'NT$1,280', sku: 'LO-1', stock: 3 },
+                { name: '售完商品', price: 980, priceLabel: 'NT$980', sku: 'OUT-1', stock: 0 },
+              ],
+              title: '本週選品',
+              type: 'product-grid',
+            },
+            spec.pages[0]!.sections[1],
+          ],
+        },
+      ],
+    });
+    const html = renderWebsitePreviewDocument(commerce, 'home');
+    expect(html).toContain('現貨 24 件');
+    expect(html).toContain('stock-low">僅剩 3 件');
+    expect(html).toContain('stock-out">售完');
+    // In-stock and low-stock items are addable; the sold-out item is not.
+    expect(html).toContain('data-stock="24"');
+    expect(html).toContain('data-stock="3"');
+    expect(html).toContain('product-add product-soldout');
+    // The sold-out item renders no add button (so no data-stock="0").
+    expect(html).not.toContain('data-stock="0"');
+  });
+
+  it('reduces displayed product stock by units already sold', () => {
+    const commerce = WebsiteSpecSchema.parse({
+      ...spec,
+      locale: 'zh-Hant',
+      pages: [
+        {
+          ...spec.pages[0],
+          sections: [
+            {
+              columns: '2',
+              id: 'products-main',
+              items: [
+                { name: '暢銷商品', price: 1000, priceLabel: 'NT$1,000', sku: 'S-1', stock: 10 },
+                { name: '完售商品', price: 800, priceLabel: 'NT$800', sku: 'S-2', stock: 3 },
+              ],
+              title: '本週選品',
+              type: 'product-grid',
+            },
+            spec.pages[0]!.sections[1],
+          ],
+        },
+      ],
+    });
+    const live = applyInventorySold(
+      commerce,
+      new Map([
+        ['S-1', 8],
+        ['S-2', 3],
+      ]),
+    );
+    const html = renderWebsitePreviewDocument(live, 'home');
+    expect(html).toContain('僅剩 2 件'); // 10 published − 8 sold
+    expect(html).toContain('stock-out">售完'); // 3 published − 3 sold
+    expect(html).toContain('product-add product-soldout');
+    // The original spec is not mutated by the render-time transform.
+    const untouched = commerce.pages[0]!.sections[0]!;
+    expect(untouched.type === 'product-grid' && untouched.items[0]?.stock).toBe(10);
+  });
+
   it('renders a real product image when an item has an attached asset', () => {
     const withImage = WebsiteSpecSchema.parse({
       ...spec,
@@ -207,11 +283,11 @@ describe('website preview', () => {
     // A non-commerce page stays completely script-free.
     expect(renderWebsitePreviewDocument(spec, 'home')).not.toContain('<script');
 
-    // Published: checkout posts an order into the same-origin contact pipeline.
+    // Published: checkout posts a structured order into the same-origin orders pipeline.
     const published = renderWebsitePublishedDocument(commerce, 'home', 'product-site-a1000000');
     expect(published).toContain('class="cart-checkout-form"');
-    expect(published).toContain('action="/api/public-sites/product-site-a1000000/contact"');
-    expect(published).toContain('data-cart-order-message');
+    expect(published).toContain('action="/api/public-sites/product-site-a1000000/checkout"');
+    expect(published).toContain('data-cart-items-json');
     // Preview (no backend) keeps the anchor fallback, not a POST form.
     expect(shop).toContain('class="action cart-checkout" href="#contact"');
     expect(shop).not.toContain('<form class="cart-checkout-form"');

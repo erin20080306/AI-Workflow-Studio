@@ -4,9 +4,37 @@ import {
   WebsiteAdminDashboardSchema,
   type WebsiteAdminDashboard as WebsiteAdminDashboardValue,
   type WebsiteDataDashboard,
+  type WebsiteOrderStatus,
   type WebsiteSiteAccessDashboard,
   type WebsiteSubmissionStatus,
 } from '@ai-workflow-studio/website-schema';
+
+const ORDER_STATUSES: readonly WebsiteOrderStatus[] = [
+  'pending',
+  'paid',
+  'shipped',
+  'completed',
+  'cancelled',
+];
+
+const orderStatusText: Readonly<
+  Record<'en' | 'zh-Hant', Readonly<Record<WebsiteOrderStatus, string>>>
+> = {
+  en: {
+    cancelled: 'Cancelled',
+    completed: 'Completed',
+    paid: 'Paid',
+    pending: 'Pending',
+    shipped: 'Shipped',
+  },
+  'zh-Hant': {
+    cancelled: '已取消',
+    completed: '已完成',
+    paid: '已付款',
+    pending: '待處理',
+    shipped: '已出貨',
+  },
+};
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
@@ -41,9 +69,17 @@ const copy = {
     message: 'Message',
     modules: 'Backend modules',
     modulesBody:
-      'CMS, contact inbox, site access, reviewed collections, public/protected forms, and safe server actions are live. Uploads and analytics remain separate tested modules.',
+      'CMS, contact inbox, storefront orders, site access, reviewed collections, public/protected forms, and safe server actions are live. Uploads and analytics remain separate tested modules.',
     name: 'Name',
     newCount: 'New messages',
+    emptyOrders: 'No orders yet.',
+    openOrders: 'Open orders',
+    orderItems: 'Items',
+    orders: 'Orders',
+    resetInventory: 'Reset stock counts',
+    resetInventoryHint: 'Restores every product’s shown stock to its published level.',
+    subtotal: 'Subtotal',
+    totalOrders: 'Orders',
     page: 'Target page',
     private: 'Private website admin',
     project: 'Website backend',
@@ -78,9 +114,17 @@ const copy = {
     message: '訊息內容',
     modules: '後台模組',
     modulesBody:
-      'CMS、聯絡收件匣、網站會員、經審核資料集合、公開／受保護表單與安全伺服器動作已可使用；檔案與分析會在完成獨立測試後加入。',
+      'CMS、聯絡收件匣、商店訂單、網站會員、經審核資料集合、公開／受保護表單與安全伺服器動作已可使用；檔案與分析會在完成獨立測試後加入。',
     name: '姓名',
     newCount: '未讀訊息',
+    emptyOrders: '目前沒有訂單。',
+    openOrders: '待處理訂單',
+    orderItems: '商品',
+    orders: '訂單',
+    resetInventory: '重設庫存已售數',
+    resetInventoryHint: '將每項商品顯示的庫存還原為發布時的數量。',
+    subtotal: '小計',
+    totalOrders: '訂單數',
     page: '顯示頁面',
     private: '網站私人後台',
     project: '網站後台',
@@ -96,7 +140,7 @@ const copy = {
   },
 } as const;
 
-type Tab = 'access' | 'content' | 'data' | 'inbox' | 'settings';
+type Tab = 'access' | 'content' | 'data' | 'inbox' | 'orders' | 'settings';
 
 export function WebsiteAdminDashboard({
   canManage,
@@ -133,6 +177,13 @@ export function WebsiteAdminDashboard({
   const newMessages = useMemo(
     () => dashboard.submissions.filter((submission) => submission.status === 'new').length,
     [dashboard.submissions],
+  );
+  const openOrders = useMemo(
+    () =>
+      dashboard.orders.filter(
+        (order) => order.status !== 'completed' && order.status !== 'cancelled',
+      ).length,
+    [dashboard.orders],
   );
 
   async function mutate(input: Readonly<Record<string, unknown>>): Promise<boolean> {
@@ -179,11 +230,16 @@ export function WebsiteAdminDashboard({
     await mutate({ action: 'update-submission', status, submissionId });
   }
 
+  async function updateOrder(orderId: string, status: WebsiteOrderStatus): Promise<void> {
+    await mutate({ action: 'update-order-status', orderId, status });
+  }
+
   const tabLabels: Readonly<Record<Tab, string>> = {
     access: text.access,
     content: text.content,
     data: text.data,
     inbox: `${text.inbox}${newMessages > 0 ? ` (${newMessages})` : ''}`,
+    orders: `${text.orders}${openOrders > 0 ? ` (${openOrders})` : ''}`,
     settings: text.settings,
   };
 
@@ -225,11 +281,12 @@ export function WebsiteAdminDashboard({
             </span>
           ) : null}
         </div>
-        <dl className="mt-7 grid gap-3 sm:grid-cols-3">
+        <dl className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
             [text.totalContent, dashboard.contentEntries.length],
             [text.totalMessages, dashboard.submissions.length],
-            [text.newCount, newMessages],
+            [text.totalOrders, dashboard.orders.length],
+            [text.openOrders, openOrders],
           ].map(([label, value]) => (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4" key={label}>
               <dt className="text-xs text-slate-400">{label}</dt>
@@ -434,6 +491,83 @@ export function WebsiteAdminDashboard({
         </section>
       ) : null}
 
+      {tab === 'orders' ? (
+        <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h2 className="text-xl font-semibold text-slate-950">{text.orders}</h2>
+            <div className="text-right">
+              <button
+                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-40"
+                disabled={!canManage || saving}
+                onClick={() => void mutate({ action: 'reset-inventory' })}
+                type="button"
+              >
+                {text.resetInventory}
+              </button>
+              <p className="mt-1 max-w-xs text-[10px] leading-4 text-slate-400">
+                {text.resetInventoryHint}
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 space-y-4">
+            {dashboard.orders.length === 0 ? (
+              <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
+                {text.emptyOrders}
+              </p>
+            ) : (
+              dashboard.orders.map((order) => (
+                <article className="rounded-2xl border border-slate-200 p-5" key={order.id}>
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <h3 className="font-semibold text-slate-950">
+                        {order.buyerName} · {order.currency}
+                        {order.subtotal.toLocaleString()}
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-500">{order.buyerEmail}</p>
+                    </div>
+                    <label className="text-xs font-semibold text-slate-500">
+                      {text.status}
+                      <select
+                        className="ml-2 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800"
+                        disabled={!canManage || saving}
+                        onChange={(event) =>
+                          void updateOrder(order.id, event.target.value as WebsiteOrderStatus)
+                        }
+                        value={order.status}
+                      >
+                        {ORDER_STATUSES.map((status) => (
+                          <option key={status} value={status}>
+                            {orderStatusText[locale][status]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <ul className="mt-4 space-y-1 text-sm text-slate-700">
+                    {order.items.map((item, index) => (
+                      <li className="flex justify-between gap-4" key={`${order.id}-${index}`}>
+                        <span>
+                          {item.name}
+                          {item.sku === undefined ? '' : ` · ${item.sku}`} × {item.quantity}
+                        </span>
+                        <span className="tabular-nums text-slate-500">
+                          {item.currency}
+                          {item.lineTotal.toLocaleString()}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-[10px] text-slate-400">
+                    {text.orderItems}: {order.itemCount} · /{order.pageSlug} ·{' '}
+                    {new Date(order.createdAt).toLocaleString()}
+                  </p>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+      ) : null}
+
       {tab === 'access' ? (
         <WebsiteAccessPanel
           canManage={canManageAccess}
@@ -462,6 +596,7 @@ export function WebsiteAdminDashboard({
             {[
               'CMS · active',
               'Contact inbox · active',
+              'Storefront orders · active',
               'Members & protected pages · active',
               'Collections, forms & safe actions · active',
               'Files · planned',

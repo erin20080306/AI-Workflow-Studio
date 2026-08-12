@@ -44,7 +44,9 @@ rm.addEventListener('click',function(){remove(item.id)});row.appendChild(rm);
 list.appendChild(row)})(cart[i])}
 var sub=root.querySelector('[data-cart-subtotal]');if(sub)sub.textContent=money(subtotal());
 var orderField=root.querySelector('[data-cart-order-message]');
-if(orderField){var lines=[root.getAttribute('data-cart-order-title')||'Order'];for(var j=0;j<cart.length;j++){var it=cart[j];lines.push('- '+it.name+(it.variant?(' ('+it.variant+')'):'')+' x'+it.qty+(it.price?(' = '+money(it.price*it.qty)):''))}lines.push((root.getAttribute('data-cart-subtotal-label')||'Subtotal')+': '+money(subtotal()));orderField.value=lines.join('\\n').slice(0,1990)}}
+if(orderField){var lines=[root.getAttribute('data-cart-order-title')||'Order'];for(var j=0;j<cart.length;j++){var it=cart[j];lines.push('- '+it.name+(it.variant?(' ('+it.variant+')'):'')+' x'+it.qty+(it.price?(' = '+money(it.price*it.qty)):''))}lines.push((root.getAttribute('data-cart-subtotal-label')||'Subtotal')+': '+money(subtotal()));orderField.value=lines.join('\\n').slice(0,1990)}
+var itemsField=root.querySelector('[data-cart-items-json]');
+if(itemsField){var arr=[];for(var m=0;m<cart.length;m++){arr.push({id:cart[m].id,name:cart[m].name,quantity:cart[m].qty})}itemsField.value=JSON.stringify(arr).slice(0,11000)}}
 function add(p){var e=find(p.id);if(e){e.qty++}else{cart.push({id:p.id,name:p.name,price:p.price,currency:p.currency,variant:p.variant,qty:1})}write(cart);render();open()}
 function change(id,d){var e=find(id);if(!e)return;e.qty+=d;if(e.qty<=0){remove(id);return}write(cart);render()}
 function remove(id){cart=cart.filter(function(x){return x.id!==id});write(cart);render()}
@@ -65,4 +67,4 @@ render()})();`;
 
 // SHA-256 of WEBSITE_CART_SCRIPT, in CSP source-expression form. Guarded by a
 // test so it cannot drift from the script above.
-export const WEBSITE_CART_SCRIPT_SHA256 = 'sha256-uJZc8m1oSm/OnXQVKwAeZep/85QFrwu2algs3bEdnfo=';
+export const WEBSITE_CART_SCRIPT_SHA256 = 'sha256-xoDpdZrddJ9dv//IGXK5xaJEfuGHwTSN/PGjepnitsM=';

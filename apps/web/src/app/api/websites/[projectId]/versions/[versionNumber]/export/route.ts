@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { requireWorkspaceContext } from '@/lib/auth/context';
+import { exportWebsiteNextApp } from '@/lib/website-nextjs-export-server';
 import { exportWebsiteVersion } from '@/lib/website-static-export-server';
 import { websiteApiError } from '@/lib/website-studio-api';
 
@@ -12,7 +13,7 @@ const ParamsSchema = z
   .strict();
 
 export async function GET(
-  _request: Request,
+  request: Request,
   routeContext: {
     readonly params: Promise<{
       readonly projectId: string;
@@ -23,7 +24,11 @@ export async function GET(
   try {
     const params = ParamsSchema.parse(await routeContext.params);
     const context = await requireWorkspaceContext();
-    const result = await exportWebsiteVersion(context, params.projectId, params.versionNumber);
+    const format = new URL(request.url).searchParams.get('format');
+    const result =
+      format === 'next-app'
+        ? await exportWebsiteNextApp(context, params.projectId, params.versionNumber)
+        : await exportWebsiteVersion(context, params.projectId, params.versionNumber);
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(result.bytes);

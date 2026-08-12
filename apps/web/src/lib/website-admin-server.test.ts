@@ -51,6 +51,43 @@ const spec = WebsiteSpecSchema.parse({
   },
 });
 
+const commerceSpec = WebsiteSpecSchema.parse({
+  ...spec,
+  pages: [
+    {
+      metaDescription: 'A storefront fixture with a product grid for orders.',
+      sections: [
+        {
+          columns: '2',
+          id: 'products-main',
+          items: [
+            {
+              currency: 'NT$',
+              name: '有現貨商品',
+              price: 1000,
+              priceLabel: 'NT$1,000',
+              sku: 'OK-1',
+              stock: 5,
+            },
+            {
+              currency: 'NT$',
+              name: '售完商品',
+              price: 800,
+              priceLabel: 'NT$800',
+              sku: 'OUT-1',
+              stock: 0,
+            },
+          ],
+          title: '本週選品',
+          type: 'product-grid',
+        },
+      ],
+      slug: 'home',
+      title: '首頁',
+    },
+  ],
+});
+
 vi.mock('@/lib/website-spec-server', () => ({
   getWebsiteSpecGeneration: () =>
     Promise.resolve({
@@ -129,6 +166,101 @@ describe('website admin backend', () => {
       expect.objectContaining({ id: submission.id, status: 'read' }),
     ]);
     expect(await getWebsiteAdminDashboard(context, project.id)).toEqual(afterStatus);
+  });
+
+  it('captures a re-priced storefront order and advances its fulfillment status', async () => {
+    const { createWebsiteProject } = await import('./website-studio-server');
+    const { createWebsiteOrder, getWebsiteAdminDashboard, mutateWebsiteAdmin } =
+      await import('./website-admin-server');
+    const project = await createWebsiteProject(context, { name: `Store ${crypto.randomUUID()}` });
+    const website = { projectId: project.id, spec: commerceSpec, tenantId: context.actor.tenantId };
+
+    const order = await createWebsiteOrder(website, {
+      email: 'Buyer@Example.com',
+      // Only id/name/quantity are trusted; the server re-prices from the spec.
+      items: [{ id: 'OK-1', name: '有現貨商品', quantity: 2 }],
+      name: '購買者',
+      pageSlug: 'home',
+    });
+    expect(order).toMatchObject({
+      buyerEmail: 'buyer@example.com',
+      currency: 'NT$',
+      itemCount: 2,
+      status: 'pending',
+      subtotal: 2000,
+    });
+    expect(order.items[0]).toMatchObject({ lineTotal: 2000, sku: 'OK-1', unitPrice: 1000 });
+
+    const afterStatus = await mutateWebsiteAdmin(context, project.id, {
+      action: 'update-order-status',
+      orderId: order.id,
+      status: 'shipped',
+    });
+    expect(afterStatus.orders).toEqual([
+      expect.objectContaining({ id: order.id, status: 'shipped' }),
+    ]);
+    expect(await getWebsiteAdminDashboard(context, project.id)).toEqual(afterStatus);
+  });
+
+  it('deducts live stock on checkout, restocks on cancel, and resets on demand', async () => {
+    const { createWebsiteProject } = await import('./website-studio-server');
+    const { createWebsiteOrder, getWebsiteInventorySold, mutateWebsiteAdmin } =
+      await import('./website-admin-server');
+    const project = await createWebsiteProject(context, { name: `Store ${crypto.randomUUID()}` });
+    const website = { projectId: project.id, spec: commerceSpec, tenantId: context.actor.tenantId };
+    const line = (quantity: number) => ({
+      email: 'buyer@example.com',
+      items: [{ id: 'OK-1', name: '有現貨商品', quantity }],
+      name: '購買者',
+      pageSlug: 'home',
+    });
+
+    const first = await createWebsiteOrder(website, line(4));
+    expect((await getWebsiteInventorySold(website)).get('OK-1')).toBe(4);
+    // Only 1 of 5 remains, so a further order of 2 must be rejected.
+    await expect(createWebsiteOrder(website, line(2))).rejects.toMatchObject({
+      code: 'WEBSITE_INVALID',
+    });
+
+    // Cancelling the first order returns its units to stock.
+    await mutateWebsiteAdmin(context, project.id, {
+      action: 'update-order-status',
+      orderId: first.id,
+      status: 'cancelled',
+    });
+    expect((await getWebsiteInventorySold(website)).get('OK-1')).toBe(0);
+    const second = await createWebsiteOrder(website, line(5));
+    expect(second.itemCount).toBe(5);
+    expect((await getWebsiteInventorySold(website)).get('OK-1')).toBe(5);
+
+    // Resetting inventory clears the sold counters back to the published level.
+    await mutateWebsiteAdmin(context, project.id, { action: 'reset-inventory' });
+    expect((await getWebsiteInventorySold(website)).get('OK-1')).toBeUndefined();
+  });
+
+  it('rejects a checkout for a sold-out product or a quantity above stock', async () => {
+    const { createWebsiteProject } = await import('./website-studio-server');
+    const { createWebsiteOrder } = await import('./website-admin-server');
+    const project = await createWebsiteProject(context, { name: `Store ${crypto.randomUUID()}` });
+    const website = { projectId: project.id, spec: commerceSpec, tenantId: context.actor.tenantId };
+
+    await expect(
+      createWebsiteOrder(website, {
+        email: 'buyer@example.com',
+        items: [{ id: 'OUT-1', name: '售完商品', quantity: 1 }],
+        name: '購買者',
+        pageSlug: 'home',
+      }),
+    ).rejects.toMatchObject({ code: 'WEBSITE_INVALID' });
+
+    await expect(
+      createWebsiteOrder(website, {
+        email: 'buyer@example.com',
+        items: [{ id: 'OK-1', name: '有現貨商品', quantity: 99 }],
+        name: '購買者',
+        pageSlug: 'home',
+      }),
+    ).rejects.toMatchObject({ code: 'WEBSITE_INVALID' });
   });
 
   it('rejects managed content that targets a page outside the validated Canvas', async () => {

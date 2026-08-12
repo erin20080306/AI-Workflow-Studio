@@ -108,6 +108,56 @@ describe('Website Studio safe provider fallback', () => {
     ]);
   });
 
+  it('keeps a reservation-based cafe brief free of storefront commerce sections', () => {
+    const brief = completeWebsiteBrief(project.brief);
+    const spec = createSafeWebsiteSpec(project, brief, 'zh-Hant');
+
+    expect(
+      spec.pages.flatMap((page) => page.sections.map((section) => section.type)),
+    ).not.toContain('product-grid');
+  });
+
+  it('builds a real product grid and gallery for an explicit online-store brief', () => {
+    const storeProject: WebsiteProject = {
+      ...project,
+      name: '選物電商品牌',
+      brief: {
+        ...project.brief,
+        callsToAction: ['立即選購'],
+        content: '介紹當季商品、購物車結帳流程與會員選購紀錄。',
+        purpose: '建立線上購物商店，讓顧客瀏覽商品並完成結帳下單。',
+      },
+    };
+    const brief = completeWebsiteBrief(storeProject.brief);
+    const spec = createSafeWebsiteSpec(storeProject, brief, 'zh-Hant');
+
+    expect(WebsiteSpecSchema.parse(spec)).toEqual(spec);
+    expect(spec.pages[0]?.sections.map((section) => section.type)).toEqual([
+      'hero',
+      'feature-grid',
+      'product-grid',
+      'gallery',
+      'cta',
+      'footer',
+    ]);
+    const productGrid = spec.pages[0]?.sections.find((section) => section.type === 'product-grid');
+    expect(productGrid?.type === 'product-grid' && productGrid.items.length).toBeGreaterThanOrEqual(
+      2,
+    );
+    expect(
+      productGrid?.type === 'product-grid' &&
+        productGrid.items.every((item) => typeof item.price === 'number'),
+    ).toBe(true);
+    // Every fallback product carries a numeric stock count (incl. a sold-out one).
+    expect(
+      productGrid?.type === 'product-grid' &&
+        productGrid.items.every((item) => typeof item.stock === 'number'),
+    ).toBe(true);
+    expect(
+      productGrid?.type === 'product-grid' && productGrid.items.some((item) => item.stock === 0),
+    ).toBe(true);
+  });
+
   it('applies only recognized bounded theme instructions', () => {
     const spec = createSafeWebsiteSpec(project, completeWebsiteBrief(project.brief), 'zh-Hant');
     const edited = createSafeWebsiteEdit(spec, '請改成深色主題、森林綠色、圓角並使用科技感字體');
