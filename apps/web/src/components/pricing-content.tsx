@@ -88,7 +88,7 @@ export function PricingContent() {
           <p className="mt-5 text-lg leading-8 text-slate-600">{text.subtitle}</p>
         </div>
 
-        <div className="mt-14 grid gap-4 lg:grid-cols-4">
+        <div className="mt-14 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {PRODUCT_PLANS.map((plan) => {
             const features = [
               text.features.workflows(currency(plan.workflowLimit, locale)),

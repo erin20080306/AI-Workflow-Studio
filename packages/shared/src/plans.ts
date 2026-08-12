@@ -1,4 +1,4 @@
-export const PLAN_CODES = ['free', 'pro', 'team', 'business'] as const;
+export const PLAN_CODES = ['free', 'personal', 'pro', 'team', 'business'] as const;
 
 export type PlanCode = (typeof PLAN_CODES)[number];
 export const AI_MODEL_TIERS = ['economy', 'standard', 'advanced', 'flagship'] as const;
@@ -45,13 +45,35 @@ export const PRODUCT_PLANS: readonly ProductPlan[] = [
     memberLimit: 1,
     maximumAiModelTier: 'economy',
     maximumAiRequestCostMicrounits: 3_000_000,
-    monthlyAiCostBudgetMicrounits: 10_000_000,
+    monthlyAiCostBudgetMicrounits: 5_000_000,
     monthlyPriceTwd: 0,
-    monthlyRunLimit: 100,
-    monthlySourceBytes: 20 * 1_048_576,
-    monthlyToolCallLimit: 100,
+    monthlyRunLimit: 50,
+    monthlySourceBytes: 10 * 1_048_576,
+    monthlyToolCallLimit: 50,
     name: { en: 'Free', zhHant: '免費版' },
-    workflowLimit: 3,
+    workflowLimit: 2,
+  },
+  {
+    aiRequestsPerMinute: 5,
+    annualPriceTwd: 990,
+    auditRetentionDays: 14,
+    code: 'personal',
+    description: {
+      en: 'For one person automating everyday spreadsheet work on a single device.',
+      zhHant: '適合單人、單一裝置處理日常試算表自動化。',
+    },
+    deviceLimit: 1,
+    featured: false,
+    memberLimit: 1,
+    maximumAiModelTier: 'standard',
+    maximumAiRequestCostMicrounits: 5_000_000,
+    monthlyAiCostBudgetMicrounits: 50_000_000,
+    monthlyPriceTwd: 99,
+    monthlyRunLimit: 800,
+    monthlySourceBytes: 200 * 1_048_576,
+    monthlyToolCallLimit: 800,
+    name: { en: 'Personal', zhHant: '個人版' },
+    workflowLimit: 10,
   },
   {
     aiRequestsPerMinute: 10,
