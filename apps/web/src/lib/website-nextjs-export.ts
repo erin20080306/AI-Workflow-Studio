@@ -122,7 +122,7 @@ function collectProducts(spec: WebsiteSpec): StoreProduct[] {
 // --- Fixed, platform-authored app files (never AI/user content). ------------
 // String.raw keeps regex backslashes intact; none of these contain `${` or backticks.
 
-const PACKAGE_JSON = (name: string): string =>
+const PACKAGE_JSON = (name: string, membersEnabled: boolean): string =>
   `${JSON.stringify(
     {
       name: `${name}-store`,
@@ -133,6 +133,7 @@ const PACKAGE_JSON = (name: string): string =>
         start: 'next start',
       },
       dependencies: {
+        ...(membersEnabled ? { '@supabase/ssr': '^0.5.2' } : {}),
         '@supabase/supabase-js': '^2.47.10',
         next: '^15.1.6',
         react: '^19.0.0',
@@ -195,6 +196,206 @@ const ENV_EXAMPLE = String.raw`# Your own Supabase project (Settings -> API in t
 # Never commit real values. Set these as environment variables in Vercel.
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+`;
+
+// Extra public env vars needed when member login (Supabase Auth) is enabled.
+const ENV_EXAMPLE_MEMBERS = String.raw`
+# Member login (Supabase Auth). The anon/publishable key is safe to expose.
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+`;
+
+const SUPABASE_SERVER_LIB = String.raw`import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+
+export async function createSupabaseServer() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) throw new Error('Supabase public environment variables are not configured.');
+  const store = await cookies();
+  return createServerClient(url, key, {
+    cookies: {
+      getAll() {
+        return store.getAll();
+      },
+      setAll(list: any[]) {
+        try {
+          list.forEach((item) => store.set(item.name, item.value, item.options));
+        } catch (error) {
+          // Server Components cannot set cookies; middleware refreshes the session.
+        }
+      },
+    },
+  });
+}
+`;
+
+const MIDDLEWARE = String.raw`import { createServerClient } from '@supabase/ssr';
+import { NextResponse } from 'next/server';
+
+export async function middleware(request: any) {
+  let response = NextResponse.next({ request });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return response;
+  const supabase = createServerClient(url, key, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(list: any[]) {
+        list.forEach((item) => request.cookies.set(item.name, item.value));
+        response = NextResponse.next({ request });
+        list.forEach((item) => response.cookies.set(item.name, item.value, item.options));
+      },
+    },
+  });
+  await supabase.auth.getUser();
+  return response;
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|assets/).*)'],
+};
+`;
+
+const AUTH_ROUTE = String.raw`import { REGISTRATION_ENABLED } from '@/lib/access';
+import { createSupabaseServer } from '@/lib/supabase-server';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function back(target: string | null, error: string | null): Response {
+  const location = error ? '/login?error=' + encodeURIComponent(error) : target || '/';
+  return new Response(null, { status: 303, headers: { location: location } });
+}
+
+export async function POST(request: Request): Promise<Response> {
+  try {
+    const form = await request.formData();
+    const action = String(form.get('action') || '');
+    const supabase = await createSupabaseServer();
+    if (action === 'logout') {
+      await supabase.auth.signOut();
+      return back('/', null);
+    }
+    const email = String(form.get('email') || '')
+      .trim()
+      .toLowerCase();
+    const password = String(form.get('password') || '');
+    const next = String(form.get('next') || '/');
+    if (email.indexOf('@') < 0 || password.length < 6) {
+      return back(null, 'invalid');
+    }
+    if (action === 'signup') {
+      if (!REGISTRATION_ENABLED) return back(null, 'closed');
+      const result = await supabase.auth.signUp({ email: email, password: password });
+      if (result.error) return back(null, 'signup');
+      return back(next, null);
+    }
+    if (action === 'login') {
+      const result = await supabase.auth.signInWithPassword({ email: email, password: password });
+      if (result.error) return back(null, 'login');
+      return back(next, null);
+    }
+    return back(null, 'invalid');
+  } catch (error) {
+    return back(null, 'error');
+  }
+}
+`;
+
+const LOGIN_ROUTE = String.raw`import { REGISTRATION_ENABLED } from '@/lib/access';
+
+export const dynamic = 'force-dynamic';
+
+function esc(value: any): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export async function GET(request: Request): Promise<Response> {
+  const params = new URL(request.url).searchParams;
+  const next = esc(params.get('next') || '/');
+  const error = params.get('error');
+  const errorHtml = error
+    ? '<p style="color:#b91c1c;font-size:14px">Sign-in failed. Please check your details.</p>'
+    : '';
+  const field =
+    '<input style="width:100%;box-sizing:border-box;margin:6px 0;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px" ';
+  const button =
+    '<button style="width:100%;margin-top:8px;padding:11px;border:0;border-radius:10px;background:#4f46e5;color:#fff;font-weight:700;cursor:pointer" type="submit">';
+  const loginForm =
+    '<h2 style="margin:0 0 8px">Sign in</h2><form method="post" action="/api/auth">' +
+    '<input type="hidden" name="action" value="login"><input type="hidden" name="next" value="' +
+    next +
+    '">' +
+    field +
+    'name="email" type="email" placeholder="Email" required>' +
+    field +
+    'name="password" type="password" placeholder="Password" required minlength="6">' +
+    button +
+    'Sign in</button></form>';
+  const signupForm = REGISTRATION_ENABLED
+    ? '<hr style="border:none;border-top:1px solid #e2e8f0;margin:22px 0"><h2 style="margin:0 0 8px">Create account</h2><form method="post" action="/api/auth">' +
+      '<input type="hidden" name="action" value="signup"><input type="hidden" name="next" value="' +
+      next +
+      '">' +
+      field +
+      'name="email" type="email" placeholder="Email" required>' +
+      field +
+      'name="password" type="password" placeholder="Password (min 6)" required minlength="6">' +
+      button +
+      'Sign up</button></form>'
+    : '';
+  const doc =
+    '<!doctype html><html><head><meta charset="utf-8">' +
+    '<meta content="width=device-width,initial-scale=1" name="viewport"><title>Sign in</title>' +
+    '<style>body{font-family:system-ui,sans-serif;background:#f8fafc;color:#0f172a;display:grid;' +
+    'min-height:100vh;margin:0;place-items:center;padding:24px}.card{width:min(400px,100%);border:1px solid #dbe3ee;' +
+    'border-radius:24px;background:#fff;padding:28px}a{color:#4f46e5}</style></head><body><main class="card">' +
+    errorHtml +
+    loginForm +
+    signupForm +
+    '<p style="margin-top:18px;font-size:12px"><a href="/">Back to site</a></p></main></body></html>';
+  return new Response(doc, {
+    headers: { 'cache-control': 'no-store', 'content-type': 'text/html; charset=utf-8' },
+  });
+}
+`;
+
+const PAGES_ROUTE_MEMBERS = String.raw`import { PROTECTED_SLUGS } from '@/lib/access';
+import { PAGES, FIRST_SLUG } from '@/lib/pages';
+import { createSupabaseServer } from '@/lib/supabase-server';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(_request: Request, context: any): Promise<Response> {
+  const params = context && context.params ? await context.params : {};
+  const slug = Array.isArray(params.slug) ? params.slug : [];
+  if (slug.length > 1) return new Response('Not found', { status: 404 });
+  const key = slug.length === 0 ? FIRST_SLUG : String(slug[0]);
+  const html = (PAGES as Record<string, string>)[key];
+  if (!html) return new Response('Not found', { status: 404 });
+  if ((PROTECTED_SLUGS as string[]).indexOf(key) >= 0) {
+    const supabase = await createSupabaseServer();
+    const result = await supabase.auth.getUser();
+    if (!result.data || !result.data.user) {
+      const target = key === FIRST_SLUG ? '/' : '/' + key;
+      return new Response(null, {
+        status: 302,
+        headers: { location: '/login?next=' + encodeURIComponent(target) },
+      });
+    }
+  }
+  return new Response(html, {
+    headers: { 'cache-control': 'no-store', 'content-type': 'text/html; charset=utf-8' },
+  });
+}
 `;
 
 const SUPABASE_MIGRATION = String.raw`-- Storefront database for a self-hosted AI Workflow Studio export.
@@ -530,7 +731,12 @@ export async function POST(request: Request): Promise<Response> {
 }
 `;
 
-function readme(projectName: string, version: number, locale: 'en' | 'zh-Hant'): string {
+function readme(
+  projectName: string,
+  version: number,
+  locale: 'en' | 'zh-Hant',
+  membersEnabled: boolean,
+): string {
   if (locale === 'zh-Hant') {
     return [
       `# ${projectName} — 自架商店`,
@@ -573,8 +779,25 @@ function readme(projectName: string, version: number, locale: 'en' | 'zh-Hant'):
       '## 注意事項',
       '- `SUPABASE_SERVICE_ROLE_KEY` 是最高權限金鑰，只放 Vercel 環境變數，**不要**提交進 GitHub。',
       '- 商品頁顯示的庫存數字是**匯出當下**的值；防超賣是**即時**的（結帳時會即時檢查你 Supabase 的庫存）。要更新頁面上顯示的數字，重新匯出一次即可。',
-      '- 這份匯出含商店、結帳與聯絡表單；會員登入未包含在此版本。',
+      membersEnabled
+        ? '- 這份匯出含商店、結帳、聯絡表單與會員登入（Supabase Auth）。'
+        : '- 這份匯出含商店、結帳與聯絡表單；會員登入未包含在此版本。',
       '',
+      ...(membersEnabled
+        ? [
+            '## 會員登入（Supabase Auth）',
+            '受保護頁面需要登入才能瀏覽，使用你 Supabase 內建的 Auth（不是自製登入）。',
+            '1. Supabase 後台 **Authentication → Providers → Email** 啟用（可視需求開關 Confirm email）。',
+            '2. 在 Vercel 另外加兩個環境變數（anon／publishable key 可公開）：',
+            '```',
+            'NEXT_PUBLIC_SUPABASE_URL=你的-project-url',
+            'NEXT_PUBLIC_SUPABASE_ANON_KEY=你的-anon-key',
+            '```',
+            '3. 訪客到 `/login` 註冊／登入；已註冊會員在 Supabase **Authentication → Users** 查看。',
+            '⚠️ **上線前請自行測試**：註冊、登入、登出，以及未登入時受保護頁是否確實被導到 `/login`。',
+            '',
+          ]
+        : []),
     ].join('\n');
   }
   return [
@@ -614,10 +837,31 @@ function readme(projectName: string, version: number, locale: 'en' | 'zh-Hant'):
     '- The `service_role` key is a full-access secret: keep it only in Vercel env vars, never in GitHub.',
     '- Displayed stock reflects the export time; oversell protection is live at checkout. Re-export to refresh displayed numbers.',
     '',
+    ...(membersEnabled
+      ? [
+          '## Member login (Supabase Auth)',
+          'Protected pages require sign-in, using your Supabase built-in Auth (not custom auth).',
+          '1. In Supabase, enable **Authentication → Providers → Email**.',
+          '2. Add two more env vars in Vercel (the anon/publishable key is safe to expose):',
+          '```',
+          'NEXT_PUBLIC_SUPABASE_URL=your-project-url',
+          'NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key',
+          '```',
+          '3. Visitors sign up / sign in at `/login`; members appear under Supabase **Authentication → Users**.',
+          '⚠️ **Verify before launch**: sign-up, sign-in, sign-out, and that a signed-out visitor is redirected to `/login` on protected pages.',
+          '',
+        ]
+      : []),
   ].join('\n');
 }
 
+export interface WebsiteNextExportAccess {
+  readonly protectedSlugs: readonly string[];
+  readonly registrationEnabled: boolean;
+}
+
 export function createWebsiteNextAppSource(input: {
+  readonly access?: WebsiteNextExportAccess;
   readonly assets: readonly WebsiteNextExportAsset[];
   readonly generation: WebsiteSpecGeneration;
   readonly project: { readonly id: string; readonly name: string; readonly slug: string };
@@ -639,17 +883,32 @@ export function createWebsiteNextAppSource(input: {
   }
 
   const firstSlug = spec.pages[0]?.slug ?? 'home';
+  const pageSlugs = new Set(spec.pages.map((page) => page.slug));
+  const protectedSlugs = [...new Set(input.access?.protectedSlugs ?? [])].filter((slug) =>
+    pageSlugs.has(slug),
+  );
+  const membersEnabled = protectedSlugs.length > 0;
+  const registrationEnabled = input.access?.registrationEnabled ?? false;
   const pages: Record<string, string> = {};
   for (const page of spec.pages) {
-    pages[page.slug] = `${renderWebsiteSelfHostDocument(spec, page.slug, exportAssetUrls)}\n`;
+    pages[page.slug] =
+      `${renderWebsiteSelfHostDocument(spec, page.slug, exportAssetUrls, membersEnabled)}\n`;
   }
 
-  addFile(files, 'package.json', textFile(PACKAGE_JSON(project.slug)));
+  addFile(files, 'package.json', textFile(PACKAGE_JSON(project.slug, membersEnabled)));
   addFile(files, 'next.config.mjs', textFile(NEXT_CONFIG));
   addFile(files, 'tsconfig.json', textFile(TSCONFIG));
   addFile(files, '.gitignore', textFile(GITIGNORE));
-  addFile(files, '.env.example', textFile(ENV_EXAMPLE));
-  addFile(files, 'README.md', textFile(readme(project.name, generation.version, spec.locale)));
+  addFile(
+    files,
+    '.env.example',
+    textFile(membersEnabled ? ENV_EXAMPLE + ENV_EXAMPLE_MEMBERS : ENV_EXAMPLE),
+  );
+  addFile(
+    files,
+    'README.md',
+    textFile(readme(project.name, generation.version, spec.locale, membersEnabled)),
+  );
   addFile(
     files,
     'lib/products.ts',
@@ -672,19 +931,44 @@ export function createWebsiteNextAppSource(input: {
       )};\n`,
     ),
   );
-  addFile(files, 'app/[[...slug]]/route.ts', textFile(PAGES_ROUTE));
+  addFile(
+    files,
+    'app/[[...slug]]/route.ts',
+    textFile(membersEnabled ? PAGES_ROUTE_MEMBERS : PAGES_ROUTE),
+  );
   addFile(files, 'app/api/checkout/route.ts', textFile(CHECKOUT_ROUTE));
   addFile(files, 'app/api/contact/route.ts', textFile(CONTACT_ROUTE));
   addFile(files, 'supabase/migrations/0001_store.sql', textFile(SUPABASE_MIGRATION));
+
+  if (membersEnabled) {
+    addFile(files, 'middleware.ts', textFile(MIDDLEWARE));
+    addFile(files, 'lib/supabase-server.ts', textFile(SUPABASE_SERVER_LIB));
+    addFile(
+      files,
+      'lib/access.ts',
+      textFile(
+        `export const PROTECTED_SLUGS: string[] = ${JSON.stringify(
+          protectedSlugs,
+        )};\n\nexport const REGISTRATION_ENABLED = ${registrationEnabled ? 'true' : 'false'};\n`,
+      ),
+    );
+    addFile(files, 'app/login/route.ts', textFile(LOGIN_ROUTE));
+    addFile(files, 'app/api/auth/route.ts', textFile(AUTH_ROUTE));
+  }
 
   const manifest = textFile(
     `${JSON.stringify(
       {
         entrypoint: 'app/[[...slug]]/route.ts',
         exportFormat: 'ai-workflow-studio-nextjs-store',
+        membersEnabled,
         pages: spec.pages.map((page) => page.slug),
         project: { id: project.id, name: project.name, slug: project.slug },
-        requiresEnv: ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'],
+        requiresEnv: [
+          'SUPABASE_URL',
+          'SUPABASE_SERVICE_ROLE_KEY',
+          ...(membersEnabled ? ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'] : []),
+        ],
         schemaVersion: 1,
         version: { name: generation.versionName, number: generation.version },
       },
@@ -725,6 +1009,7 @@ export function createWebsiteNextAppSource(input: {
 }
 
 export function createWebsiteNextAppExport(input: {
+  readonly access?: WebsiteNextExportAccess;
   readonly assets: readonly WebsiteNextExportAsset[];
   readonly generation: WebsiteSpecGeneration;
   readonly project: { readonly id: string; readonly name: string; readonly slug: string };
