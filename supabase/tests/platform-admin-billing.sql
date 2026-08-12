@@ -80,7 +80,7 @@ values (
 );
 
 select tests.assert_true(
-  (select count(*) from public.billing_plans) = 4,
+  (select count(*) from public.billing_plans) = 5,
   'all public billing plans must exist'
 );
 
@@ -128,11 +128,6 @@ values
     '20000000-0000-0000-0000-000000000001',
     '10000000-0000-0000-0000-000000000001',
     'Free workflow two'
-  ),
-  (
-    '20000000-0000-0000-0000-000000000001',
-    '10000000-0000-0000-0000-000000000001',
-    'Free workflow three'
   );
 
 do $$
@@ -142,9 +137,9 @@ begin
     values (
       '20000000-0000-0000-0000-000000000001',
       '10000000-0000-0000-0000-000000000001',
-      'Free workflow four'
+      'Free workflow three'
     );
-    raise exception 'free workflow limit unexpectedly allowed a fourth workflow';
+    raise exception 'free workflow limit unexpectedly allowed a third workflow';
   exception
     when check_violation then
       null;
@@ -275,7 +270,7 @@ select
   'pending',
   'free-limit-run-' || run_sequence.run_number
 from public.workflow_versions version
-cross join generate_series(1, 100) as run_sequence(run_number)
+cross join generate_series(1, 50) as run_sequence(run_number)
 where version.tenant_id = '20000000-0000-0000-0000-000000000001';
 
 do $$
@@ -301,9 +296,9 @@ begin
       target_version.id,
       '10000000-0000-0000-0000-000000000001',
       'pending',
-      'free-limit-run-101'
+      'free-limit-run-51'
     );
-    raise exception 'free monthly run limit unexpectedly allowed run 101';
+    raise exception 'free monthly run limit unexpectedly allowed run 51';
   exception
     when check_violation then
       null;
@@ -399,7 +394,7 @@ select tests.assert_true(
     from public.workflows
     where tenant_id = '20000000-0000-0000-0000-000000000001'
       and status <> 'archived'
-  ) = 4,
+  ) = 3,
   'an active platform administrator must be able to create an auditable acceptance workflow after the Tenant limit'
 );
 
@@ -408,7 +403,7 @@ select tests.assert_true(
     select count(*)
     from public.workflow_runs
     where tenant_id = '20000000-0000-0000-0000-000000000001'
-  ) = 101,
+  ) = 51,
   'an active platform administrator must be able to create an auditable acceptance Run after the monthly limit'
 );
 
