@@ -689,6 +689,24 @@ export function renderWebsitePublishedDocument(
   );
 }
 
+/**
+ * Render a page for the self-hosted Next.js app export. The checkout form posts
+ * to the app's own /api/checkout route and internal links use clean paths
+ * ("/" for the first page, "/slug" otherwise).
+ */
+export function renderWebsiteSelfHostDocument(
+  specValue: WebsiteSpec,
+  pageSlug: string,
+  assetUrls: ReadonlyMap<string, string> = new Map(),
+): string {
+  const spec = WebsiteSpecSchema.parse(specValue);
+  const firstSlug = spec.pages[0]?.slug;
+  return renderWebsiteDocument(spec, pageSlug, assetUrls, {
+    checkoutAction: '/api/checkout',
+    pageHref: (targetPageSlug) => (targetPageSlug === firstSlug ? '/' : `/${targetPageSlug}`),
+  });
+}
+
 export function websiteStaticPagePath(specValue: WebsiteSpec, pageSlug: string): string {
   const spec = WebsiteSpecSchema.parse(specValue);
   const pageIndex = spec.pages.findIndex((page) => page.slug === pageSlug);
