@@ -85,9 +85,10 @@ const copy = {
     duplicate: 'Duplicate',
     editing: 'Saving a validated version…',
     exportHelp:
-      'Download any exact version as a portable static ZIP with HTML, local assets, a manifest, and SHA-256 integrity metadata.',
+      'Download any exact version as a portable static ZIP. Storefronts can also export a deployable Next.js store that runs on the customer’s own Supabase (create Supabase, run the included migration, set Vercel env vars, deploy).',
     exportPaid: 'ZIP export is included with active paid subscriptions.',
     exportRequiresPaid: 'Paid plan required',
+    exportStore: 'Deployable store',
     exportZip: 'Export ZIP',
     failed: 'The edit could not be validated or saved.',
     history: 'Version history',
@@ -150,9 +151,10 @@ const copy = {
     duplicate: '複製區塊',
     editing: '正在儲存已驗證版本…',
     exportHelp:
-      '可將任一指定版本下載為靜態網站 ZIP，內含 HTML、本機素材、manifest 與 SHA-256 完整性資料。',
+      '可將任一版本下載為靜態網站 ZIP；商店類版本還能匯出「可部署 Next.js 商店」，跑在客戶自己的 Supabase 上（建 Supabase、執行內附 migration、在 Vercel 設環境變數、部署）。',
     exportPaid: 'ZIP 匯出包含在有效付費訂閱方案內。',
     exportRequiresPaid: '需付費方案',
+    exportStore: '可部署商店',
     exportZip: '匯出 ZIP',
     failed: '修改未通過驗證，或目前無法儲存。',
     history: '版本紀錄',
@@ -1147,6 +1149,18 @@ export function WebsiteSpecEditor({
                       {text.exportRequiresPaid}
                     </span>
                   )}
+                  {canExportWebsite &&
+                  version.spec.pages.some((page) =>
+                    page.sections.some((section) => section.type === 'product-grid'),
+                  ) ? (
+                    <a
+                      className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-[10px] font-semibold text-emerald-700"
+                      download
+                      href={`/api/websites/${projectId}/versions/${version.version}/export?format=next-app`}
+                    >
+                      ↓ {text.exportStore}
+                    </a>
+                  ) : null}
                   {version.version === generation.version ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800">
                       <CheckIcon className="size-3.5" /> {text.current}
