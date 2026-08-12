@@ -114,9 +114,12 @@ describe('self-hosted Next.js store export', () => {
       '.gitignore',
       'README.md',
       'app/[[...slug]]/route.ts',
+      'app/admin/route.ts',
+      'app/api/admin/route.ts',
       'app/api/checkout/route.ts',
       'app/api/contact/route.ts',
       'integrity.sha256',
+      'lib/admin.ts',
       'lib/pages.ts',
       'lib/products.ts',
       'manifest.json',
@@ -192,6 +195,25 @@ describe('self-hosted Next.js store export', () => {
     expect(createWebsiteNextAppSource(input).sourceSha256).toBe(
       createWebsiteNextAppSource(input).sourceSha256,
     );
+  });
+
+  it('ships a token-gated admin screen for orders and messages', () => {
+    const all = files();
+    const adminPage = strFromU8(all['app/admin/route.ts'] ?? new Uint8Array());
+    const adminApi = strFromU8(all['app/api/admin/route.ts'] ?? new Uint8Array());
+    const adminLib = strFromU8(all['lib/admin.ts'] ?? new Uint8Array());
+    // Reads orders + messages, updates order status through /api/admin.
+    expect(adminPage).toContain("from('orders')");
+    expect(adminPage).toContain("from('messages')");
+    expect(adminApi).toContain('order-status');
+    expect(adminApi).toContain('update({ status:');
+    // Gated by ADMIN_TOKEN with a timing-safe compare, never a plain === check.
+    expect(adminLib).toContain('ADMIN_TOKEN');
+    expect(adminLib).toContain('timingSafeEqual');
+    const env = strFromU8(all['.env.example'] ?? new Uint8Array());
+    expect(env).toContain('ADMIN_TOKEN=');
+    const guide = strFromU8(all['README.md'] ?? new Uint8Array());
+    expect(guide).toContain('/admin');
   });
 
   it('omits member auth files when no page is protected', () => {
