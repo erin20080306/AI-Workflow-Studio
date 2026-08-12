@@ -698,10 +698,19 @@ export function renderWebsiteSelfHostDocument(
   specValue: WebsiteSpec,
   pageSlug: string,
   assetUrls: ReadonlyMap<string, string> = new Map(),
+  membersEnabled = false,
 ): string {
   const spec = WebsiteSpecSchema.parse(specValue);
   const firstSlug = spec.pages[0]?.slug;
   return renderWebsiteDocument(spec, pageSlug, assetUrls, {
+    ...(membersEnabled
+      ? {
+          account: {
+            href: '/login',
+            label: spec.locale === 'zh-Hant' ? '會員登入' : 'Sign in',
+          },
+        }
+      : {}),
     checkoutAction: '/api/checkout',
     contactAction: '/api/contact',
     pageHref: (targetPageSlug) => (targetPageSlug === firstSlug ? '/' : `/${targetPageSlug}`),

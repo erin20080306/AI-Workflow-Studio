@@ -193,4 +193,60 @@ describe('self-hosted Next.js store export', () => {
       createWebsiteNextAppSource(input).sourceSha256,
     );
   });
+
+  it('omits member auth files when no page is protected', () => {
+    const names = Object.keys(files());
+    expect(names).not.toContain('middleware.ts');
+    expect(names).not.toContain('app/api/auth/route.ts');
+    expect(names).not.toContain('lib/access.ts');
+  });
+
+  describe('with member-protected pages (Supabase Auth)', () => {
+    const memberInput = {
+      ...input,
+      access: { protectedSlugs: ['menu'], registrationEnabled: true },
+    } as const;
+    function memberFiles() {
+      return unzipSync(createWebsiteNextAppExport(memberInput).bytes);
+    }
+
+    it('adds Supabase Auth files, dependency, and public env vars', () => {
+      const all = memberFiles();
+      const names = Object.keys(all);
+      expect(names).toContain('middleware.ts');
+      expect(names).toContain('lib/supabase-server.ts');
+      expect(names).toContain('lib/access.ts');
+      expect(names).toContain('app/login/route.ts');
+      expect(names).toContain('app/api/auth/route.ts');
+
+      const pkg = strFromU8(all['package.json'] ?? new Uint8Array());
+      expect(pkg).toContain('@supabase/ssr');
+      const env = strFromU8(all['.env.example'] ?? new Uint8Array());
+      expect(env).toContain('NEXT_PUBLIC_SUPABASE_URL=');
+      expect(env).toContain('NEXT_PUBLIC_SUPABASE_ANON_KEY=');
+    });
+
+    it('gates the protected page fail-closed via Supabase getUser', () => {
+      const all = memberFiles();
+      const access = strFromU8(all['lib/access.ts'] ?? new Uint8Array());
+      expect(access).toContain('"menu"');
+      expect(access).toContain('REGISTRATION_ENABLED = true');
+
+      const pagesRoute = strFromU8(all['app/[[...slug]]/route.ts'] ?? new Uint8Array());
+      expect(pagesRoute).toContain('PROTECTED_SLUGS');
+      expect(pagesRoute).toContain('auth.getUser');
+      expect(pagesRoute).toContain("location: '/login?next='");
+
+      // Uses the customer's Supabase Auth, never hand-rolled password crypto.
+      const auth = strFromU8(all['app/api/auth/route.ts'] ?? new Uint8Array());
+      expect(auth).toContain('signInWithPassword');
+      expect(auth).toContain('signUp');
+      expect(auth).not.toContain('scrypt');
+      expect(auth).not.toContain('createHash');
+
+      // A "Sign in" account link is added to the storefront nav.
+      const pages = strFromU8(all['lib/pages.ts'] ?? new Uint8Array());
+      expect(pages).toContain('href=\\"/login\\"');
+    });
+  });
 });

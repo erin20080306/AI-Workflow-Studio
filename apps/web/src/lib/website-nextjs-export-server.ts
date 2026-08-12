@@ -3,6 +3,7 @@ import 'server-only';
 import type { WorkspaceContext } from '@/lib/auth/context';
 import { getEnvironment } from '@/lib/env';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
+import { getWebsiteSiteAccessDashboard } from '@/lib/website-access-server';
 import { getPublishedWebsiteAsset } from '@/lib/website-asset-server';
 import { createWebsiteNextAppExport, type WebsiteNextExport } from '@/lib/website-nextjs-export';
 import { getWebsiteSpecVersion } from '@/lib/website-spec-server';
@@ -47,9 +48,16 @@ export async function exportWebsiteNextApp(
       return { bytes: stored.bytes, id: asset.id };
     }),
   );
+  const access = await getWebsiteSiteAccessDashboard(context, project.id).catch(() => undefined);
+  const protectedSlugs = (access?.rules ?? [])
+    .filter((rule) => rule.requiredRole !== null)
+    .map((rule) => rule.pageSlug);
   let result: WebsiteNextExport;
   try {
     result = createWebsiteNextAppExport({
+      ...(access === undefined
+        ? {}
+        : { access: { protectedSlugs, registrationEnabled: access.registrationEnabled } }),
       assets,
       generation,
       project: { id: project.id, name: project.name, slug: project.slug },
