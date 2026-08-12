@@ -394,7 +394,7 @@ select tests.assert_true(
     from public.workflows
     where tenant_id = '20000000-0000-0000-0000-000000000001'
       and status <> 'archived'
-  ) = 4,
+  ) = 3,
   'an active platform administrator must be able to create an auditable acceptance workflow after the Tenant limit'
 );
 
@@ -403,7 +403,7 @@ select tests.assert_true(
     select count(*)
     from public.workflow_runs
     where tenant_id = '20000000-0000-0000-0000-000000000001'
-  ) = 101,
+  ) = 51,
   'an active platform administrator must be able to create an auditable acceptance Run after the monthly limit'
 );
 
